@@ -79,6 +79,61 @@
       "light": "Light",
       "dark": "Dark",
       "system": "System"
+    },
+    "providers": {
+      "sectionTitle": "API Providers",
+      "activeLabel": "Active provider",
+      "addButton": "Add provider",
+      "empty": "No providers configured yet. Add one to start generating.",
+      "loading": "Loading providers…",
+      "switchedTo": "Switched to {{name}}",
+      "saved": "Provider saved",
+      "removed": "Provider removed",
+      "deleteConfirm": "Confirm delete",
+      "deleteCancel": "Cancel",
+      "setActive": "Set active",
+      "edit": "Edit",
+      "test": "Test",
+      "saveAndTest": "Save & Test",
+      "cancel": "Cancel",
+      "addTitle": "Add provider",
+      "editTitle": "Edit provider",
+      "fields": {
+        "provider": "Provider",
+        "apiKey": "API Key",
+        "baseUrl": "Base URL",
+        "baseUrlOptional": "Base URL (optional, leave blank for default)",
+        "primaryModel": "Primary model",
+        "fastModel": "Fast model",
+        "getKey": "Get key ↗"
+      },
+      "preview": {
+        "willCall": "Will call: {{url}}",
+        "default": "Will use the official endpoint",
+        "invalidUrl": "{{reason}}"
+      },
+      "keyFormat": {
+        "looksGood": "Format looks correct for {{provider}}",
+        "wrongPrefix": "Expected prefix: {{prefix}}",
+        "tooShort": "Key looks too short",
+        "unknown": "Format check skipped"
+      },
+      "details": {
+        "expand": "Show details",
+        "collapse": "Hide details",
+        "lastTested": "Last tested",
+        "neverTested": "Never tested",
+        "modelCount_one": "{{count}} model available",
+        "modelCount_other": "{{count}} models available",
+        "host": "Host",
+        "endpoint": "Resolved endpoint"
+      },
+      "switchConfirm": {
+        "title": "This provider failed last test",
+        "body": "Switching to {{name}} now might fail when you generate. Continue anyway?",
+        "confirm": "Switch anyway",
+        "cancel": "Stay on current"
+      }
     }
   },
   "onboarding": {

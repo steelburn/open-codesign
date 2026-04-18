@@ -199,6 +199,9 @@ export function detectProviderFromKey(key: string): ModelRef['provider'] | null 
 export { pingProvider } from './validate';
 export type { ValidateResult } from './validate';
 
+export { enrichProviderError } from './errorEnrichment';
+export type { EnrichInput, EnrichedError } from './errorEnrichment';
+
 export { completeWithRetry, classifyError, sleepWithAbort } from './retry';
 export type { CompleteWithRetryOptions, RetryReason } from './retry';
 

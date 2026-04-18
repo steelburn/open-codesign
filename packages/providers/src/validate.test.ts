@@ -42,7 +42,8 @@ describe('pingProvider', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe('401');
-      expect(result.message).toContain('anthropic');
+      expect(result.message.toLowerCase()).toContain('anthropic');
+      expect(result.providerKeyUrl).toContain('console.anthropic.com');
     }
   });
 
@@ -68,7 +69,7 @@ describe('pingProvider', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe('network');
-      expect(result.message).toContain('ECONNREFUSED');
+      expect(result.message.toLowerCase()).toContain('cannot reach');
     }
   });
 

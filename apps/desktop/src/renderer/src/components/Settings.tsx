@@ -7,6 +7,8 @@ import type {
 import {
   PROVIDER_SHORTLIST as SHORTLIST,
   isSupportedOnboardingProvider,
+  normalizeBaseUrl,
+  resolveModelsEndpoint,
 } from '@open-codesign/shared';
 import { Button } from '@open-codesign/ui';
 import {
@@ -14,6 +16,7 @@ import {
   ArrowLeft,
   CheckCircle,
   ChevronDown,
+  ChevronRight,
   Cpu,
   FolderOpen,
   Globe,
@@ -24,11 +27,13 @@ import {
   Sliders,
   Trash2,
   X,
+  XCircle,
   Zap,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { AppPaths, Preferences, ProviderRow } from '../../../preload/index';
 import { useCodesignStore } from '../store';
+import { type KeyFormatStatus, checkKeyFormat } from './Settings/keyFormat';
 
 type Tab = 'models' | 'appearance' | 'storage' | 'advanced';
 
@@ -234,13 +239,15 @@ export function applyValidateResult(
   return { ...current, validating: false, error: message ?? 'Validation failed' };
 }
 
-function AddProviderModal({
+function AddProviderForm({
   onSave,
   onClose,
 }: {
   onSave: (rows: ProviderRow[]) => void;
   onClose: () => void;
 }) {
+  const t = useT();
+  const pushToast = useCodesignStore((s) => s.pushToast);
   const providerOptions: { value: SupportedOnboardingProvider; label: string }[] = [
     { value: 'anthropic', label: 'Anthropic Claude' },
     { value: 'openai', label: 'OpenAI' },
@@ -272,18 +279,42 @@ function AddProviderModal({
         apiKey: snapshot.apiKey,
         ...(snapshot.baseUrl.length > 0 ? { baseUrl: snapshot.baseUrl } : {}),
       });
-      // Discard result if the user changed provider/key/baseUrl while we were waiting.
       setForm((current) =>
         applyValidateResult(current, snapshot, res.ok, res.ok ? undefined : res.message),
       );
     } finally {
-      // Ensure validating spinner clears even if we discarded the result.
       setForm((current) => (current.validating ? { ...current, validating: false } : current));
     }
   }
 
-  async function handleSave() {
+  async function handleSaveAndTest() {
     if (!window.codesign) return;
+    // Run validation first; only persist if it succeeds.
+    const snapshot = {
+      provider: form.provider,
+      apiKey: form.apiKey.trim(),
+      baseUrl: form.baseUrl.trim(),
+    };
+    setForm((prev) => ({ ...prev, validating: true, error: null, validated: false }));
+    let validateOk = false;
+    let validateMsg: string | undefined;
+    try {
+      const res = await window.codesign.settings.validateKey({
+        provider: snapshot.provider,
+        apiKey: snapshot.apiKey,
+        ...(snapshot.baseUrl.length > 0 ? { baseUrl: snapshot.baseUrl } : {}),
+      });
+      validateOk = res.ok;
+      if (!res.ok) validateMsg = res.message;
+    } catch (err) {
+      validateMsg = err instanceof Error ? err.message : 'Validation failed';
+    }
+
+    if (!validateOk) {
+      setForm((prev) => ({ ...prev, validating: false, error: validateMsg ?? 'Test failed' }));
+      return;
+    }
+
     try {
       const trimmedUrl = form.baseUrl.trim();
       const rows = await window.codesign.settings.addProvider({
@@ -294,9 +325,11 @@ function AddProviderModal({
         ...(trimmedUrl.length > 0 ? { baseUrl: trimmedUrl } : {}),
       });
       onSave(rows);
+      pushToast({ variant: 'success', title: t('settings.providers.saved') });
     } catch (err) {
       setForm((prev) => ({
         ...prev,
+        validating: false,
         error: err instanceof Error ? err.message : 'Save failed',
       }));
     }
@@ -305,137 +338,205 @@ function AddProviderModal({
   const sl = SHORTLIST[form.provider];
   const primaryOptions = sl.primary.map((m) => ({ value: m, label: m }));
   const fastOptions = sl.fast.map((m) => ({ value: m, label: m }));
-  const canSave = canSaveProvider(form);
+  const keyStatus: KeyFormatStatus = checkKeyFormat(form.provider, form.apiKey);
+  const protocol: 'openai' | 'anthropic' = form.provider === 'anthropic' ? 'anthropic' : 'openai';
+
+  // Live URL preview
+  let urlPreview:
+    | { kind: 'default' }
+    | { kind: 'ok'; url: string }
+    | { kind: 'invalid'; reason: string };
+  const trimmedBase = form.baseUrl.trim();
+  if (trimmedBase.length === 0) {
+    urlPreview = { kind: 'default' };
+  } else {
+    const r = normalizeBaseUrl(trimmedBase);
+    urlPreview = r.ok
+      ? { kind: 'ok', url: resolveModelsEndpoint(r.normalized, protocol) }
+      : { kind: 'invalid', reason: r.message };
+  }
+
+  const canSubmit = form.apiKey.trim().length > 0 && !form.validating;
 
   return (
-    <div
-      // biome-ignore lint/a11y/useSemanticElements: native <dialog> top-layer rendering interferes with our overlay stack
-      role="dialog"
-      aria-modal="true"
-      aria-label="Add provider"
-      className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-[var(--color-overlay)]"
-      onClick={onClose}
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
-    >
-      <div
-        className="w-full max-w-md bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-xl)] shadow-[var(--shadow-elevated)] p-6 space-y-4"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        role="document"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-[var(--text-base)] font-semibold text-[var(--color-text-primary)]">
-            Add provider
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-[var(--radius-md)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"
+    <div className="rounded-[var(--radius-lg)] border border-[var(--color-accent)] bg-[var(--color-accent-soft)] p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-[var(--text-sm)] font-semibold text-[var(--color-text-primary)]">
+          {t('settings.providers.addTitle')}
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('settings.providers.cancel')}
+          className="p-1 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <div>
+        <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
+          {t('settings.providers.fields.provider')}
+        </p>
+        <NativeSelect
+          value={form.provider}
+          onChange={handleProviderChange}
+          options={providerOptions}
+        />
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)]">
+            {t('settings.providers.fields.apiKey')}
+          </p>
+          <a
+            href={sl.keyHelpUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[var(--text-xs)] text-[var(--color-accent)] hover:underline"
           >
-            <X className="w-4 h-4" />
-          </button>
+            {t('settings.providers.fields.getKey')}
+          </a>
         </div>
+        <TextInput
+          type="password"
+          value={form.apiKey}
+          onChange={(v) => setField('apiKey', v)}
+          placeholder="sk-..."
+          className="w-full"
+        />
+        <KeyFormatHint provider={form.provider} status={keyStatus} t={t} />
+      </div>
 
-        <div className="space-y-3">
-          <div>
-            <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Provider
-            </p>
-            <NativeSelect
-              value={form.provider}
-              onChange={handleProviderChange}
-              options={providerOptions}
-            />
-          </div>
+      <div>
+        <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
+          {t('settings.providers.fields.baseUrlOptional')}
+        </p>
+        <TextInput
+          value={form.baseUrl}
+          onChange={(v) => setField('baseUrl', v)}
+          placeholder="https://your-proxy.example.com"
+          className="w-full"
+        />
+        <UrlPreview preview={urlPreview} t={t} />
+      </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)]">
-                API Key
-              </p>
-              <a
-                href={sl.keyHelpUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[var(--text-xs)] text-[var(--color-accent)] hover:underline"
-              >
-                Get key ↗
-              </a>
-            </div>
-            <div className="flex gap-2">
-              <TextInput
-                type="password"
-                value={form.apiKey}
-                onChange={(v) => setField('apiKey', v)}
-                placeholder="sk-..."
-                className="flex-1"
-              />
-              <button
-                type="button"
-                onClick={handleValidate}
-                disabled={form.apiKey.trim().length === 0 || form.validating}
-                className="h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
-              >
-                {form.validating ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : form.validated ? (
-                  <CheckCircle className="w-3.5 h-3.5 text-[var(--color-success)]" />
-                ) : null}
-                {form.validated ? 'Valid' : 'Validate'}
-              </button>
-            </div>
-            {form.error && (
-              <p className="mt-1.5 text-[var(--text-xs)] text-[var(--color-error)]">{form.error}</p>
-            )}
-          </div>
-
-          <div>
-            <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
-              Base URL{' '}
-              <span className="text-[var(--color-text-muted)] font-normal">(optional)</span>
-            </p>
-            <TextInput
-              value={form.baseUrl}
-              onChange={(v) => setField('baseUrl', v)}
-              placeholder="https://your-proxy.example.com"
-              className="w-full"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
-                Primary model
-              </p>
-              <NativeSelect
-                value={form.modelPrimary}
-                onChange={(v) => setField('modelPrimary', v)}
-                options={primaryOptions}
-              />
-            </div>
-            <div>
-              <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
-                Fast model
-              </p>
-              <NativeSelect
-                value={form.modelFast}
-                onChange={(v) => setField('modelFast', v)}
-                options={fastOptions}
-              />
-            </div>
-          </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
+            {t('settings.providers.fields.primaryModel')}
+          </p>
+          <NativeSelect
+            value={form.modelPrimary}
+            onChange={(v) => setField('modelPrimary', v)}
+            options={primaryOptions}
+          />
         </div>
+        <div>
+          <p className="block text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] mb-1.5">
+            {t('settings.providers.fields.fastModel')}
+          </p>
+          <NativeSelect
+            value={form.modelFast}
+            onChange={(v) => setField('modelFast', v)}
+            options={fastOptions}
+          />
+        </div>
+      </div>
 
-        <div className="flex justify-end gap-2 pt-1">
+      {form.error !== null && (
+        <div className="flex items-start gap-2 p-2 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-error)]">
+          <XCircle className="w-3.5 h-3.5 mt-0.5 text-[var(--color-error)] shrink-0" />
+          <p className="text-[var(--text-xs)] text-[var(--color-error)]">{form.error}</p>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-1">
+        <button
+          type="button"
+          onClick={handleValidate}
+          disabled={form.apiKey.trim().length === 0 || form.validating}
+          className="h-8 px-3 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
+        >
+          {form.validating ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : form.validated ? (
+            <CheckCircle className="w-3.5 h-3.5 text-[var(--color-success)]" />
+          ) : null}
+          {t('settings.providers.test')}
+        </button>
+        <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={onClose}>
-            Cancel
+            {t('settings.providers.cancel')}
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={!canSave}>
-            Save provider
+          <Button size="sm" onClick={handleSaveAndTest} disabled={!canSubmit}>
+            {form.validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+            {t('settings.providers.saveAndTest')}
           </Button>
         </div>
       </div>
     </div>
+  );
+}
+
+function KeyFormatHint({
+  provider,
+  status,
+  t,
+}: {
+  provider: SupportedOnboardingProvider;
+  status: KeyFormatStatus;
+  t: (k: string, v?: Record<string, unknown>) => string;
+}) {
+  if (status.kind === 'empty' || status.kind === 'unknown') return null;
+  if (status.kind === 'ok') {
+    return (
+      <p className="mt-1 text-[var(--text-xs)] text-[var(--color-success)] inline-flex items-center gap-1">
+        <CheckCircle className="w-3 h-3" />
+        {t('settings.providers.keyFormat.looksGood', { provider: SHORTLIST[provider].label })}
+      </p>
+    );
+  }
+  if (status.kind === 'wrong-prefix') {
+    return (
+      <p className="mt-1 text-[var(--text-xs)] text-[var(--color-warning,var(--color-text-muted))]">
+        {t('settings.providers.keyFormat.wrongPrefix', { prefix: status.expected })}
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
+      {t('settings.providers.keyFormat.tooShort')}
+    </p>
+  );
+}
+
+function UrlPreview({
+  preview,
+  t,
+}: {
+  preview: { kind: 'default' } | { kind: 'ok'; url: string } | { kind: 'invalid'; reason: string };
+  t: (k: string, v?: Record<string, unknown>) => string;
+}) {
+  if (preview.kind === 'default') {
+    return (
+      <p className="mt-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
+        {t('settings.providers.preview.default')}
+      </p>
+    );
+  }
+  if (preview.kind === 'invalid') {
+    return (
+      <p className="mt-1 text-[var(--text-xs)] text-[var(--color-error)]">
+        {t('settings.providers.preview.invalidUrl', { reason: preview.reason })}
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[var(--text-xs)] text-[var(--color-text-muted)] font-mono break-all">
+      {t('settings.providers.preview.willCall', { url: preview.url })}
+    </p>
   );
 }
 
@@ -452,13 +553,27 @@ function ProviderCard({
   onActivate: (p: SupportedOnboardingProvider) => void;
   onReEnterKey: (p: SupportedOnboardingProvider) => void;
 }) {
+  const t = useT();
   const label = SHORTLIST[row.provider]?.label ?? row.provider;
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const hasError = row.error !== undefined;
+
+  const protocol: 'openai' | 'anthropic' = row.provider === 'anthropic' ? 'anthropic' : 'openai';
+  const baseForResolve = row.baseUrl ?? null;
+  let resolvedEndpoint: string | null = null;
+  let host: string | null = null;
+  if (baseForResolve !== null) {
+    const r = normalizeBaseUrl(baseForResolve);
+    if (r.ok) {
+      resolvedEndpoint = resolveModelsEndpoint(r.normalized, protocol);
+      host = r.host;
+    }
+  }
 
   return (
     <div
-      className={`rounded-[var(--radius-lg)] border p-3 transition-colors ${
+      className={`rounded-[var(--radius-lg)] border transition-colors ${
         hasError
           ? 'border-[var(--color-error)] bg-[var(--color-error-soft,var(--color-surface))]'
           : row.isActive
@@ -466,94 +581,138 @@ function ProviderCard({
             : 'border-[var(--color-border)] bg-[var(--color-surface)]'
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
-              {label}
-            </span>
-            {row.isActive && !hasError && (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--font-size-badge)] font-medium leading-none">
-                Active
-              </span>
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-start gap-2 min-w-0 flex-1 text-left rounded-[var(--radius-sm)] -m-1 p-1 hover:bg-[var(--color-surface-hover)]"
+            aria-expanded={expanded}
+            aria-label={
+              expanded
+                ? t('settings.providers.details.collapse')
+                : t('settings.providers.details.expand')
+            }
+          >
+            {expanded ? (
+              <ChevronDown className="w-3.5 h-3.5 mt-1 text-[var(--color-text-muted)] shrink-0" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 mt-1 text-[var(--color-text-muted)] shrink-0" />
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
+                  {label}
+                </span>
+                {row.isActive && !hasError && (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--font-size-badge)] font-medium leading-none">
+                    Active
+                  </span>
+                )}
+                {hasError && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--color-error)] text-[var(--color-on-accent)] text-[var(--font-size-badge)] font-medium leading-none">
+                    <AlertTriangle className="w-2.5 h-2.5" />
+                    Decryption failed
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                {!hasError && (
+                  <code className="text-[var(--text-xs)] text-[var(--color-text-muted)] font-mono">
+                    {row.maskedKey}
+                  </code>
+                )}
+                {host !== null && (
+                  <span className="flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
+                    <Globe className="w-3 h-3" />
+                    {host}
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
+
+          <div className="flex items-center gap-1 shrink-0">
+            {!row.isActive && !hasError && (
+              <button
+                type="button"
+                onClick={() => onActivate(row.provider)}
+                className="h-7 px-2.5 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] transition-colors"
+              >
+                {t('settings.providers.setActive')}
+              </button>
             )}
             {hasError && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[var(--color-error)] text-[var(--color-on-accent)] text-[var(--font-size-badge)] font-medium leading-none">
-                <AlertTriangle className="w-2.5 h-2.5" />
-                Decryption failed
-              </span>
+              <button
+                type="button"
+                onClick={() => onReEnterKey(row.provider)}
+                className="h-7 px-2.5 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-error)] border border-[var(--color-error)] bg-[var(--color-surface)] hover:opacity-80 transition-opacity"
+              >
+                Re-enter key
+              </button>
             )}
-          </div>
-          <div className="flex items-center gap-3 mt-1">
-            {!hasError && (
-              <code className="text-[var(--text-xs)] text-[var(--color-text-muted)] font-mono">
-                {row.maskedKey}
-              </code>
-            )}
-            {row.baseUrl && (
-              <span className="flex items-center gap-1 text-[var(--text-xs)] text-[var(--color-text-muted)]">
-                <Globe className="w-3 h-3" />
-                {row.baseUrl}
-              </span>
+            {confirmDelete ? (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmDelete(false);
+                    onDelete(row.provider);
+                  }}
+                  className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-error)] hover:opacity-90 transition-opacity"
+                >
+                  {t('settings.providers.deleteConfirm')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                >
+                  {t('settings.providers.deleteCancel')}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface-hover)] transition-colors"
+                aria-label={`Delete ${label} provider`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
-          {!row.isActive && !hasError && (
-            <button
-              type="button"
-              onClick={() => onActivate(row.provider)}
-              className="h-7 px-2.5 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] transition-colors"
-            >
-              Set active
-            </button>
-          )}
-          {hasError && (
-            <button
-              type="button"
-              onClick={() => onReEnterKey(row.provider)}
-              className="h-7 px-2.5 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-error)] border border-[var(--color-error)] bg-[var(--color-surface)] hover:opacity-80 transition-opacity"
-            >
-              Re-enter key
-            </button>
-          )}
-          {confirmDelete ? (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmDelete(false);
-                  onDelete(row.provider);
-                }}
-                className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-error)] hover:opacity-90 transition-opacity"
-              >
-                Confirm
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(false)}
-                className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface-hover)] transition-colors"
-              aria-label={`Delete ${label} provider`}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
+        {expanded && (
+          <div className="mt-3 pt-3 border-t border-[var(--color-border-subtle)] space-y-1.5">
+            {row.baseUrl !== null && (
+              <div className="grid grid-cols-[6.5rem_1fr] gap-2 text-[var(--text-xs)]">
+                <span className="text-[var(--color-text-muted)]">
+                  {t('settings.providers.details.host')}
+                </span>
+                <code className="font-mono text-[var(--color-text-primary)] break-all">
+                  {row.baseUrl}
+                </code>
+              </div>
+            )}
+            {resolvedEndpoint !== null && (
+              <div className="grid grid-cols-[6.5rem_1fr] gap-2 text-[var(--text-xs)]">
+                <span className="text-[var(--color-text-muted)]">
+                  {t('settings.providers.details.endpoint')}
+                </span>
+                <code className="font-mono text-[var(--color-text-primary)] break-all">
+                  {resolvedEndpoint}
+                </code>
+              </div>
+            )}
+          </div>
+        )}
+
+        {row.isActive && !hasError && config !== null && (
+          <ActiveModelSelector config={config} provider={row.provider} />
+        )}
       </div>
-
-      {row.isActive && !hasError && config !== null && (
-        <ActiveModelSelector config={config} provider={row.provider} />
-      )}
     </div>
   );
 }
@@ -642,6 +801,7 @@ function ModelsTab() {
   const config = useCodesignStore((s) => s.config);
   const setConfig = useCodesignStore((s) => s.completeOnboarding);
   const pushToast = useCodesignStore((s) => s.pushToast);
+  const t = useT();
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -669,7 +829,7 @@ function ModelsTab() {
       setRows(next);
       const newState = await window.codesign.onboarding.getState();
       setConfig(newState);
-      pushToast({ variant: 'success', title: 'Provider removed' });
+      pushToast({ variant: 'success', title: t('settings.providers.removed') });
     } catch (err) {
       pushToast({
         variant: 'error',
@@ -691,7 +851,10 @@ function ModelsTab() {
       setConfig(next);
       const updatedRows = await window.codesign.settings.listProviders();
       setRows(updatedRows);
-      pushToast({ variant: 'success', title: `Switched to ${sl.label}` });
+      pushToast({
+        variant: 'success',
+        title: t('settings.providers.switchedTo', { name: sl.label }),
+      });
     } catch (err) {
       pushToast({
         variant: 'error',
@@ -705,13 +868,35 @@ function ModelsTab() {
     setRows(nextRows);
     setShowAdd(false);
     setReEnterProvider(null);
-    pushToast({ variant: 'success', title: 'Provider saved' });
   }
 
+  const activeRow = rows.find((r) => r.isActive);
+  const activeLabel =
+    activeRow !== undefined ? (SHORTLIST[activeRow.provider]?.label ?? activeRow.provider) : null;
+
   return (
-    <>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <SectionTitle>{t('settings.providers.sectionTitle')}</SectionTitle>
+        {!showAdd && reEnterProvider === null && (
+          <Button variant="secondary" size="sm" onClick={() => setShowAdd(true)}>
+            <Plus className="w-3.5 h-3.5" />
+            {t('settings.providers.addButton')}
+          </Button>
+        )}
+      </div>
+
+      {activeLabel !== null && (
+        <div className="flex items-center gap-2 text-[var(--text-xs)] text-[var(--color-text-muted)]">
+          <span>{t('settings.providers.activeLabel')}:</span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-[var(--color-accent)] text-[var(--color-on-accent)] text-[var(--font-size-badge)] font-medium leading-none">
+            {activeLabel}
+          </span>
+        </div>
+      )}
+
       {(showAdd || reEnterProvider !== null) && (
-        <AddProviderModal
+        <AddProviderForm
           onSave={handleAddSave}
           onClose={() => {
             setShowAdd(false);
@@ -720,44 +905,34 @@ function ModelsTab() {
         />
       )}
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <SectionTitle>API Providers</SectionTitle>
-          <Button variant="secondary" size="sm" onClick={() => setShowAdd(true)}>
-            <Plus className="w-3.5 h-3.5" />
-            Add provider
-          </Button>
+      {loading && (
+        <div className="flex items-center gap-2 py-4 text-[var(--text-sm)] text-[var(--color-text-muted)]">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          {t('settings.providers.loading')}
         </div>
+      )}
 
-        {loading && (
-          <div className="flex items-center gap-2 py-4 text-[var(--text-sm)] text-[var(--color-text-muted)]">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Loading…
-          </div>
-        )}
+      {!loading && rows.length === 0 && !showAdd && (
+        <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] p-6 text-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
+          {t('settings.providers.empty')}
+        </div>
+      )}
 
-        {!loading && rows.length === 0 && (
-          <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] p-6 text-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
-            No providers configured yet. Add one to start generating.
-          </div>
-        )}
-
-        {!loading && rows.length > 0 && (
-          <div className="space-y-2">
-            {rows.map((row) => (
-              <ProviderCard
-                key={row.provider}
-                row={row}
-                config={config}
-                onDelete={handleDelete}
-                onActivate={handleActivate}
-                onReEnterKey={setReEnterProvider}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </>
+      {!loading && rows.length > 0 && (
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <ProviderCard
+              key={row.provider}
+              row={row}
+              config={config}
+              onDelete={handleDelete}
+              onActivate={handleActivate}
+              onReEnterKey={setReEnterProvider}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

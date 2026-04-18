@@ -202,3 +202,10 @@ export {
   getPresetById,
 } from './proxy-presets';
 export type { ProxyPresetId } from './proxy-presets';
+
+export { normalizeBaseUrl, resolveModelsEndpoint } from './baseUrl';
+export type {
+  NormalizeBaseUrlError,
+  NormalizeBaseUrlOk,
+  NormalizeBaseUrlResult,
+} from './baseUrl';

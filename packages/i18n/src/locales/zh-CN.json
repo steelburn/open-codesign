@@ -79,6 +79,61 @@
       "light": "浅色",
       "dark": "深色",
       "system": "跟随系统"
+    },
+    "providers": {
+      "sectionTitle": "API 提供商",
+      "activeLabel": "当前激活",
+      "addButton": "添加提供商",
+      "empty": "尚未配置任何提供商。添加一个开始生成。",
+      "loading": "正在加载提供商…",
+      "switchedTo": "已切换到 {{name}}",
+      "saved": "已保存提供商",
+      "removed": "已删除提供商",
+      "deleteConfirm": "确认删除",
+      "deleteCancel": "取消",
+      "setActive": "设为激活",
+      "edit": "编辑",
+      "test": "测试",
+      "saveAndTest": "保存并测试",
+      "cancel": "取消",
+      "addTitle": "添加提供商",
+      "editTitle": "编辑提供商",
+      "fields": {
+        "provider": "提供商",
+        "apiKey": "API Key",
+        "baseUrl": "Base URL",
+        "baseUrlOptional": "Base URL (可选,留空使用默认)",
+        "primaryModel": "主要模型",
+        "fastModel": "快速模型",
+        "getKey": "获取 Key ↗"
+      },
+      "preview": {
+        "willCall": "将请求：{{url}}",
+        "default": "将使用官方默认端点",
+        "invalidUrl": "{{reason}}"
+      },
+      "keyFormat": {
+        "looksGood": "{{provider}} 的 Key 格式看起来正确",
+        "wrongPrefix": "应以 {{prefix}} 开头",
+        "tooShort": "Key 看起来太短了",
+        "unknown": "未做格式检查"
+      },
+      "details": {
+        "expand": "展开详情",
+        "collapse": "收起详情",
+        "lastTested": "上次测试",
+        "neverTested": "尚未测试",
+        "modelCount_one": "{{count}} 个可用模型",
+        "modelCount_other": "{{count}} 个可用模型",
+        "host": "主机",
+        "endpoint": "解析后的端点"
+      },
+      "switchConfirm": {
+        "title": "该提供商上次测试失败",
+        "body": "切换到 {{name}} 后生成可能会失败。仍然切换？",
+        "confirm": "仍然切换",
+        "cancel": "保持当前"
+      }
     }
   },
   "onboarding": {

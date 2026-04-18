@@ -2,58 +2,64 @@ import {
   CodesignError,
   type SupportedOnboardingProvider,
   isSupportedOnboardingProvider,
+  normalizeBaseUrl,
+  resolveModelsEndpoint,
 } from '@open-codesign/shared';
+import { type EnrichedError, enrichProviderError } from './errorEnrichment';
 
 export type ValidateResult =
   | { ok: true; modelCount: number }
-  | { ok: false; code: '401' | '402' | '429' | 'network'; message: string };
+  | {
+      ok: false;
+      code: '401' | '402' | '429' | 'network';
+      message: string;
+      hint?: string;
+      providerKeyUrl?: string;
+      retryable?: boolean;
+    };
 
-interface ProviderEndpoint {
-  url: string;
-  headers: (apiKey: string) => Record<string, string>;
-}
+const DEFAULT_BASES: Record<SupportedOnboardingProvider, string> = {
+  anthropic: 'https://api.anthropic.com',
+  openai: 'https://api.openai.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+};
 
-function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): ProviderEndpoint {
-  switch (provider) {
-    case 'anthropic':
-      return {
-        url: `${baseUrl ?? 'https://api.anthropic.com'}/v1/models`,
-        headers: (apiKey) => ({
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        }),
-      };
-    case 'openai':
-      return {
-        url: `${baseUrl ?? 'https://api.openai.com'}/v1/models`,
-        headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
-      };
-    case 'openrouter':
-      return {
-        url: `${baseUrl ?? 'https://openrouter.ai/api'}/v1/models`,
-        headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
-      };
+const PROTOCOL: Record<SupportedOnboardingProvider, 'openai' | 'anthropic'> = {
+  anthropic: 'anthropic',
+  openai: 'openai',
+  openrouter: 'openai',
+};
+
+function buildHeaders(
+  provider: SupportedOnboardingProvider,
+  apiKey: string,
+): Record<string, string> {
+  if (provider === 'anthropic') {
+    return { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
   }
+  return { authorization: `Bearer ${apiKey}` };
 }
 
-function statusToCode(status: number): '401' | '402' | '429' | null {
+function toLegacyCode(status: number | 'network'): '401' | '402' | '429' | 'network' {
+  if (status === 'network') return 'network';
   if (status === 401 || status === 403) return '401';
   if (status === 402) return '402';
   if (status === 429) return '429';
-  return null;
+  return 'network';
 }
 
-function statusMessage(provider: SupportedOnboardingProvider, status: number): string {
-  if (status === 401 || status === 403) {
-    return `Invalid ${provider} API key (HTTP ${status}). Double-check the key, then try again.`;
+function toFailure(status: number | 'network', enriched: EnrichedError): ValidateResult {
+  const failure: ValidateResult = {
+    ok: false,
+    code: toLegacyCode(status),
+    message: enriched.message,
+    hint: enriched.hint,
+    retryable: enriched.retryable,
+  };
+  if (enriched.providerKeyUrl !== undefined) {
+    failure.providerKeyUrl = enriched.providerKeyUrl;
   }
-  if (status === 402) {
-    return `${provider} reports the account has no credit (HTTP 402). Add billing or pick another provider.`;
-  }
-  if (status === 429) {
-    return `${provider} rate-limited the validation request (HTTP 429). Wait a moment and retry.`;
-  }
-  return `${provider} returned HTTP ${status}.`;
+  return failure;
 }
 
 export async function pingProvider(
@@ -71,37 +77,63 @@ export async function pingProvider(
     throw new CodesignError('API key is empty', 'PROVIDER_AUTH_MISSING');
   }
 
-  const ep = endpoint(provider, baseUrl);
+  let normalized: string;
+  let host: string;
+  if (baseUrl !== undefined && baseUrl.trim().length > 0) {
+    const r = normalizeBaseUrl(baseUrl);
+    if (!r.ok) {
+      const enriched = enrichProviderError({
+        provider,
+        host: baseUrl,
+        status: 'network',
+      });
+      return toFailure('network', { ...enriched, message: r.message, hint: enriched.hint });
+    }
+    normalized = r.normalized;
+    host = r.host;
+  } else {
+    normalized = DEFAULT_BASES[provider];
+    host = new URL(normalized).hostname;
+  }
+
+  const url = resolveModelsEndpoint(normalized, PROTOCOL[provider]);
+  const headers = buildHeaders(provider, apiKey);
+
   let res: Response;
   try {
-    res = await fetch(ep.url, { method: 'GET', headers: ep.headers(apiKey) });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Network request failed';
-    return { ok: false, code: 'network', message };
+    res = await fetch(url, { method: 'GET', headers });
+  } catch {
+    const enriched = enrichProviderError({ provider, host, status: 'network' });
+    return toFailure('network', enriched);
   }
 
   if (!res.ok) {
-    const code = statusToCode(res.status);
-    if (code !== null) {
-      return { ok: false, code, message: statusMessage(provider, res.status) };
+    const retryAfter = res.headers.get('retry-after') ?? undefined;
+    let rawBody: string | undefined;
+    try {
+      rawBody = await res.clone().text();
+    } catch {
+      rawBody = undefined;
     }
-    return {
-      ok: false,
-      code: 'network',
-      message: `${provider} returned an unexpected HTTP ${res.status}.`,
-    };
+    const enriched = enrichProviderError({
+      provider,
+      host,
+      status: res.status,
+      ...(retryAfter !== undefined ? { retryAfter } : {}),
+      ...(rawBody !== undefined ? { rawBody } : {}),
+    });
+    return toFailure(res.status, enriched);
   }
 
   let body: unknown;
   try {
     body = await res.json();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid JSON in response';
-    return { ok: false, code: 'network', message };
+  } catch {
+    const enriched = enrichProviderError({ provider, host, status: 'network' });
+    return toFailure('network', { ...enriched, message: 'Invalid JSON response from provider' });
   }
 
-  const modelCount = countModels(body);
-  return { ok: true, modelCount };
+  return { ok: true, modelCount: countModels(body) };
 }
 
 function countModels(body: unknown): number {
