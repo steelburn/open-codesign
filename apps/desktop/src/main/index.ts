@@ -6,6 +6,7 @@ import { BRAND, CodesignError, GeneratePayload } from '@open-codesign/shared';
 import { BrowserWindow, app, ipcMain, shell } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { registerExporterIpc } from './exporter-ipc';
+import { getLogPath, getLogger, initLogger } from './logger';
 import {
   getApiKeyForProvider,
   getBaseUrlForProvider,
@@ -50,6 +51,8 @@ function createWindow(): void {
 }
 
 function registerIpcHandlers(): void {
+  const logIpc = getLogger('main:ipc');
+
   ipcMain.handle('codesign:detect-provider', (_e, key: unknown) => {
     if (typeof key !== 'string') {
       throw new CodesignError('detect-provider expects a string key', 'IPC_BAD_INPUT');
@@ -62,13 +65,43 @@ function registerIpcHandlers(): void {
     const apiKey = getApiKeyForProvider(payload.model.provider);
     const storedBaseUrl = getBaseUrlForProvider(payload.model.provider);
     const baseUrl = payload.baseUrl ?? storedBaseUrl;
-    return generate({
-      prompt: payload.prompt,
-      history: payload.history,
-      model: payload.model,
-      apiKey,
-      ...(baseUrl !== undefined ? { baseUrl } : {}),
+    logIpc.info('generate', {
+      provider: payload.model.provider,
+      modelId: payload.model.modelId,
+      promptLen: payload.prompt.length,
+      historyLen: payload.history.length,
+      baseUrl: baseUrl ?? '<default>',
     });
+    const t0 = Date.now();
+    try {
+      const result = await generate({
+        prompt: payload.prompt,
+        history: payload.history,
+        model: payload.model,
+        apiKey,
+        ...(baseUrl !== undefined ? { baseUrl } : {}),
+      });
+      logIpc.info('generate.ok', {
+        ms: Date.now() - t0,
+        artifacts: (result as { artifacts?: unknown[] }).artifacts?.length ?? 0,
+        cost: (result as { costUsd?: number }).costUsd,
+      });
+      return result;
+    } catch (err) {
+      logIpc.error('generate.fail', {
+        ms: Date.now() - t0,
+        provider: payload.model.provider,
+        modelId: payload.model.modelId,
+        baseUrl: baseUrl ?? '<default>',
+        message: err instanceof Error ? err.message : String(err),
+        code: err instanceof CodesignError ? err.code : undefined,
+      });
+      throw err;
+    }
+  });
+
+  ipcMain.handle('codesign:open-log-folder', async () => {
+    await shell.openPath(getLogPath());
   });
 }
 
@@ -87,6 +120,7 @@ function setupAutoUpdater(): void {
 }
 
 void app.whenReady().then(async () => {
+  initLogger();
   await loadConfigOnBoot();
   registerIpcHandlers();
   registerOnboardingIpc();

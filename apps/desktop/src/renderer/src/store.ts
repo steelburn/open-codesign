@@ -38,12 +38,14 @@ interface CodesignState {
   settingsOpen: boolean;
   commandPaletteOpen: boolean;
   toasts: Toast[];
+  iframeErrors: string[];
 
   loadConfig: () => Promise<void>;
   completeOnboarding: (next: OnboardingState) => void;
   sendPrompt: (prompt: string) => Promise<void>;
   retryLastPrompt: () => Promise<void>;
   clearError: () => void;
+  clearIframeErrors: () => void;
   exportActive: (format: ExportFormat) => Promise<void>;
 
   setTheme: (theme: Theme) => void;
@@ -108,6 +110,11 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   settingsOpen: false,
   commandPaletteOpen: false,
   toasts: [],
+  iframeErrors: [],
+
+  clearIframeErrors() {
+    set({ iframeErrors: [] });
+  },
 
   async loadConfig() {
     if (!window.codesign) {
