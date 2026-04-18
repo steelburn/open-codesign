@@ -8,6 +8,7 @@ export default defineConfig({
       outDir: 'out/main',
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') },
+        external: ['puppeteer-core', 'pptxgenjs', 'zip-lib', 'better-sqlite3'],
       },
     },
   },
