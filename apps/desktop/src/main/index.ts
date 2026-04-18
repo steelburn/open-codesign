@@ -30,6 +30,7 @@ import {
 import { registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
 import { resolveActiveModel } from './provider-settings';
+import { registerShareIpc } from './share-ipc';
 import { safeInitSnapshotsDb } from './snapshots-db';
 import { registerSnapshotsIpc, registerSnapshotsUnavailableIpc } from './snapshots-ipc';
 
@@ -467,6 +468,7 @@ void app.whenReady().then(async () => {
   registerOnboardingIpc();
   registerPreferencesIpc();
   registerExporterIpc(() => mainWindow);
+  registerShareIpc();
   setupAutoUpdater();
   createWindow();
 

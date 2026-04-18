@@ -94,6 +94,7 @@ interface CodesignState {
   clearIframeErrors: () => void;
   pushIframeError: (message: string) => void;
   exportActive: (format: ExportFormat) => Promise<void>;
+  openActiveInBrowser: () => Promise<void>;
 
   pickInputFiles: () => Promise<void>;
   removeInputFile: (path: string) => void;
@@ -587,6 +588,31 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
       set({ toastMessage: msg, errorMessage: msg, lastError: msg });
+    }
+  },
+
+  async openActiveInBrowser() {
+    const html = get().previewHtml;
+    if (!html) {
+      set({ toastMessage: tr('notifications.noDesignToExport') });
+      return;
+    }
+    if (!window.codesign) {
+      set({ errorMessage: tr('errors.rendererDisconnected') });
+      return;
+    }
+    try {
+      await window.codesign.share.openInBrowser(html);
+      set({ toastMessage: tr('preview.openInBrowserSuccess') });
+      get().pushToast({ variant: 'success', title: tr('preview.openInBrowserSuccess') });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      set({ toastMessage: tr('preview.openInBrowserFailed'), errorMessage: msg, lastError: msg });
+      get().pushToast({
+        variant: 'error',
+        title: tr('preview.openInBrowserFailed'),
+        description: msg,
+      });
     }
   },
 

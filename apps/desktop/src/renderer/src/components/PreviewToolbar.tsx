@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { Tooltip } from '@open-codesign/ui';
-import { Download } from 'lucide-react';
+import { Download, Globe } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
 import { useCodesignStore } from '../store';
@@ -16,6 +16,7 @@ export function PreviewToolbar(): ReactElement {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
   const exportActive = useCodesignStore((s) => s.exportActive);
+  const openActiveInBrowser = useCodesignStore((s) => s.openActiveInBrowser);
   const toastMessage = useCodesignStore((s) => s.toastMessage);
   const dismissToast = useCodesignStore((s) => s.dismissToast);
   const [open, setOpen] = useState(false);
@@ -77,6 +78,22 @@ export function PreviewToolbar(): ReactElement {
           {toastMessage}
         </output>
       )}
+
+      <div className="relative">
+        <Tooltip label={disabled ? t('disabledReason.noDesignToExport') : undefined} side="bottom">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              void openActiveInBrowser();
+            }}
+            className="inline-flex items-center gap-1.5 h-[var(--size-control-sm)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] mr-2"
+          >
+            <Globe className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" aria-hidden="true" />
+            {t('preview.openInBrowser')}
+          </button>
+        </Tooltip>
+      </div>
 
       <div className="relative" ref={ref}>
         <Tooltip label={disabled ? t('disabledReason.noDesignToExport') : undefined} side="bottom">

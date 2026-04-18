@@ -50,7 +50,10 @@
     "noDesign": "还没有设计",
     "clickToComment": "点击预览中的任意元素即可留下局部评论。",
     "runtimeError": "预览运行时错误",
-    "dismissErrors": "关闭预览错误"
+    "dismissErrors": "关闭预览错误",
+    "openInBrowser": "在浏览器中打开",
+    "openInBrowserSuccess": "已在浏览器打开",
+    "openInBrowserFailed": "无法在浏览器中打开"
   },
   "chat": {
     "placeholder": "想设计什么？",

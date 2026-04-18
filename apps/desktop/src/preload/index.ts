@@ -97,6 +97,14 @@ const api = {
     ipcRenderer.invoke('codesign:clear-design-system') as Promise<OnboardingState>,
   export: (payload: { format: ExportFormat; htmlContent: string; defaultFilename?: string }) =>
     ipcRenderer.invoke('codesign:export', payload) as Promise<ExportInvokeResponse>,
+  share: {
+    openInBrowser: (html: string, designName?: string) =>
+      ipcRenderer.invoke('share:v1:openInBrowser', {
+        schemaVersion: 1 as const,
+        html,
+        ...(designName ? { designName } : {}),
+      }) as Promise<{ ok: true; filepath: string }>,
+  },
   locale: {
     getSystem: () => ipcRenderer.invoke('locale:get-system') as Promise<string>,
     getCurrent: () => ipcRenderer.invoke('locale:get-current') as Promise<string>,
