@@ -40,11 +40,7 @@ describe('computeAnchoredPosition', () => {
   });
 
   it('clamps left to the safe gap when the element sits near the left edge', () => {
-    const result = computeAnchoredPosition(
-      { top: 100, left: 0, width: 40, height: 30 },
-      220,
-      800,
-    );
+    const result = computeAnchoredPosition({ top: 100, left: 0, width: 40, height: 30 }, 220, 800);
     expect(result.left).toBe(8);
   });
 
