@@ -1,4 +1,3 @@
-import { basename } from 'node:path';
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
 import { type RetryReason, complete, completeWithRetry } from '@open-codesign/providers';
 import type {
@@ -75,28 +74,68 @@ interface ModelRunInput {
   messages: ChatMessage[];
 }
 
+function createHtmlArtifact(content: string, index: number): Artifact {
+  return {
+    id: `design-${index + 1}`,
+    type: 'html',
+    title: 'Design',
+    content,
+    designParams: [],
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function collect(events: Iterable<ArtifactEvent>, into: Collected): void {
   for (const ev of events) {
     if (ev.type === 'text') {
       into.text += ev.delta;
     } else if (ev.type === 'artifact:end') {
-      into.artifacts.push({
-        id: ev.identifier || `design-${into.artifacts.length + 1}`,
-        type: 'html',
-        title: 'Design',
-        content: ev.fullContent,
-        designParams: [],
-        createdAt: new Date().toISOString(),
-      });
+      const artifact = createHtmlArtifact(ev.fullContent, into.artifacts.length);
+      if (ev.identifier) artifact.id = ev.identifier;
+      into.artifacts.push(artifact);
     }
   }
 }
 
+function extractHtmlDocument(source: string): string | null {
+  const doctypeMatch = source.match(/<!doctype html[\s\S]*?<\/html>/i);
+  if (doctypeMatch) return doctypeMatch[0].trim();
+
+  const htmlMatch = source.match(/<html[\s\S]*?<\/html>/i);
+  if (htmlMatch) return htmlMatch[0].trim();
+
+  return null;
+}
+
+function extractFallbackArtifact(text: string): { artifact: Artifact | null; message: string } {
+  const fencedMatches = [...text.matchAll(/```(?:html)?\s*([\s\S]*?)```/gi)];
+  for (const match of fencedMatches) {
+    const block = match[1];
+    const matchedText = match[0];
+    if (!block || !matchedText) continue;
+
+    const html = extractHtmlDocument(block);
+    if (!html) continue;
+
+    return {
+      artifact: createHtmlArtifact(html, 0),
+      message: text.replace(matchedText, '').trim(),
+    };
+  }
+
+  const html = extractHtmlDocument(text);
+  if (!html) return { artifact: null, message: text.trim() };
+
+  return {
+    artifact: createHtmlArtifact(html, 0),
+    message: text.replace(html, '').trim(),
+  };
+}
+
 function formatDesignSystem(designSystem: StoredDesignSystem): string {
-  const repoLabel = basename(designSystem.rootPath);
   const lines = [
     '## Design system to follow',
-    `Repository: ${repoLabel}`,
+    `Root path: ${designSystem.rootPath}`,
     `Summary: ${designSystem.summary}`,
   ];
   if (designSystem.colors.length > 0) lines.push(`Colors: ${designSystem.colors.join(', ')}`);
@@ -114,7 +153,7 @@ function formatAttachments(attachments: AttachmentContext[]): string | null {
   if (attachments.length === 0) return null;
   const body = attachments
     .map((file, index) => {
-      const lines = [`${index + 1}. ${file.name}`];
+      const lines = [`${index + 1}. ${file.name} (${file.path})`];
       if (file.note) lines.push(`Note: ${file.note}`);
       if (file.excerpt) lines.push(`Excerpt:\n${file.excerpt}`);
       return lines.join('\n');
@@ -159,6 +198,7 @@ function buildRevisionPrompt(input: ApplyCommentInput, contextSections: string[]
   const parts = [
     'Revise the existing HTML artifact below.',
     'Keep the overall structure, copy, and layout intact unless the user request requires a broader change.',
+    'Prioritize the selected element first and avoid unrelated edits.',
     `User request: ${input.comment.trim()}`,
     `Selected element tag: <${input.selection.tag}>`,
     `Selected element selector: ${input.selection.selector}`,
@@ -172,7 +212,7 @@ function buildRevisionPrompt(input: ApplyCommentInput, contextSections: string[]
     parts.push(contextSections.join('\n\n'));
   }
   parts.push(
-    'Return the full updated HTML artifact. Do not explain the diff line by line; a short summary outside the artifact is enough.',
+    'Return exactly one full updated HTML artifact wrapped in the required <artifact> tag. Do not use Markdown code fences. A short summary outside the artifact is enough.',
   );
   return parts.join('\n\n');
 }
@@ -196,6 +236,14 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
   const collected: Collected = { text: '', artifacts: [] };
   collect(parser.feed(result.content), collected);
   collect(parser.flush(), collected);
+
+  if (collected.artifacts.length === 0) {
+    const fallback = extractFallbackArtifact(collected.text);
+    if (fallback.artifact) {
+      collected.artifacts.push(fallback.artifact);
+      collected.text = fallback.message;
+    }
+  }
 
   return {
     message: collected.text.trim(),
