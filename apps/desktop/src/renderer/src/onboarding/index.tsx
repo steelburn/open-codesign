@@ -107,10 +107,12 @@ export function Onboarding() {
 
 function Stepper({ current, total }: { current: number; total: number }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-[var(--space-2)]">
+      <span className="sr-only">{`Step ${current} of ${total}`}</span>
       <span
-        className="text-[11px] text-[var(--color-text-muted)] tracking-[0.05em]"
+        className="text-[var(--text-2xs)] text-[var(--color-text-muted)] tracking-[var(--tracking-label)]"
         style={{ fontFamily: 'var(--font-mono)' }}
+        aria-hidden="true"
       >
         {current.toString().padStart(2, '0')} / {total.toString().padStart(2, '0')}
       </span>
@@ -119,7 +121,7 @@ function Stepper({ current, total }: { current: number; total: number }) {
           <span
             // biome-ignore lint/suspicious/noArrayIndexKey: stepper dots are positional
             key={i}
-            className={`h-[3px] rounded-full transition-[width,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            className={`h-[3px] rounded-full motion-safe:transition-[width,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
               i < current
                 ? 'w-[14px] bg-[var(--color-accent)]'
                 : 'w-[6px] bg-[var(--color-border-strong)]'

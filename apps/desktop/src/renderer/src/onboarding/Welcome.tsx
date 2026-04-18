@@ -13,17 +13,17 @@ export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomePr
   const t = useT();
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-[24px] font-semibold text-[var(--color-text-primary)] tracking-[-0.01em] leading-[1.2]">
+    <div className="flex flex-col gap-[var(--space-6)]">
+      <div className="flex flex-col gap-[var(--space-2)]">
+        <h1 className="text-[var(--text-xl)] font-semibold text-[var(--color-text-primary)] tracking-[var(--tracking-heading)] leading-[var(--leading-heading)]">
           {t('onboarding.welcome.title')}
         </h1>
-        <p className="text-[14px] text-[var(--color-text-secondary)] leading-[1.55]">
+        <p className="text-[var(--text-base)] text-[var(--color-text-secondary)] leading-[var(--leading-body)]">
           {t('onboarding.welcome.subtitle')}
         </p>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-[var(--space-3)]">
         <PathButton
           icon={<Rocket className="w-[18px] h-[18px]" />}
           title={t('onboarding.welcome.tryFree')}
@@ -48,14 +48,14 @@ export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomePr
         ) : null}
       </div>
 
-      <div className="pt-4 border-t border-[var(--color-border-subtle)] flex flex-col gap-2">
+      <div className="pt-[var(--space-4)] border-t border-[var(--color-border-subtle)] flex flex-col gap-[var(--space-2)]">
         <span
-          className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)] font-medium"
+          className="text-[var(--text-2xs)] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)] font-medium"
           style={{ fontFamily: 'var(--font-mono)' }}
         >
           {t('onboarding.welcome.whereToGetKey')}
         </span>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <div className="flex flex-wrap gap-x-[var(--space-4)] gap-y-[var(--space-1)]">
           {(
             Object.values(PROVIDER_SHORTLIST) as Array<
               (typeof PROVIDER_SHORTLIST)[SupportedOnboardingProvider]
@@ -66,7 +66,7 @@ export function Welcome({ onPickKey, onPickFreeTier, ollamaDetected }: WelcomePr
               href={p.keyHelpUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors duration-150"
+              className="inline-flex items-center gap-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] transition-colors duration-[var(--duration-fast)]"
             >
               {p.label}
               <ExternalLink className="w-[11px] h-[11px]" />
@@ -92,20 +92,20 @@ function PathButton({ icon, title, subtitle, onClick, disabled }: PathButtonProp
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group relative flex items-start gap-4 w-full text-left p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[var(--shadow-soft)] transition-[transform,box-shadow,border-color,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-[1px] hover:border-[var(--color-border-strong)] hover:shadow-[var(--shadow-card)] disabled:opacity-50 disabled:pointer-events-none"
+      className="group relative flex items-start gap-[var(--space-4)] w-full text-left p-[var(--space-4)] rounded-[var(--radius-lg)] bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[var(--shadow-soft)] motion-safe:transition-[transform,box-shadow,border-color,background-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:hover:-translate-y-[1px] hover:border-[var(--color-border-strong)] hover:shadow-[var(--shadow-card)] active:translate-y-0 active:shadow-[var(--shadow-soft)] disabled:opacity-50 disabled:pointer-events-none"
     >
       <span className="shrink-0 mt-[2px] inline-flex items-center justify-center w-[34px] h-[34px] rounded-[var(--radius-md)] bg-[var(--color-accent-soft)] text-[var(--color-accent)]">
         {icon}
       </span>
-      <span className="flex flex-col gap-[2px] flex-1 min-w-0">
-        <span className="text-[14px] font-semibold text-[var(--color-text-primary)] tracking-[-0.005em]">
+      <span className="flex flex-col gap-[var(--space-0_5)] flex-1 min-w-0">
+        <span className="text-[var(--text-base)] font-semibold text-[var(--color-text-primary)] tracking-[-0.005em]">
           {title}
         </span>
-        <span className="text-[12px] text-[var(--color-text-secondary)] leading-[1.5]">
+        <span className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-[var(--leading-ui)]">
           {subtitle}
         </span>
       </span>
-      <ArrowRight className="w-[14px] h-[14px] mt-[10px] shrink-0 text-[var(--color-text-muted)] opacity-0 -translate-x-[4px] transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-[var(--color-accent)]" />
+      <ArrowRight className="w-[14px] h-[14px] mt-[10px] shrink-0 text-[var(--color-text-muted)] opacity-0 -translate-x-[4px] motion-safe:transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-[var(--color-accent)]" />
     </button>
   );
 }
