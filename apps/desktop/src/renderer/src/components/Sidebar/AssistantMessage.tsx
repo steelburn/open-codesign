@@ -1,6 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import type { ChatMessage } from '@open-codesign/shared';
-import { Check, Copy, RefreshCcw, Star } from 'lucide-react';
+import { Check, Copy, MessageSquareText, RefreshCcw, Star } from 'lucide-react';
 import { useState } from 'react';
 import { useCodesignStore } from '../../store';
 
@@ -19,11 +19,13 @@ export function AssistantMessage({ message, index }: AssistantMessageProps) {
   const messages = useCodesignStore((s) => s.messages);
   const regenerate = useCodesignStore((s) => s.regenerateLast);
   const saveSnapshot = useCodesignStore((s) => s.saveSnapshot);
+  const appliedComments = useCodesignStore((s) => s.appliedComments);
   const [copied, setCopied] = useState(false);
   const [snapped, setSnapped] = useState(false);
 
   const isLast = index === messages.length - 1;
   const hasArtifact = isLast && previewHtml !== null && !isError;
+  const ownComments = appliedComments.filter((c) => c.assistantMessageIndex === index);
 
   async function copyArtifact(): Promise<void> {
     if (!previewHtml) return;
@@ -55,6 +57,23 @@ export function AssistantMessage({ message, index }: AssistantMessageProps) {
       {hasArtifact ? (
         <div className="mt-2 text-[11px] text-[var(--color-text-muted)]">
           {t('assistantMessage.artifactReady')}
+        </div>
+      ) : null}
+
+      {ownComments.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {ownComments.map((c) => (
+            <span
+              key={c.id}
+              className="inline-flex items-center gap-1.5 max-w-full rounded-full border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-[3px] text-[11px] text-[var(--color-text-secondary)]"
+              title={`${c.label.display} \u2014 ${c.comment}`}
+            >
+              <MessageSquareText className="h-3 w-3 text-[var(--color-accent)] shrink-0" />
+              <span className="truncate max-w-[260px]">
+                {t('comment.chip', { target: c.label.display, edit: c.comment })}
+              </span>
+            </span>
+          ))}
         </div>
       ) : null}
 

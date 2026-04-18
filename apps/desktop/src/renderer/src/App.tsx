@@ -112,7 +112,7 @@ export function App() {
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-background)]">
-      <TopBar />
+      <TopBar onReuseLastPrompt={(p) => setPrompt(p)} />
       <div className="flex-1 min-h-0">
         {view === 'settings' ? (
           <Settings />
