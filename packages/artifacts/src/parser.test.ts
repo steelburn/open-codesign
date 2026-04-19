@@ -65,7 +65,9 @@ describe('artifact parser', () => {
     );
     expect(endEvent?.fullContent).toBe('body');
     const textLeak = events.find(
-      (e) => (e as { type: string }).type === 'text' && /<artifact/i.test((e as { delta: string }).delta),
+      (e) =>
+        (e as { type: string }).type === 'text' &&
+        /<artifact/i.test((e as { delta: string }).delta),
     );
     expect(textLeak).toBeUndefined();
   });
