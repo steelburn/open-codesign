@@ -23,11 +23,13 @@ vi.mock('./electron-runtime', () => ({
 }));
 
 import {
+  SHARE_CSP,
   buildTempFilename,
   cleanupOldTempFiles,
   parseShareRequest,
   registerShareIpc,
   safeDesignSlug,
+  wrapShareHtml,
 } from './share-ipc';
 
 describe('parseShareRequest', () => {
@@ -154,6 +156,22 @@ describe('cleanupOldTempFiles', () => {
   });
 });
 
+describe('wrapShareHtml', () => {
+  it('embeds a restrictive CSP meta tag and the sandbox marker', () => {
+    const wrapped = wrapShareHtml('<p>hello</p>');
+    expect(wrapped).toContain(`<meta http-equiv="Content-Security-Policy" content="${SHARE_CSP}">`);
+    expect(wrapped).toContain('sandboxed preview');
+    expect(wrapped).toContain('<p>hello</p>');
+    expect(wrapped.startsWith('<!doctype html>')).toBe(true);
+  });
+
+  it('CSP forbids arbitrary network and frame sources', () => {
+    expect(SHARE_CSP).toContain("default-src 'none'");
+    expect(SHARE_CSP).toContain("connect-src 'none'");
+    expect(SHARE_CSP).toContain("frame-src 'none'");
+  });
+});
+
 describe('share:v1:openInBrowser handler', () => {
   function getHandler(): (...args: unknown[]) => unknown {
     registerShareIpc();
@@ -184,7 +202,10 @@ describe('share:v1:openInBrowser handler', () => {
     expect(writeFileMock).toHaveBeenCalledOnce();
     const firstCall = writeFileMock.mock.calls[0];
     expect(firstCall?.[0]).toBe(result.filepath);
-    expect(firstCall?.[1]).toBe('<p>hi</p>');
+    const written = firstCall?.[1] as string;
+    expect(written).toContain('<p>hi</p>');
+    expect(written).toContain(`<meta http-equiv="Content-Security-Policy" content="${SHARE_CSP}">`);
+    expect(written.startsWith('<!doctype html>')).toBe(true);
     expect(openExternalMock).toHaveBeenCalledTimes(1);
     const openedUrl = openExternalMock.mock.calls[0]?.[0];
     expect(openedUrl).toBe(`file://${result.filepath}`);
