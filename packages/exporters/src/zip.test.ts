@@ -56,4 +56,30 @@ describe('exportZip', () => {
       code: 'EXPORTER_ZIP_FAILED',
     });
   });
+
+  it('rejects asset paths that escape the staging directory (zip-slip)', async () => {
+    const dest = join(tempDir, 'unsafe.zip');
+    await expect(
+      exportZip('<p>x</p>', dest, {
+        assets: [{ path: '../escape.txt', content: 'pwn' }],
+      }),
+    ).rejects.toMatchObject({ code: 'EXPORTER_ZIP_UNSAFE_PATH' });
+    await expect(
+      exportZip('<p>x</p>', dest, {
+        assets: [{ path: 'assets/../../escape.txt', content: 'pwn' }],
+      }),
+    ).rejects.toMatchObject({ code: 'EXPORTER_ZIP_UNSAFE_PATH' });
+    // Windows-style backslash traversal — must be rejected on POSIX too,
+    // since ZIP entries authored on Windows can carry `\` separators.
+    await expect(
+      exportZip('<p>x</p>', dest, {
+        assets: [{ path: '..\\..\\etc\\passwd', content: 'pwn' }],
+      }),
+    ).rejects.toMatchObject({ code: 'EXPORTER_ZIP_UNSAFE_PATH' });
+    await expect(
+      exportZip('<p>x</p>', dest, {
+        assets: [{ path: 'assets\\..\\..\\escape.txt', content: 'pwn' }],
+      }),
+    ).rejects.toMatchObject({ code: 'EXPORTER_ZIP_UNSAFE_PATH' });
+  });
 });

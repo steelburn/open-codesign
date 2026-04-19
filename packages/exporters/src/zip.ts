@@ -70,15 +70,23 @@ export async function exportZip(
     zip.addFile(readmePath, 'README.md');
 
     if (opts.assets) {
+      const stagingResolved = path.resolve(stagingDir);
       for (const asset of opts.assets) {
-        const safeRel = asset.path.replace(/^\/+/, '');
-        const localPath = path.join(stagingDir, safeRel);
+        // Normalize backslashes first: on POSIX `path.resolve` treats `\` as a
+        // literal char, so a Windows-style ZIP entry like `..\..\etc\passwd`
+        // would slip past the containment check unless rewritten to `/`.
+        const normalized = asset.path.replace(/\\/g, '/').replace(/^\/+/, '');
+        const localPath = path.resolve(stagingDir, normalized);
+        const rel = path.relative(stagingResolved, localPath);
+        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+          throw new CodesignError(
+            `ZIP export rejected unsafe asset path: ${asset.path}`,
+            'EXPORTER_ZIP_UNSAFE_PATH',
+          );
+        }
         await fs.mkdir(path.dirname(localPath), { recursive: true });
-        await fs.writeFile(
-          localPath,
-          typeof asset.content === 'string' ? asset.content : asset.content,
-        );
-        zip.addFile(localPath, safeRel);
+        await fs.writeFile(localPath, asset.content);
+        zip.addFile(localPath, normalized);
       }
     }
 
@@ -86,6 +94,7 @@ export async function exportZip(
     const stat = await fs.stat(destinationPath);
     return { bytes: stat.size, path: destinationPath };
   } catch (err) {
+    if (err instanceof CodesignError) throw err;
     throw new CodesignError(
       `ZIP export failed: ${err instanceof Error ? err.message : String(err)}`,
       'EXPORTER_ZIP_FAILED',
