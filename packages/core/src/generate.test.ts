@@ -488,6 +488,7 @@ describe('generate()', () => {
       '[generate] step=resolve_model',
       '[generate] step=resolve_model.ok',
       '[generate] step=build_request',
+      '[generate] step=load_skills.ok',
       '[generate] step=build_request.ok',
       '[generate] step=send_request',
       '[generate] step=send_request.ok',
@@ -646,7 +647,7 @@ describe('generate() skills injection', () => {
     body: '## Data Viz\n\nNever use Recharts default colors.',
   };
 
-  it('injects matched skill body into the system prompt when prompt contains a trigger keyword', async () => {
+  it('injects every loaded skill body into the system prompt (progressive disclosure level 1)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -665,11 +666,12 @@ describe('generate() skills injection', () => {
     const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
     const system = messages[0];
     if (!system) throw new Error('expected system message');
-    expect(system.content).toContain('### Skill: data-viz-recharts');
+    expect(system.content).toContain('## Skill: data-viz-recharts');
     expect(system.content).toContain('Never use Recharts default colors.');
+    expect(system.content).toContain('# Available Skills');
   });
 
-  it('does NOT inject the dashboard skill when prompt has no matching keyword', async () => {
+  it('still injects skills for a Chinese prompt (no language gating after rewrite)', async () => {
     completeMock.mockResolvedValueOnce({
       content: RESPONSE,
       inputTokens: 0,
@@ -679,7 +681,7 @@ describe('generate() skills injection', () => {
     loadBuiltinSkillsMock.mockResolvedValue([dataVizSkill]);
 
     await generate({
-      prompt: 'make a meditation app onboarding flow',
+      prompt: '为冥想 App 设计一个移动端引导流程',
       history: [],
       model: MODEL,
       apiKey: 'sk-test',
@@ -688,8 +690,33 @@ describe('generate() skills injection', () => {
     const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
     const system = messages[0];
     if (!system) throw new Error('expected system message');
-    expect(system.content).not.toContain('### Skill: data-viz-recharts');
-    expect(system.content).not.toContain('Never use Recharts default colors.');
+    // Old behaviour dropped the dashboard skill here because the keyword
+    // matcher never fired on a Chinese prompt. Progressive disclosure relies
+    // on the model to ignore irrelevant skills, so the body still ships.
+    expect(system.content).toContain('## Skill: data-viz-recharts');
+  });
+
+  it('renders no skill section when the loaded set is empty', async () => {
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([]);
+
+    await generate({
+      prompt: 'make a dashboard',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+
+    const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
+    const system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).not.toContain('# Available Skills');
+    expect(system.content).not.toContain('## Skill:');
   });
 
   it('falls back gracefully when the skills loader throws', async () => {
@@ -720,12 +747,110 @@ describe('generate() skills injection', () => {
     const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
     const system = messages[0];
     if (!system) throw new Error('expected system message');
-    expect(system.content).not.toContain('### Skill:');
+    expect(system.content).not.toContain('## Skill:');
 
     expect(result.warnings).toEqual([
       expect.stringContaining('Builtin skills unavailable: disk read failed'),
     ]);
     expect(errorLogs.some((entry) => entry.msg.includes('step=load_skills.fail'))).toBe(true);
+  });
+
+  it('drops skills with disable_model_invocation: true', async () => {
+    const disabledSkill: LoadedSkill = {
+      id: 'disabled-skill',
+      source: 'builtin',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'disabled-skill',
+        description: 'Should never be injected.',
+        trigger: { providers: ['*'], scope: 'system' },
+        disable_model_invocation: true,
+        user_invocable: true,
+      },
+      body: 'SHOULD NOT APPEAR',
+    };
+
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([dataVizSkill, disabledSkill]);
+
+    await generate({
+      prompt: 'make a dashboard',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+
+    const messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
+    const system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).toContain('## Skill: data-viz-recharts');
+    expect(system.content).not.toContain('## Skill: disabled-skill');
+    expect(system.content).not.toContain('SHOULD NOT APPEAR');
+  });
+
+  it('drops provider-restricted skills that do not match the current provider', async () => {
+    const openaiOnlySkill: LoadedSkill = {
+      id: 'openai-only',
+      source: 'builtin',
+      frontmatter: {
+        schemaVersion: 1,
+        name: 'openai-only',
+        description: 'Restricted to openai.',
+        trigger: { providers: ['openai'], scope: 'system' },
+        disable_model_invocation: false,
+        user_invocable: true,
+      },
+      body: 'OPENAI ONLY BODY',
+    };
+
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([openaiOnlySkill]);
+
+    // MODEL is anthropic — the openai-only skill must be filtered out.
+    await generate({
+      prompt: 'make a dashboard',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+
+    let messages = completeMock.mock.calls[0]?.[1] as ChatMessage[];
+    let system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).not.toContain('## Skill: openai-only');
+    expect(system.content).not.toContain('OPENAI ONLY BODY');
+
+    // Same skill, openai provider — must be injected.
+    completeMock.mockResolvedValueOnce({
+      content: RESPONSE,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    });
+    loadBuiltinSkillsMock.mockResolvedValue([openaiOnlySkill]);
+
+    await generate({
+      prompt: 'make a dashboard',
+      history: [],
+      model: { provider: 'openai', modelId: 'gpt-5' },
+      apiKey: 'sk-test',
+    });
+
+    messages = completeMock.mock.calls[1]?.[1] as ChatMessage[];
+    system = messages[0];
+    if (!system) throw new Error('expected system message');
+    expect(system.content).toContain('## Skill: openai-only');
+    expect(system.content).toContain('OPENAI ONLY BODY');
   });
 });
 
