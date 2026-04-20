@@ -411,6 +411,10 @@
     "generationFailed": "Generation failed",
     "cancellationFailed": "Cancellation failed",
     "inlineCommentFailed": "Inline comment failed",
+    "commentNeedsSnapshot": "Generate a design first before leaving a comment",
+    "commentCreateFailed": "Could not save the comment",
+    "commentUpdateFailed": "Could not update the comment",
+    "commentDeleteFailed": "Could not delete the comment",
     "noDesignToExport": "No design to export yet.",
     "exportedTo": "Exported to {{path}}"
   },

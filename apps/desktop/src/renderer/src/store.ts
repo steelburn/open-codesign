@@ -3,6 +3,9 @@ import {
   type ChatAppendInput,
   type ChatMessage,
   type ChatMessageRow,
+  type CommentKind,
+  type CommentRect,
+  type CommentRow,
   type Design,
   type LocalInputFile,
   type ModelRef,
@@ -129,6 +132,11 @@ interface CodesignState {
   sidebarCollapsed: boolean;
   attachedSkills: BuiltinSkillId[];
 
+  // Workstream D — comments
+  comments: CommentRow[];
+  commentsLoaded: boolean;
+  commentBubble: CommentBubbleAnchor | null;
+
   loadConfig: () => Promise<void>;
   completeOnboarding: (next: OnboardingState) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -194,6 +202,31 @@ interface CodesignState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleAttachedSkill: (skill: BuiltinSkillId) => void;
   clearAttachedSkills: () => void;
+
+  // Workstream D — comments
+  loadCommentsForCurrentDesign: () => Promise<void>;
+  openCommentBubble: (anchor: CommentBubbleAnchor) => void;
+  closeCommentBubble: () => void;
+  addComment: (input: {
+    kind: CommentKind;
+    selector: string;
+    tag: string;
+    outerHTML: string;
+    rect: CommentRect;
+    text: string;
+  }) => Promise<CommentRow | null>;
+  updateComment: (id: string, patch: { text?: string }) => Promise<void>;
+  removeComment: (id: string) => Promise<void>;
+}
+
+export interface CommentBubbleAnchor {
+  selector: string;
+  tag: string;
+  outerHTML: string;
+  rect: CommentRect;
+  /** If set, the bubble is editing an existing saved comment. */
+  existingCommentId?: string;
+  initialText?: string;
 }
 
 const THEME_STORAGE_KEY = 'open-codesign:theme';
@@ -792,6 +825,10 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   sidebarCollapsed: false,
   attachedSkills: [],
 
+  comments: [],
+  commentsLoaded: false,
+  commentBubble: null,
+
   clearIframeErrors() {
     set({ iframeErrors: [] });
   },
@@ -1146,7 +1183,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   setInteractionMode(mode) {
     if (mode === 'default') {
-      set({ interactionMode: mode, selectedElement: null });
+      set({ interactionMode: mode, selectedElement: null, commentBubble: null });
     } else {
       set({ interactionMode: mode });
     }
@@ -1305,9 +1342,13 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         designsViewOpen: false,
         chatMessages: [],
         chatLoaded: false,
+        comments: [],
+        commentsLoaded: false,
+        commentBubble: null,
       });
       await get().loadDesigns();
       void get().loadChatForCurrentDesign();
+      void get().loadCommentsForCurrentDesign();
       return design;
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -1350,8 +1391,12 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         designsViewOpen: false,
         chatMessages: [],
         chatLoaded: false,
+        comments: [],
+        commentsLoaded: false,
+        commentBubble: null,
       });
       void get().loadChatForCurrentDesign();
+      void get().loadCommentsForCurrentDesign();
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
       get().pushToast({
@@ -1537,6 +1582,111 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   clearAttachedSkills() {
     set({ attachedSkills: [] });
+  },
+
+  async loadCommentsForCurrentDesign() {
+    if (!window.codesign) return;
+    const designId = get().currentDesignId;
+    if (!designId) {
+      set({ comments: [], commentsLoaded: true });
+      return;
+    }
+    try {
+      const rows = await window.codesign.comments.list(designId);
+      if (get().currentDesignId !== designId) return;
+      set({ comments: rows, commentsLoaded: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      console.warn('[open-codesign] loadCommentsForCurrentDesign failed:', msg);
+      set({ commentsLoaded: true });
+    }
+  },
+
+  openCommentBubble(anchor) {
+    set({ commentBubble: anchor });
+  },
+
+  closeCommentBubble() {
+    set({ commentBubble: null });
+  },
+
+  async addComment(input) {
+    if (!window.codesign) return null;
+    const designId = get().currentDesignId;
+    if (!designId) return null;
+    // Pin comments to the current snapshot so pin overlays only surface for
+    // the snapshot the user was viewing when the click happened.
+    let snapshotId: string | null = null;
+    try {
+      const snaps = await window.codesign.snapshots.list(designId);
+      snapshotId = snaps[0]?.id ?? null;
+    } catch (err) {
+      console.warn('[open-codesign] addComment: failed to look up latest snapshot', err);
+    }
+    if (!snapshotId) {
+      get().pushToast({
+        variant: 'error',
+        title: tr('notifications.commentNeedsSnapshot'),
+      });
+      return null;
+    }
+    try {
+      const row = await window.codesign.comments.add({
+        designId,
+        snapshotId,
+        kind: input.kind,
+        selector: input.selector,
+        tag: input.tag,
+        outerHTML: input.outerHTML,
+        rect: input.rect,
+        text: input.text,
+      });
+      if (get().currentDesignId === designId) {
+        set((s) => ({ comments: [...s.comments, row] }));
+      }
+      return row;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('notifications.commentCreateFailed'),
+        description: msg,
+      });
+      return null;
+    }
+  },
+
+  async updateComment(id, patch) {
+    if (!window.codesign) return;
+    try {
+      const updated = await window.codesign.comments.update(id, patch);
+      if (!updated) return;
+      set((s) => ({
+        comments: s.comments.map((c) => (c.id === id ? updated : c)),
+      }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('notifications.commentUpdateFailed'),
+        description: msg,
+      });
+    }
+  },
+
+  async removeComment(id) {
+    if (!window.codesign) return;
+    try {
+      await window.codesign.comments.remove(id);
+      set((s) => ({ comments: s.comments.filter((c) => c.id !== id) }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('notifications.commentDeleteFailed'),
+        description: msg,
+      });
+    }
   },
 }));
 

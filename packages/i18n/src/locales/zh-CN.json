@@ -410,6 +410,10 @@
     "generationFailed": "生成失败",
     "cancellationFailed": "取消失败",
     "inlineCommentFailed": "局部修改失败",
+    "commentNeedsSnapshot": "请先生成一个设计，再添加批注",
+    "commentCreateFailed": "保存批注失败",
+    "commentUpdateFailed": "更新批注失败",
+    "commentDeleteFailed": "删除批注失败",
     "noDesignToExport": "当前还没有可导出的设计。",
     "exportedTo": "已导出到 {{path}}"
   },
