@@ -47,7 +47,7 @@ export function AddCustomProviderModal({ onSave, onClose, initialSetAsActive = t
 
   async function handleTest() {
     if (!window.codesign?.config) return;
-    if (baseUrl.trim().length === 0 || apiKey.trim().length === 0) return;
+    if (baseUrl.trim().length === 0) return;
     setTest({ kind: 'testing' });
     try {
       const res = await window.codesign.config.testEndpoint({
