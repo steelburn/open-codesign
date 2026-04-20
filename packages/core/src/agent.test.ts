@@ -185,12 +185,17 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
 
   it('constructs an Agent with empty tools, system prompt, and supplied history', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
-    await generateViaAgent({
-      prompt: 'design a landing page',
-      history: [{ role: 'user', content: 'prior turn' }],
-      model: MODEL,
-      apiKey: 'sk-test',
-    });
+    await generateViaAgent(
+      {
+        prompt: 'design a landing page',
+        history: [{ role: 'user', content: 'prior turn' }],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      // Opt out of the default toolset so this test continues to pin the
+      // Phase 1 zero-tool shape of the Agent init state.
+      { tools: [] },
+    );
 
     expect(agentCalls).toHaveLength(1);
     const call = agentCalls[0];
@@ -326,5 +331,61 @@ describe('generateViaAgent() — Phase 1 pass-through', () => {
     expect(result.warnings).toEqual([
       expect.stringContaining('Builtin skills unavailable: disk read failed'),
     ]);
+  });
+
+  it('returns no artifacts when prose contains a fenced ```html block but no <artifact> wrapper and no fs is provided', async () => {
+    // Locks in the post-fallback contract: prose-only HTML is no longer
+    // rescued. The host must rely on the text_editor + fs path.
+    scriptedAgent = {
+      assistantText: 'Here you go:\n\n```html\n<!doctype html><html><body>Hi</body></html>\n```',
+    };
+    const result = await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { tools: [] },
+    );
+    expect(result.artifacts).toHaveLength(0);
+  });
+
+  it('augments the system prompt with the file-output policy when tools are active', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a landing page',
+      history: [],
+      model: MODEL,
+      apiKey: 'sk-test',
+    });
+    const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
+    expect(sys).toContain('str_replace_based_edit_tool');
+    expect(sys).toContain('Do NOT emit `<artifact>`');
+  });
+});
+
+describe('FRAME_TEMPLATES — device frame starter assets', () => {
+  it('exposes iphone, ipad, watch, android, and macos-safari frames as JSX modules with EDITMODE markers', async () => {
+    const { FRAME_TEMPLATES } = await import('./frames/index.js');
+    const names = FRAME_TEMPLATES.map(([n]) => n);
+    expect(names).toEqual(['iphone.jsx', 'ipad.jsx', 'watch.jsx', 'android.jsx', 'macos-safari.jsx']);
+    for (const [name, jsx] of FRAME_TEMPLATES) {
+      expect(jsx.length, `${name} should be non-empty`).toBeGreaterThan(200);
+      expect(jsx, `${name} must declare an EDITMODE block`).toMatch(/EDITMODE-BEGIN/);
+      expect(jsx, `${name} must declare an EDITMODE block`).toMatch(/EDITMODE-END/);
+      expect(jsx, `${name} must call ReactDOM.createRoot`).toMatch(/ReactDOM\.createRoot/);
+    }
+  });
+
+  it('seeds an agent-host fsMap so the agent can `view` frames/<name>', async () => {
+    const { FRAME_TEMPLATES } = await import('./frames/index.js');
+    const fsMap = new Map<string, string>();
+    for (const [name, content] of FRAME_TEMPLATES) {
+      fsMap.set(`frames/${name}`, content);
+    }
+    expect(fsMap.get('frames/iphone.jsx')).toMatch(/IOSDevice/);
+    expect(fsMap.get('frames/ipad.jsx')).toMatch(/ReactDOM\.createRoot/);
+    expect(fsMap.get('frames/watch.jsx')).toMatch(/ReactDOM\.createRoot/);
   });
 });

@@ -7,8 +7,8 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
 }
 
 const sizeClass: Record<NonNullable<IconButtonProps['size']>, string> = {
-  sm: 'h-7 w-7',
-  md: 'h-9 w-9',
+  sm: 'h-8 w-8',
+  md: 'h-10 w-10',
 };
 
 export function IconButton({

@@ -34,4 +34,32 @@ export const enExamples: Record<string, ExampleContent> = {
     title: 'Habit tracker mobile screen',
     description: 'Phone-framed home screen with streak hero, habit list, and bottom tab bar.',
   },
+  'pricing-page': {
+    title: 'SaaS pricing page',
+    description: 'Three-tier pricing cards with feature comparison table and billing toggle.',
+  },
+  'blog-article': {
+    title: 'Editorial blog article',
+    description: 'Long-form article with TOC sidebar, pull quotes, and related articles grid.',
+  },
+  'event-calendar': {
+    title: 'Team calendar view',
+    description: 'Monthly calendar grid with multi-day event pills and upcoming events sidebar.',
+  },
+  'chat-interface': {
+    title: 'Chat messaging screen',
+    description: 'Mobile messaging UI with bubbles, typing indicator, and image messages.',
+  },
+  'portfolio-gallery': {
+    title: 'Photo portfolio gallery',
+    description: 'Dark masonry grid with hover overlays, category filters, and lightbox feel.',
+  },
+  'receipt-invoice': {
+    title: 'Print-ready invoice',
+    description: 'Clean A4 invoice with itemized table, tax breakdown, and payment terms.',
+  },
+  'settings-panel': {
+    title: 'App settings page',
+    description: 'Sidebar-navigated settings with forms, toggles, and danger zone section.',
+  },
 };

@@ -123,8 +123,8 @@
   --size-input-height: 40px;
 
   /* Titlebar (Electron frameless window) */
-  --size-titlebar-height: 44px;
-  --size-titlebar-pad-left: 88px; /* clears macOS traffic-light buttons */
+  --size-titlebar-height: 96px;
+  --size-titlebar-pad-left: 72px; /* clears macOS traffic-light buttons */
 
   /* Chip / file-token max width */
   --size-chip-max: 180px;

@@ -541,7 +541,7 @@ describe('generate()', () => {
     expect(user.content).toContain('https://example.com');
   });
 
-  it('falls back to fenced HTML when the model skips artifact tags', async () => {
+  it('returns no artifacts when the model only emits fenced HTML (prose fallback removed)', async () => {
     completeMock.mockResolvedValueOnce({
       content: FENCED_RESPONSE,
       inputTokens: 3,
@@ -556,10 +556,11 @@ describe('generate()', () => {
       apiKey: 'sk-test',
     });
 
-    expect(result.artifacts).toHaveLength(1);
-    expect(result.artifacts[0]?.content).toBe(SAMPLE_HTML);
-    expect(result.message).toContain('Here is the revised HTML artifact.');
-    expect(result.message).not.toContain('```html');
+    // The prose-based ```html``` fallback was deliberately removed in the
+    // JSX-runtime overhaul: artifacts come exclusively from `<artifact>`
+    // stream events or the text_editor virtual fs. Fenced source in prose
+    // is now ignored, mirroring the agent path.
+    expect(result.artifacts).toHaveLength(0);
   });
 
   it('strips empty markdown fences left over after streaming-extracted artifacts', async () => {
@@ -1097,7 +1098,7 @@ describe('applyComment()', () => {
     expect(user.content).toContain('Do not use Markdown code fences');
   });
 
-  it('returns a parsed artifact for fenced revision responses', async () => {
+  it('returns no artifacts for fenced revision responses (prose fallback removed)', async () => {
     completeMock.mockResolvedValueOnce({
       content: FENCED_RESPONSE,
       inputTokens: 0,
@@ -1118,9 +1119,7 @@ describe('applyComment()', () => {
       apiKey: 'sk-test',
     });
 
-    expect(result.artifacts).toHaveLength(1);
-    expect(result.artifacts[0]?.content).toBe(SAMPLE_HTML);
-    expect(result.message).toContain('Here is the revised HTML artifact.');
+    expect(result.artifacts).toHaveLength(0);
   });
 
   it('emits named-step logs in order through the injected logger', async () => {
@@ -1313,6 +1312,23 @@ describe('composeSystemPrompt()', () => {
     const prompt = composeSystemPrompt({ mode: 'tweak' });
     expect(prompt).not.toContain('iOS frame starter');
     expect(prompt).not.toContain('.ios-status-bar');
+  });
+
+  it('create mode advertises the device-frames starter assets without hardcoding chrome', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('Device frames (optional starter templates)');
+    expect(prompt).toContain('frames/iphone.html');
+    expect(prompt).toContain('frames/ipad.html');
+    expect(prompt).toContain('frames/watch.html');
+  });
+
+  it('progressive create mode includes device-frames hint in Layer 1 even without keyword match', () => {
+    const prompt = composeSystemPrompt({
+      mode: 'create',
+      userPrompt: 'a brutalist editorial homepage about typography',
+    });
+    expect(prompt).toContain('Device frames (optional starter templates)');
+    expect(prompt).toContain('frames/iphone.html');
   });
 
   it('revise mode does not include iOS frame starter template', () => {

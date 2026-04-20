@@ -39,14 +39,15 @@ describe('variantFor', () => {
 });
 
 describe('pinStyle', () => {
-  it('anchors to the top-right corner of the rect, offset by 12px', () => {
+  it('anchors to the top-right corner of the rect, offset by 10px', () => {
     const pos = pinStyle(comment({ rect: { top: 100, left: 50, width: 80, height: 40 } }), 100);
-    expect(pos).toEqual({ top: '88px', left: '118px' });
+    // top = 100 - 10 = 90; left = 50 + 80 - 10 = 120
+    expect(pos).toEqual({ top: '90px', left: '120px' });
   });
 
   it('scales with zoom', () => {
     const pos = pinStyle(comment({ rect: { top: 100, left: 50, width: 80, height: 40 } }), 50);
-    // scale = 0.5; top = 100*0.5 - 12 = 38; left = 50*0.5 + 80*0.5 - 12 = 53
-    expect(pos).toEqual({ top: '38px', left: '53px' });
+    // scale = 0.5; top = 100*0.5 - 10 = 40; left = 50*0.5 + 80*0.5 - 10 = 55
+    expect(pos).toEqual({ top: '40px', left: '55px' });
   });
 });

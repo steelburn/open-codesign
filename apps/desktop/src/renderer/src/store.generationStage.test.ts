@@ -21,7 +21,6 @@ function resetStore() {
     isGenerating: false,
     activeGenerationId: null,
     generationStage: 'idle',
-    streamingTokenCount: 0,
     errorMessage: null,
     lastError: null,
     config: READY_CONFIG,
@@ -97,26 +96,6 @@ describe('generationStage transitions', () => {
 
     expect(useCodesignStore.getState().generationStage).toBe('error');
     expect(useCodesignStore.getState().isGenerating).toBe(false);
-  });
-
-  it('resets streamingTokenCount to 0 on each new sendPrompt call', async () => {
-    const generate = vi.fn(() =>
-      Promise.resolve({ artifacts: [{ content: '<html></html>' }], message: 'ok' }),
-    );
-
-    vi.stubGlobal('window', {
-      codesign: { generate },
-      setTimeout,
-    });
-
-    useCodesignStore.setState({ streamingTokenCount: 42 });
-    await useCodesignStore.getState().sendPrompt({ prompt: 'new design' });
-
-    // streamingTokenCount is reset to 0 at start of sendPrompt
-    // (the subscribe below captures it at the beginning — easier to check via direct assertion
-    // captured just after state is set)
-    // We verify it's 0 after completion (no streaming increments in mock)
-    expect(useCodesignStore.getState().streamingTokenCount).toBe(0);
   });
 
   it('stage is sending synchronously at the start, then advances to done', async () => {

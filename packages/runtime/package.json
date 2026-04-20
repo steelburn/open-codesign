@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./overlay": "./src/overlay.ts"
   },
+  "files": ["src", "vendor"],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"

@@ -17,7 +17,8 @@
     "@mariozechner/pi-ai": "^0.67.68",
     "@open-codesign/artifacts": "workspace:*",
     "@open-codesign/providers": "workspace:*",
-    "@open-codesign/shared": "workspace:*"
+    "@open-codesign/shared": "workspace:*",
+    "@sinclair/typebox": "^0.34.49"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

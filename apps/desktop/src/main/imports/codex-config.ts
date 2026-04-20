@@ -84,7 +84,7 @@ export async function parseCodexConfig(toml: string): Promise<CodexImport> {
               : detectWireFromBaseUrl(block.base_url);
         const entry: ProviderEntry = {
           id: `codex-${id}`,
-          name: typeof block.name === 'string' && block.name.length > 0 ? block.name : id,
+          name: 'Codex (imported)',
           builtin: false,
           wire,
           baseUrl: block.base_url,

@@ -21,7 +21,9 @@ function InlineCommentComposerCard({ selectedElement }: InlineCommentComposerCar
   const t = useT();
   const clearCanvasElement = useCodesignStore((s) => s.clearCanvasElement);
   const applyInlineComment = useCodesignStore((s) => s.applyInlineComment);
-  const isGenerating = useCodesignStore((s) => s.isGenerating);
+  const isGenerating = useCodesignStore(
+    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
+  );
   const [draft, setDraft] = useState('');
   const applyDisabledReason = isGenerating
     ? t('disabledReason.generatingInProgress')

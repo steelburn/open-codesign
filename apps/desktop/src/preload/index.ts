@@ -114,7 +114,15 @@ export interface Preferences {
  * event types by ignoring them.
  */
 export interface AgentStreamEvent {
-  type: 'turn_start' | 'text_delta' | 'turn_end' | 'tool_call_start' | 'tool_call_result' | 'error';
+  type:
+    | 'turn_start'
+    | 'text_delta'
+    | 'turn_end'
+    | 'tool_call_start'
+    | 'tool_call_result'
+    | 'fs_updated'
+    | 'agent_end'
+    | 'error';
   designId: string;
   generationId?: string;
   // turn_start
@@ -132,6 +140,11 @@ export interface AgentStreamEvent {
   // tool_call_result
   result?: unknown;
   durationMs?: number;
+  // fs_updated — emitted whenever the agent's text_editor mutates a file in the
+  // virtual fs. Renderer uses this to re-render the iframe live during
+  // generation so the user can watch the design take shape.
+  path?: string;
+  content?: string;
   // error
   message?: string;
   code?: string;
@@ -140,6 +153,10 @@ export interface AgentStreamEvent {
 const api = {
   detectProvider: (key: string) =>
     ipcRenderer.invoke('codesign:detect-provider', key) as Promise<string | null>,
+  doneVerify: (artifact: string) =>
+    ipcRenderer.invoke('done:verify:v1', { artifact }) as Promise<{
+      errors: Array<{ message: string; source?: string; lineno?: number }>;
+    }>,
   generate: (payload: {
     prompt: string;
     history: ChatMessage[];
@@ -148,6 +165,8 @@ const api = {
     referenceUrl?: string;
     attachments: LocalInputFile[];
     generationId: string;
+    designId?: string;
+    previousHtml?: string;
   }) =>
     ipcRenderer.invoke('codesign:v1:generate', {
       schemaVersion: 1,
@@ -158,6 +177,8 @@ const api = {
       schemaVersion: 1,
       generationId,
     } satisfies CancelGenerationPayloadV1),
+  generateTitle: (prompt: string) =>
+    ipcRenderer.invoke('codesign:v1:generate-title', { prompt }) as Promise<string>,
   applyComment: (payload: {
     html: string;
     comment: string;
@@ -306,6 +327,10 @@ const api = {
       ipcRenderer.invoke('connection:v1:test-active') as Promise<
         ConnectionTestResult | ConnectionTestError
       >,
+    testProvider: (providerId: string) =>
+      ipcRenderer.invoke('connection:v1:test-provider', providerId) as Promise<
+        ConnectionTestResult | ConnectionTestError
+      >,
   },
   models: {
     list: (input: {
@@ -395,6 +420,16 @@ const api = {
         schemaVersion: 1,
         designId,
       }) as Promise<{ inserted: number }>,
+    updateToolStatus: (input: {
+      designId: string;
+      seq: number;
+      status: 'done' | 'error';
+      errorMessage?: string;
+    }) =>
+      ipcRenderer.invoke('chat:update-tool-status:v1', {
+        schemaVersion: 1,
+        ...input,
+      }) as Promise<{ ok: true }>,
     onAgentEvent: (cb: (event: AgentStreamEvent) => void) => {
       const listener = (_e: unknown, event: AgentStreamEvent) => cb(event);
       ipcRenderer.on('agent:event:v1', listener);

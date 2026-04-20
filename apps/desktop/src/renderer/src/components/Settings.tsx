@@ -7,7 +7,6 @@ import {
 import { Button } from '@open-codesign/ui';
 import {
   AlertTriangle,
-  ArrowLeft,
   CheckCircle,
   ChevronDown,
   Cpu,
@@ -196,7 +195,7 @@ function ProviderOverflowMenu({
           role="menu"
           className="absolute right-0 top-full mt-1 z-10 min-w-[10rem] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1"
         >
-          {isActive && !hasError && (
+          {!hasError && (
             <button
               type="button"
               role="menuitem"
@@ -280,7 +279,7 @@ function ProviderCard({
       return;
     }
     try {
-      const res = await window.codesign.connection.testActive();
+      const res = await window.codesign.connection.testProvider(row.provider);
       if (res.ok) {
         pushToast({ variant: 'success', title: t('settings.providers.toast.connectionOk') });
       } else {
@@ -371,18 +370,15 @@ function ActiveModelSelector({
   const pushToast = useCodesignStore((s) => s.pushToast);
 
   const [primary, setPrimary] = useState(config.modelPrimary ?? '');
-  const [editing, setEditing] = useState(false);
   const [models, setModels] = useState<string[] | null>(null);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [manualInput, setManualInput] = useState('');
 
   useEffect(() => {
     setPrimary(config.modelPrimary ?? '');
   }, [config.modelPrimary]);
 
+  // Fetch models immediately on mount
   useEffect(() => {
-    if (!editing) return;
-    if (models !== null) return;
     if (!window.codesign?.models?.listForProvider) return;
     let cancelled = false;
     setLoadingModels(true);
@@ -394,7 +390,7 @@ function ActiveModelSelector({
     return () => {
       cancelled = true;
     };
-  }, [editing, models, provider]);
+  }, [provider]);
 
   const saveSeq = useRef(0);
 
@@ -421,16 +417,9 @@ function ActiveModelSelector({
     const prev = primary;
     const seq = ++saveSeq.current;
     setPrimary(v);
-    setEditing(false);
-    setModels(null);
     void save(v).then((ok) => {
       if (!ok && seq === saveSeq.current) setPrimary(prev);
     });
-  }
-
-  function handleManualSubmit() {
-    const trimmed = manualInput.trim();
-    if (trimmed.length > 0) handleChange(trimmed);
   }
 
   const options =
@@ -439,51 +428,16 @@ function ActiveModelSelector({
   return (
     <div className="mt-[var(--space-2)] flex items-center gap-[var(--space-2)] text-[var(--text-xs)] text-[var(--color-text-muted)]">
       <Cpu className="w-3 h-3 shrink-0" />
-      {editing ? (
-        loadingModels ? (
-          <span className="inline-flex items-center gap-1 h-6 px-2 text-[var(--text-xs)]">
-            <Loader2 className="w-3 h-3 animate-spin" />
-          </span>
-        ) : options !== null ? (
-          <NativeSelect value={primary} onChange={handleChange} options={options} />
-        ) : (
-          <form
-            className="inline-flex items-center gap-1"
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleManualSubmit();
-            }}
-          >
-            <input
-              type="text"
-              value={manualInput}
-              onChange={(e) => setManualInput(e.target.value)}
-              placeholder="model-name"
-              // biome-ignore lint/a11y/noAutofocus: user just clicked to edit
-              autoFocus
-              className="h-6 w-40 px-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] font-mono text-[var(--color-text-primary)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-focus-ring)]"
-              onBlur={() => {
-                if (manualInput.trim().length === 0) setEditing(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setEditing(false);
-              }}
-            />
-          </form>
-        )
+      {loadingModels ? (
+        <span className="inline-flex items-center gap-1 h-6 px-2 text-[var(--text-xs)]">
+          <Loader2 className="w-3 h-3 animate-spin" />
+        </span>
+      ) : options !== null ? (
+        <NativeSelect value={primary} onChange={handleChange} options={options} />
       ) : (
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(true);
-            setManualInput(primary);
-          }}
-          aria-label={t('settings.providers.editModel')}
-          className="inline-flex items-center gap-1 h-6 px-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--text-xs)] font-mono text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
-        >
+        <span className="h-6 px-2 inline-flex items-center font-mono text-[var(--text-xs)] text-[var(--color-text-primary)]">
           {primary || t('settings.providers.noModel')}
-          <ChevronDown className="w-3 h-3 text-[var(--color-text-muted)]" />
-        </button>
+        </span>
       )}
     </div>
   );
@@ -544,6 +498,7 @@ function ModelsTab() {
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddCustom, setShowAddCustom] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
   const [externalConfigs, setExternalConfigs] = useState<{
     codex?: { count: number } | undefined;
     claudeCode?: { baseUrl: string } | undefined;
@@ -1151,35 +1106,12 @@ function AdvancedTab() {
 
 export function Settings() {
   const t = useT();
-  const setView = useCodesignStore((s) => s.setView);
   const [tab, setTab] = useState<Tab>('models');
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-background)]">
-      <header className="flex items-center gap-3 px-5 h-12 border-b border-[var(--color-border)] shrink-0">
-        <button
-          type="button"
-          onClick={() => setView('workspace')}
-          className="inline-flex items-center gap-1.5 text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-          aria-label={t('settings.shell.backAria')}
-        >
-          <ArrowLeft className="w-4 h-4" />
-          {t('settings.shell.back')}
-        </button>
-        <span className="text-[var(--color-text-muted)]">/</span>
-        <span className="text-[var(--text-sm)] font-semibold text-[var(--color-text-primary)]">
-          {t(`settings.tabs.${tab}`)}
-        </span>
-      </header>
-
       <div className="flex-1 grid grid-cols-[11rem_1fr] min-h-0">
-        <aside className="bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] p-3">
-          <div className="flex items-center gap-2 px-2 py-2 mb-2">
-            <Sliders className="w-4 h-4 text-[var(--color-text-secondary)]" />
-            <span className="text-[var(--text-sm)] font-semibold text-[var(--color-text-primary)]">
-              {t('settings.title')}
-            </span>
-          </div>
+        <aside className="bg-[var(--color-background-secondary)] border-r border-[var(--color-border)] p-[var(--space-3)]">
           <nav className="space-y-0.5">
             {TABS.map((entry) => {
               const Icon = entry.icon;
@@ -1189,7 +1121,7 @@ export function Settings() {
                   key={entry.id}
                   type="button"
                   onClick={() => setTab(entry.id)}
-                  className={`relative w-full flex items-center gap-2 pl-[var(--space-3)] pr-[var(--space-2)] py-[var(--space-2)] rounded-[var(--radius-md)] text-[var(--text-sm)] transition-colors ${
+                  className={`relative w-full flex items-center gap-2 pl-[var(--space-3)] pr-[var(--space-2)] py-[var(--space-2)] rounded-[var(--radius-md)] text-[var(--text-sm)] transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)] ${
                     active
                       ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)] font-medium before:absolute before:left-0 before:top-[var(--space-1_5)] before:bottom-[var(--space-1_5)] before:w-[var(--size-accent-stripe)] before:rounded-full before:bg-[var(--color-accent)]'
                       : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
@@ -1203,7 +1135,7 @@ export function Settings() {
           </nav>
         </aside>
 
-        <section className="flex flex-col min-h-0 overflow-y-auto p-5">
+        <section className="flex flex-col min-h-0 overflow-y-auto p-[var(--space-6)]">
           {tab === 'models' ? <ModelsTab /> : null}
           {tab === 'appearance' ? <AppearanceTab /> : null}
           {tab === 'storage' ? <StorageTab /> : null}

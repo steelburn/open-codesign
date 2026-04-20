@@ -9,6 +9,7 @@ files:
 asar: true
 mac:
   category: public.app-category.developer-tools
+  icon: resources/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
   notarize: false
@@ -16,10 +17,12 @@ mac:
     - target: dmg
       arch: [arm64, x64]
 win:
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch: [x64, arm64]
 linux:
+  icon: resources/icon.png
   target:
     - target: AppImage
       arch: [x64]

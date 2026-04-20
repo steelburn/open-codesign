@@ -39,7 +39,7 @@ describe('readPersisted()', () => {
     readFileMock.mockRejectedValueOnce(notFound);
 
     const result = await readPersisted();
-    expect(result).toEqual({ updateChannel: 'stable', generationTimeoutSec: 120 });
+    expect(result).toEqual({ updateChannel: 'stable', generationTimeoutSec: 600 });
   });
 
   it('honors XDG_CONFIG_HOME when computing the persisted file path', async () => {
@@ -68,5 +68,29 @@ describe('readPersisted()', () => {
     readFileMock.mockRejectedValueOnce(permissionDenied);
     const err = await readPersisted().catch((e: unknown) => e);
     expect((err as CodesignError).code).toBe('PREFERENCES_READ_FAILED');
+  });
+
+  it('migrates schemaVersion 1 with legacy 120s timeout to the 600s default', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 1, updateChannel: 'stable', generationTimeoutSec: 120 }),
+    );
+    const result = await readPersisted();
+    expect(result.generationTimeoutSec).toBe(600);
+  });
+
+  it('preserves user-chosen non-legacy timeout across the v1 → v2 migration', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 1, updateChannel: 'stable', generationTimeoutSec: 300 }),
+    );
+    const result = await readPersisted();
+    expect(result.generationTimeoutSec).toBe(300);
+  });
+
+  it('respects an explicit 120s when schema is already v2 (user chose it post-migration)', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 2, updateChannel: 'stable', generationTimeoutSec: 120 }),
+    );
+    const result = await readPersisted();
+    expect(result.generationTimeoutSec).toBe(120);
   });
 });

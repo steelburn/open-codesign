@@ -23,15 +23,32 @@
   },
   "loading": {
     "stage": {
-      "sending": "Sending prompt...",
-      "thinking": "Model is thinking...",
-      "streaming": "Receiving response...",
-      "parsing": "Parsing artifact...",
-      "rendering": "Rendering preview...",
+      "sending": "Connecting…",
+      "thinking": "Thinking…",
+      "streaming": "Generating…",
+      "parsing": "Finalizing…",
+      "rendering": "Rendering preview…",
       "done": "Done"
+    }
+  },
+  "canvas": {
+    "filesTab": "Files",
+    "filesTabEmpty": "No files yet",
+    "openInTab": "Open in tab",
+    "previewHint": "Thumbnail preview · double-click the file or use Open in tab for full view",
+    "tabsAriaLabel": "Open files",
+    "closeTab": "Close {{name}}",
+    "files": {
+      "sectionTitle": "Design files",
+      "sectionSubtitle": "{{count}} files",
+      "empty": "No files yet. Send a prompt to have the agent generate a design — files will show up here."
     },
-    "tokens_one": "{{count}} token",
-    "tokens_other": "{{count}} tokens"
+    "rail": {
+      "title": "Files",
+      "collapse": "Collapse files",
+      "expand": "Expand files",
+      "empty": "No files yet"
+    }
   },
   "preview": {
     "empty": {
@@ -54,13 +71,17 @@
     "commentModeHint": "Click any element to comment",
     "runtimeError": "Preview runtime error",
     "dismissErrors": "Dismiss preview errors",
-    "zoom": "Zoom",
-    "viewport": {
-      "label": "Viewport",
-      "desktop": "Desktop",
-      "tablet": "Tablet",
-      "mobile": "Mobile"
-    }
+    "zoom": "Zoom"
+  },
+  "tweaks": {
+    "title": "Tweaks",
+    "openLabel": "Open tweaks panel",
+    "close": "Close",
+    "reset": "Reset to defaults",
+    "pickColor": "Pick color",
+    "swatchAria": "{{key}} color",
+    "emptyTitle": "No tweakable tokens",
+    "emptyHint": "The agent hasn't declared an EDITMODE block yet. Future generations will expose design tokens here."
   },
   "chat": {
     "placeholder": "Describe what to design…",
@@ -84,34 +105,29 @@
     "clear": "Clear",
     "designSystemHint": "Link a repo to extract colors, typography, spacing, and other styling cues for future generations.",
     "startHint": "Start with a brief, then add files, a URL, or a local repo to ground the result.",
+    "empty": {
+      "title": "What should we design?",
+      "subtitle": "Describe your idea below — or start from one of these.",
+      "eyebrow": "Try"
+    },
     "ariaLabel": "Chat pane",
     "noDesign": "No design",
     "newChat": "New chat",
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
-    "tabs": {
-      "ariaLabel": "Sidebar tabs",
-      "chat": "Chat",
-      "comments": "Comments"
-    },
     "chat": {
       "youLabel": "You",
       "claudeLabel": "Claude",
       "noModel": "No model selected",
+      "thinking": "Thinking",
       "tokensLine": "~{{count}} tokens",
       "artifactDelivered": "delivered",
       "artifactDefaultLabel": "design.html",
       "tool": {
         "done": "Done"
       },
-      "skills": {
-        "label": "Attach skill"
-      },
-      "skill": {
-        "dashboard": "Dashboard",
-        "mobile-mock": "Mobile mock",
-        "marketing": "Marketing",
-        "editorial": "Editorial"
+      "working": {
+        "title": "Working"
       }
     },
     "comments": {
@@ -132,7 +148,7 @@
       "backAria": "Back to workspace"
     },
     "common": {
-      "loading": "Loading\u2026",
+      "loading": "Loading…",
       "cancel": "Cancel",
       "copy": "Copy",
       "copied": "Copied!",
@@ -185,10 +201,10 @@
         "title": "Add provider",
         "provider": "Provider",
         "apiKey": "API Key",
-        "getKey": "Get key \u2197",
+        "getKey": "Get key ↗",
         "apiKeyPlaceholder": "sk-...",
         "validate": "Validate",
-        "validating": "Validating\u2026",
+        "validating": "Validating…",
         "valid": "Valid",
         "baseUrl": "Base URL",
         "baseUrlOptional": "(optional)",
@@ -201,6 +217,8 @@
         "loadFailed": "Failed to load providers",
         "removed": "Provider removed",
         "deleteFailed": "Delete failed",
+        "activateFailed": "Cannot activate provider",
+        "missingModel": "Provider has no default model — add one first.",
         "switchedTo": "Switched to {{label}}",
         "switchFailed": "Switch failed",
         "saved": "Provider saved",
@@ -220,7 +238,7 @@
       "languageHint": "Language changes take effect immediately.",
       "languageLoadFailed": "Failed to load language",
       "langEn": "English",
-      "langZhCN": "\u4e2d\u6587 (\u7b80\u4f53)"
+      "langZhCN": "中文 (简体)"
     },
     "language": {
       "label": "Language",
@@ -365,44 +383,15 @@
         "click": "Click to re-test"
       }
     },
-    "spendThisWeek": "this week",
-    "byokTitle": "BYOK — bring-your-own-key. Usage tracked locally.",
-    "spendTooltip": "Estimated spending this week",
-    "lastUsageTooltip": "Last: {{input}} in / {{output}} out · ${{cost}}"
+    "openMyDesigns": "All designs",
+    "hubLabel": "My designs",
+    "settingsLabel": "Settings",
+    "closeSettings": "Close settings"
   },
   "theme": {
     "toggleAria": "Toggle theme",
     "switchToLight": "Switch to light",
     "switchToDark": "Switch to dark"
-  },
-  "commands": {
-    "title": "Commands",
-    "placeholder": "Type a command or search…",
-    "noMatches": "No matches.",
-    "openPalette": "Open command palette",
-    "items": {
-      "newDesign": "New design",
-      "toggleTheme": "Toggle theme",
-      "openSettings": "Open settings",
-      "export": "Export current design",
-      "browseDesigns": "Browse all designs",
-      "renameDesign": "Rename current design"
-    },
-    "hints": {
-      "newDesign": "Start a fresh design (Cmd+N)",
-      "toggleTheme": "Switch between light and dark",
-      "openSettings": "Models, appearance, storage",
-      "export": "Use the export button in the toolbar",
-      "browseDesigns": "Open the designs grid",
-      "renameDesign": "Edit the current design's name"
-    },
-    "tooltips": {
-      "commandPalette": "Command palette  Ctrl/Cmd+K",
-      "settings": "Settings  Ctrl/Cmd+,"
-    },
-    "cleared": "Workspace cleared",
-    "exportUseToolbarTitle": "Use toolbar export",
-    "exportUseToolbarBody": "Use the Export button in the toolbar."
   },
   "export": {
     "button": "Export",
@@ -459,7 +448,12 @@
     "saveNote": "Comment",
     "sendToClaude": "Send to Claude",
     "saving": "Saving…",
-    "sending": "Sending…"
+    "sending": "Sending…",
+    "scope": {
+      "legend": "Scope of this comment",
+      "element": "This element only",
+      "global": "Whole design"
+    }
   },
   "pinOverlay": {
     "note": "Note {{n}}",
@@ -467,7 +461,9 @@
   },
   "commentChip": {
     "dismiss": "Dismiss pending edit",
-    "empty": "No pending edits"
+    "empty": "No pending edits",
+    "apply": "Apply ({{count}})",
+    "applyAll": "Apply all pending edits"
   },
   "commentsTab": {
     "empty": "Click any element in the preview while comment mode is on to leave a note or an edit instruction.",
@@ -476,6 +472,53 @@
     "appliedEdits": "Applied edits",
     "delete": "Delete comment",
     "atSnapshot": "@ snapshot {{n}}"
+  },
+  "comments": {
+    "panel": {
+      "title": "Comments",
+      "close": "Close comments panel",
+      "empty": "No comments yet. Click any element on the canvas to leave one.",
+      "delete": "Delete comment",
+      "untitled": "(no text)",
+      "status": {
+        "pending": "Pending",
+        "applied": "Applied"
+      },
+      "scope": {
+        "element": "Element",
+        "global": "Global",
+        "tooltip": "Whether the change is scoped to this element or the whole design"
+      }
+    },
+    "quickActions": {
+      "label": "Quick actions",
+      "spacing": {
+        "more": "+ Spacing",
+        "less": "− Spacing"
+      },
+      "contrast": {
+        "more": "+ Contrast",
+        "less": "− Contrast"
+      },
+      "font": {
+        "bigger": "+ Font",
+        "smaller": "− Font"
+      },
+      "radius": {
+        "more": "+ Radius",
+        "less": "− Radius"
+      },
+      "text": {
+        "spacing-more": "increase spacing on this element",
+        "spacing-less": "tighten spacing on this element",
+        "contrast-more": "increase color contrast",
+        "contrast-less": "soften the color contrast",
+        "font-bigger": "increase font size on this element",
+        "font-smaller": "decrease font size on this element",
+        "radius-more": "make corners more rounded",
+        "radius-less": "make corners sharper"
+      }
+    }
   },
   "disabledReason": {
     "typePromptToSend": "Type a prompt to start",
@@ -513,11 +556,7 @@
     "onboardingIncomplete": "Onboarding is not complete.",
     "modelListFailed": "Could not load model list.",
     "unknown": "Unknown error",
-    "localePersistFailed": "Failed to save language preference",
-    "projectStorageFailed": "Couldn't read or write projects on this device. Your changes may not persist.",
-    "storageFailed": "Failed to save to local storage",
-    "weekUsageInvalid": "Provider returned invalid usage values; ignored to keep weekly totals accurate.",
-    "weekUsageReadFailed": "Couldn't read this week's usage from local storage. Showing fresh totals."
+    "localePersistFailed": "Failed to save language preference"
   },
   "projects": {
     "untitled": "Untitled design",
@@ -528,7 +567,7 @@
       "menuLabel": "Switch design",
       "newDesign": "New design",
       "renameCurrent": "Rename",
-      "viewAll": "View all designs\u2026",
+      "viewAll": "View all designs…",
       "recent": "Recent",
       "noOthers": "No other designs yet"
     },
@@ -575,6 +614,7 @@
       "createFailed": "Could not create a new design",
       "switchFailed": "Could not switch design",
       "switchBlockedGenerating": "Wait for generation to finish before switching",
+      "busyGenerating": "Wait for the current generation to finish, then try again",
       "renameFailed": "Could not rename the design",
       "duplicated": "Duplicated as \"{{name}}\"",
       "duplicateFailed": "Could not duplicate the design",
@@ -662,23 +702,44 @@
     "promptUsedToast": "Prompt loaded — edit and send when ready."
   },
   "emptyState": {
-    "heading": "Design with intent.",
-    "subline": "Describe what you want. Iterate with comments.",
+    "heading": "What would you like to design?",
+    "subline": "Describe your idea in the chat, or pick a template to get started.",
+    "tryThese": "Quick starts",
     "starters": {
-      "landing": "Landing page for an AI startup",
-      "pitch": "Pitch deck — first 3 slides",
-      "mobile": "Mobile app onboarding (3 screens)",
-      "dashboard": "Data dashboard with 3 charts"
+      "landing": "Startup landing page",
+      "pitch": "Pitch deck slides",
+      "mobile": "Mobile onboarding",
+      "dashboard": "Analytics dashboard",
+      "email": "Welcome email",
+      "portfolio": "Photo portfolio",
+      "casestudy": "Case study page",
+      "animation": "CSS animation showcase"
+    },
+    "starterDesc": {
+      "landing": "Hero + feature cards + social proof + CTA",
+      "pitch": "Title + problem + solution, 16:9 slides",
+      "mobile": "3-screen flow inside a phone frame",
+      "dashboard": "Line chart + bars + table, dark theme",
+      "email": "600px single-column with onboarding steps",
+      "portfolio": "Masonry grid + filters + hover overlays",
+      "casestudy": "Key metrics + quote + implementation steps",
+      "animation": "Pure CSS/SVG animations, 60fps smooth"
     }
   },
   "starterPrompts": {
-    "landing": "Build a landing page for an AI startup. Hero with a strong tagline, 3 feature cards, social proof section, CTA.",
-    "pitch": "Generate the first 3 slides of a pitch deck for a fintech startup. Title slide, problem, solution.",
-    "mobile": "Design a 3-screen mobile app onboarding flow. Welcome, permissions, first action.",
-    "dashboard": "Build a data dashboard with 3 charts: bar chart for sales, line chart for retention, pie chart for segments. Use a clean dark theme."
+    "landing": "Build a landing page for an AI startup. Hero with a strong tagline, 3 feature cards, social proof section, CTA. Editorial typography, generous whitespace.",
+    "pitch": "Generate the first 3 slides of a pitch deck for a fintech startup: title slide, problem, solution. 16:9 format, navy palette, one orange accent.",
+    "mobile": "Design a 3-screen mobile app onboarding flow inside a phone frame: welcome, permissions, first action. Soft mint palette.",
+    "dashboard": "Build an analytics dashboard with: MRR trend line chart, pipeline stacked bars, top accounts table, and forecast gauge. Dark theme, teal + amber accents, plausible mock data.",
+    "email": "Design a transactional welcome email for a SaaS product. Single column, 600px wide, table-based. Logo header, greeting, 3 onboarding steps, CTA button, footer.",
+    "portfolio": "Design a photographer portfolio with masonry image grid using CSS gradient placeholders. Dark background, category filter pills, hover overlay with title and camera settings.",
+    "casestudy": "Create a one-page customer case study for a B2B fintech. Hero with client name, three large metrics with deltas, a CFO pull quote, a three-step 'How we did it' section, and a logo strip. Dark theme, serif headings, monospace numerals.",
+    "animation": "Build a showcase page with six organic CSS loading animations. Each in its own card: blob morph, leaf sway, ink drop, breathing circle, soft pulse, ribbon weave. Warm cream background, muted pastels, pure CSS/SVG only."
   },
   "hub": {
     "newDesign": "New design",
+    "newDesignCardTitle": "Start a new design",
+    "newDesignCardSub": "Blank canvas · AI generated",
     "backToHub": "All designs",
     "tabs": {
       "recent": "Recent",
@@ -710,7 +771,10 @@
         "template": "From template",
         "other": "Other"
       },
-      "createdAt": "Created {{date}}"
+      "createdAt": "Created {{date}}",
+      "moreActions": "More actions for {{name}}",
+      "rename": "Rename",
+      "delete": "Delete"
     }
   },
   "create": {

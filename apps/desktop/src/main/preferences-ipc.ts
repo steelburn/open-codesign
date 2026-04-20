@@ -17,7 +17,11 @@ import { getLogger } from './logger';
 
 const logger = getLogger('preferences-ipc');
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+// v1 → v2: raise the abandoned 120s timeout default (which aborted real
+// agentic runs mid-loop) to 600s. Values that happen to equal the old
+// default are treated as unmigrated defaults, not user intent.
+const LEGACY_DEFAULT_TIMEOUT_SEC = 120;
 
 function prefsFile(): string {
   return join(configDir(), 'preferences.json');
@@ -36,7 +40,12 @@ interface PreferencesFile extends Preferences {
 
 const DEFAULTS: Preferences = {
   updateChannel: 'stable',
-  generationTimeoutSec: 120,
+  // Agentic runs do multiple LLM turns + tool executions + file writes, so
+  // 120s (Workstream B Phase 1 single-turn budget) was too tight and aborted
+  // real runs mid-loop. 600s (10 min) covers a typical multi-turn design
+  // generation with a slow coproxy. Users on fast endpoints can lower this
+  // in Settings → Advanced.
+  generationTimeoutSec: 600,
 };
 
 export async function readPersisted(): Promise<Preferences> {
@@ -44,15 +53,22 @@ export async function readPersisted(): Promise<Preferences> {
   try {
     const raw = await readFile(file, 'utf8');
     const parsed = JSON.parse(raw) as Partial<PreferencesFile>;
+    const persistedSchema =
+      typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : 1;
+    const rawTimeout =
+      typeof parsed.generationTimeoutSec === 'number' && parsed.generationTimeoutSec > 0
+        ? parsed.generationTimeoutSec
+        : DEFAULTS.generationTimeoutSec;
+    const migratedTimeout =
+      persistedSchema < SCHEMA_VERSION && rawTimeout === LEGACY_DEFAULT_TIMEOUT_SEC
+        ? DEFAULTS.generationTimeoutSec
+        : rawTimeout;
     return {
       updateChannel:
         parsed.updateChannel === 'stable' || parsed.updateChannel === 'beta'
           ? parsed.updateChannel
           : DEFAULTS.updateChannel,
-      generationTimeoutSec:
-        typeof parsed.generationTimeoutSec === 'number' && parsed.generationTimeoutSec > 0
-          ? parsed.generationTimeoutSec
-          : DEFAULTS.generationTimeoutSec,
+      generationTimeoutSec: migratedTimeout,
     };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ...DEFAULTS };

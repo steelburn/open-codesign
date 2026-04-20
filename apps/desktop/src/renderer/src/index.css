@@ -134,7 +134,90 @@ h3,
 
 .codesign-stream-dot {
   display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
   animation: codesign-stream-blink 1.2s ease-in-out infinite;
-  color: var(--color-text-muted);
+}
+
+/* Hide native scrollbar inside the prompt textarea — keeps the input clean
+ * even when content overflows. Scroll still works via wheel/keyboard. */
+.codesign-prompt-textarea {
+  scrollbar-width: none;
+}
+.codesign-prompt-textarea::-webkit-scrollbar {
+  display: none;
+}
+
+/* Markdown prose inside assistant chat bubbles */
+.codesign-prose p {
+  margin: 0;
+}
+.codesign-prose p + p {
+  margin-top: var(--space-2);
+}
+.codesign-prose strong {
   font-weight: 600;
+}
+.codesign-prose code {
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace);
+  font-size: 0.9em;
+  background: var(--color-background-secondary);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+}
+.codesign-prose pre {
+  background: var(--color-background-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+  margin: var(--space-2) 0;
+}
+.codesign-prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+}
+.codesign-prose ul,
+.codesign-prose ol {
+  margin: var(--space-2) 0;
+  padding-left: 1.25em;
+}
+.codesign-prose li + li {
+  margin-top: 2px;
+}
+.codesign-prose table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: var(--space-2) 0;
+  white-space: nowrap;
+}
+.codesign-prose th,
+.codesign-prose td {
+  border: 1px solid var(--color-border-muted);
+  padding: 3px var(--space-2);
+  text-align: left;
+}
+.codesign-prose th {
+  background: var(--color-background-secondary);
+  font-weight: 600;
+}
+.codesign-prose hr {
+  border: none;
+  border-top: 1px solid var(--color-border-muted);
+  margin: var(--space-3) 0;
+}
+.codesign-prose blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: var(--space-3);
+  margin: var(--space-2) 0;
+  color: var(--color-text-secondary);
+}
+.codesign-prose a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

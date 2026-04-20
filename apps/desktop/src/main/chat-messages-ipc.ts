@@ -11,7 +11,12 @@ import { CodesignError } from '@open-codesign/shared';
 import type BetterSqlite3 from 'better-sqlite3';
 import { ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
-import { appendChatMessage, listChatMessages, seedChatFromSnapshots } from './snapshots-db';
+import {
+  appendChatMessage,
+  listChatMessages,
+  seedChatFromSnapshots,
+  updateChatToolCallStatus,
+} from './snapshots-db';
 
 type Database = BetterSqlite3.Database;
 
@@ -68,10 +73,47 @@ function parseAppendInput(raw: unknown): ChatAppendInput {
   };
 }
 
+function parseUpdateToolStatus(raw: unknown): {
+  designId: string;
+  seq: number;
+  status: 'done' | 'error';
+  errorMessage?: string;
+} {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError(
+      'chat:update-tool-status:v1 expects an object payload',
+      'IPC_BAD_INPUT',
+    );
+  }
+  const r = raw as Record<string, unknown>;
+  requireSchemaV1(r, 'chat:update-tool-status:v1');
+  if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+    throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  if (typeof r['seq'] !== 'number' || !Number.isInteger(r['seq']) || r['seq'] < 0) {
+    throw new CodesignError('seq must be a non-negative integer', 'IPC_BAD_INPUT');
+  }
+  const status = r['status'];
+  if (status !== 'done' && status !== 'error') {
+    throw new CodesignError("status must be 'done' or 'error'", 'IPC_BAD_INPUT');
+  }
+  const errorMessage = r['errorMessage'];
+  if (errorMessage !== undefined && typeof errorMessage !== 'string') {
+    throw new CodesignError('errorMessage must be a string when present', 'IPC_BAD_INPUT');
+  }
+  return {
+    designId: r['designId'],
+    seq: r['seq'],
+    status,
+    ...(typeof errorMessage === 'string' ? { errorMessage } : {}),
+  };
+}
+
 export const CHAT_MESSAGES_CHANNELS_V1 = [
   'chat:v1:list',
   'chat:v1:append',
   'chat:v1:seed-from-snapshots',
+  'chat:update-tool-status:v1',
 ] as const;
 
 export function registerChatMessagesIpc(db: Database): void {
@@ -105,6 +147,23 @@ export function registerChatMessagesIpc(db: Database): void {
       return { inserted };
     },
   );
+
+  ipcMain.handle('chat:update-tool-status:v1', (_e: unknown, raw: unknown): { ok: true } => {
+    const input = parseUpdateToolStatus(raw);
+    try {
+      updateChatToolCallStatus(db, input.designId, input.seq, input.status, input.errorMessage);
+      return { ok: true };
+    } catch (err) {
+      logger.error('chat.update_tool_status.fail', {
+        designId: input.designId,
+        seq: input.seq,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      throw new CodesignError('Failed to update tool call status', 'IPC_DB_ERROR', {
+        cause: err,
+      });
+    }
+  });
 }
 
 export function registerChatMessagesUnavailableIpc(reason: string): void {

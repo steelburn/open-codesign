@@ -23,6 +23,13 @@ import {
   thumbMobile,
   thumbOrganic,
   thumbPitchSlide,
+  thumbPricing,
+  thumbBlog,
+  thumbCalendar,
+  thumbChat,
+  thumbPortfolio,
+  thumbReceipt,
+  thumbSettings,
 } from './thumbnails';
 
 export type ExampleCategory =
@@ -105,6 +112,55 @@ export const EXAMPLES: Example[] = [
     thumbnail: thumbMobile,
     prompt:
       "Design a single mobile app screen inside a phone frame: the home screen of a habit tracker called Streak. Show today's date at the top, a hero card for the current streak count, a list of four habits each with a circular progress ring + check button, and a bottom tab bar with five icons. Soft mint background, white cards, charcoal text, generous touch targets.",
+  },
+  {
+    id: 'pricing-page',
+    category: 'marketing',
+    thumbnail: thumbPricing,
+    prompt:
+      'Design a pricing page for a developer platform called Arcjet. Three tiers: Hobby (free), Pro ($29/mo), Enterprise (custom). Each tier in its own card — Pro card is elevated with a "Most popular" badge. Include a feature comparison table below the cards with 10+ rows and checkmarks. Toggle for monthly/annual billing. Dark mode with subtle gradients, monospace numerals, generous vertical spacing.',
+  },
+  {
+    id: 'blog-article',
+    category: 'document',
+    thumbnail: thumbBlog,
+    prompt:
+      'Design a long-form blog article page for a design engineering publication called Pixel & Prose. Include: a full-width hero image area (CSS gradient placeholder), article title in large serif, author byline with avatar initials + publish date, a table of contents sidebar, body text with pull quotes, inline code blocks, and a "Related articles" grid at the bottom. Light theme, classic editorial feel, comfortable reading width (~680px).',
+  },
+  {
+    id: 'event-calendar',
+    category: 'ui',
+    thumbnail: thumbCalendar,
+    prompt:
+      'Design a monthly calendar view component for a team scheduling app. Show a full month grid with today highlighted, several events rendered as colored pill bars spanning their duration. Include a mini sidebar with upcoming events list, and a header with month navigation arrows + "Today" button. Clean white surface, subtle grid lines, four distinct event category colors. Make the events interactive — clicking shows a detail tooltip.',
+  },
+  {
+    id: 'chat-interface',
+    category: 'mobile',
+    thumbnail: thumbChat,
+    prompt:
+      'Design a messaging app screen inside a phone frame. Show a conversation between two people with: text bubbles (blue for sender, gray for receiver), a typing indicator with three animated dots, timestamps between message groups, an image message with rounded corners, a bottom input bar with text field + send button + attachment icon. Include the iOS status bar and a contact header with avatar + name + online status dot.',
+  },
+  {
+    id: 'portfolio-gallery',
+    category: 'ui',
+    thumbnail: thumbPortfolio,
+    prompt:
+      'Design a photographer portfolio page with a masonry image grid. Use CSS gradient placeholders in varied aspect ratios (landscape, portrait, square) as image stand-ins. Include: a minimal top nav with the photographer name as a wordmark, category filter pills (All, Portrait, Landscape, Street, Abstract), and a lightbox-style hover overlay on each image showing the title + camera settings. Dark background (#0a0a0a), thin white borders, smooth hover transitions.',
+  },
+  {
+    id: 'receipt-invoice',
+    category: 'document',
+    thumbnail: thumbReceipt,
+    prompt:
+      'Design a print-ready invoice/receipt for a design agency called Studio Neon. Include: company logo area, invoice number + date, billing/shipping addresses side by side, an itemized table with 5 line items (description, quantity, rate, amount), subtotal/tax/total breakdown, payment terms, and a "Thank you" footer note. Clean minimal design, cream background, charcoal text, one accent color for totals. Proportioned for A4/Letter print.',
+  },
+  {
+    id: 'settings-panel',
+    category: 'ui',
+    thumbnail: thumbSettings,
+    prompt:
+      'Design a settings page for a SaaS application. Left sidebar with setting categories (Profile, Notifications, Security, Billing, Team, Integrations). Main panel shows the active category with form fields: text inputs, toggle switches, dropdown selects, a danger zone with red "Delete account" button. Include a top bar with breadcrumbs and a "Save changes" button. Light theme, clean form layout, proper spacing between sections, accessible focus states on all inputs.',
   },
 ];
 

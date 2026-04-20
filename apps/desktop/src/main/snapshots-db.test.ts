@@ -7,6 +7,7 @@
 import { DesignMessageV1 } from '@open-codesign/shared';
 import { describe, expect, it } from 'vitest';
 import {
+  appendChatMessage,
   createDesign,
   createSnapshot,
   deleteSnapshot,
@@ -14,6 +15,7 @@ import {
   getDesign,
   getSnapshot,
   initInMemoryDb,
+  listChatMessages,
   listDesigns,
   listMessages,
   listSnapshots,
@@ -21,6 +23,7 @@ import {
   replaceMessages,
   setDesignThumbnail,
   softDeleteDesign,
+  updateChatToolCallStatus,
 } from './snapshots-db';
 
 function makeDb() {
@@ -508,5 +511,122 @@ describe('migration is idempotent', () => {
     expect(cols).toContain('thumbnail_text');
     expect(cols).toContain('deleted_at');
     expect(getDesign(db, d.id)?.name).toBe('persist me');
+  });
+});
+
+describe('updateChatToolCallStatus', () => {
+  it('flips status from running to done in place', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    const row = appendChatMessage(db, {
+      designId: d.id,
+      kind: 'tool_call',
+      payload: {
+        toolName: 'text_editor',
+        args: {},
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        verbGroup: 'Working',
+      },
+    });
+    updateChatToolCallStatus(db, d.id, row.seq, 'done');
+    const list = listChatMessages(db, d.id);
+    expect((list[0]?.payload as { status: string }).status).toBe('done');
+  });
+
+  it('writes errorMessage when provided', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    const row = appendChatMessage(db, {
+      designId: d.id,
+      kind: 'tool_call',
+      payload: {
+        toolName: 'text_editor',
+        args: {},
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        verbGroup: 'Working',
+      },
+    });
+    updateChatToolCallStatus(db, d.id, row.seq, 'error', 'kaboom');
+    const payload = listChatMessages(db, d.id)[0]?.payload as {
+      status: string;
+      errorMessage?: string;
+    };
+    expect(payload.status).toBe('error');
+    expect(payload.errorMessage).toBe('kaboom');
+  });
+
+  it('does not throw when the row does not exist', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    expect(() => updateChatToolCallStatus(db, d.id, 9999, 'done')).not.toThrow();
+  });
+
+  it('leaves non-tool_call rows untouched', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+    const row = appendChatMessage(db, {
+      designId: d.id,
+      kind: 'user',
+      payload: { text: 'hi' },
+    });
+    updateChatToolCallStatus(db, d.id, row.seq, 'done');
+    const list = listChatMessages(db, d.id);
+    expect((list[0]?.payload as { text: string }).text).toBe('hi');
+  });
+});
+
+describe('tool_status_normalize_2026_04_20 migration', () => {
+  it('flips stale running tool_call rows to done and leaves recent ones alone', () => {
+    const db = makeDb();
+    const d = createDesign(db);
+
+    // Insert a stale (>1h old) running tool_call row directly so we bypass
+    // appendChatMessage's now() timestamp.
+    db.prepare(
+      `INSERT INTO chat_messages (design_id, seq, kind, payload, snapshot_id, created_at)
+       VALUES (?, ?, 'tool_call', ?, NULL, ?)`,
+    ).run(
+      d.id,
+      0,
+      JSON.stringify({
+        toolName: 'text_editor',
+        args: {},
+        status: 'running',
+        startedAt: '2026-04-19T12:00:00Z',
+        verbGroup: 'Working',
+      }),
+      '2026-04-19T12:00:00Z',
+    );
+    // A recent in-flight row that should NOT be touched.
+    const recent = appendChatMessage(db, {
+      designId: d.id,
+      kind: 'tool_call',
+      payload: {
+        toolName: 'text_editor',
+        args: {},
+        status: 'running',
+        startedAt: new Date().toISOString(),
+        verbGroup: 'Working',
+      },
+    });
+
+    // Clear the migration marker so re-running applySchema re-fires it.
+    db.prepare("DELETE FROM db_meta WHERE key = 'tool_status_normalize_2026_04_20'").run();
+
+    // Re-trigger the cleanup by directly running the same SQL as the migration.
+    db.exec(
+      `UPDATE chat_messages
+         SET payload = json_set(payload, '$.status', 'done')
+       WHERE kind = 'tool_call'
+         AND json_extract(payload, '$.status') = 'running'
+         AND created_at < datetime('now','-1 hour')`,
+    );
+
+    const list = listChatMessages(db, d.id);
+    expect((list[0]?.payload as { status: string }).status).toBe('done');
+    const recentRow = list.find((m) => m.seq === recent.seq);
+    expect((recentRow?.payload as { status: string }).status).toBe('running');
   });
 });

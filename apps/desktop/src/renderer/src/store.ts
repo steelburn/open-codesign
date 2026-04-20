@@ -1,20 +1,19 @@
 import { i18n } from '@open-codesign/i18n';
-import {
-  type ChatAppendInput,
-  type ChatMessage,
-  type ChatMessageRow,
-  type CommentKind,
-  type CommentRect,
-  type CommentRow,
-  type Design,
-  type LocalInputFile,
-  type ModelRef,
-  type OnboardingState,
-  PROJECT_SCHEMA_VERSION,
-  Project,
-  type ProjectDraft,
-  type SelectedElement,
-  type SupportedOnboardingProvider,
+import type {
+  ChatAppendInput,
+  ChatMessage,
+  ChatMessageRow,
+  ChatToolCallPayload,
+  CommentKind,
+  CommentRect,
+  CommentRow,
+  CommentScope,
+  Design,
+  LocalInputFile,
+  ModelRef,
+  OnboardingState,
+  SelectedElement,
+  SupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
@@ -45,31 +44,17 @@ export interface Toast {
   description?: string;
 }
 
-export type ConnectionState = 'connected' | 'untested' | 'error' | 'no_provider';
-
-export interface ConnectionStatus {
-  state: ConnectionState;
-  lastTestedAt: number | null;
-  lastError: string | null;
-}
-
 export type Theme = 'light' | 'dark';
 export type AppView = 'hub' | 'workspace' | 'settings';
 export type HubTab = 'recent' | 'your' | 'examples' | 'designSystems';
 export type InteractionMode = 'default' | 'comment';
-export type SidebarTab = 'chat' | 'comments';
-
-/** Builtin skill chip ids shown above the prompt input. */
-export const BUILTIN_SKILLS = ['dashboard', 'mobile-mock', 'marketing', 'editorial'] as const;
-export type BuiltinSkillId = (typeof BUILTIN_SKILLS)[number];
 
 export type PreviewViewport = 'desktop' | 'tablet' | 'mobile';
 
-// Workstream G — canvas file tabs.
-// `files` is the always-present first tab that shows the Design Files browser.
-// `file` tabs wrap a single file preview (today only index.html, derived from
-// the latest snapshot; post-Workstream E any path in the virtual FS). The
-// open-set is purely UI state — closing a tab does NOT delete the file.
+// Workstream G — canvas tabs.
+// 'files' is the pinned tab that hosts the file list + inline preview; 'file'
+// tabs wrap a single file preview opened by double-clicking the list. Closing
+// a 'file' tab is purely UI state — it does NOT delete anything.
 export type CanvasTab = { kind: 'files' } | { kind: 'file'; path: string };
 
 export const FILES_TAB: CanvasTab = { kind: 'files' };
@@ -88,12 +73,12 @@ export function closeTabAt(
   target: number,
 ): { tabs: CanvasTab[]; activeIndex: number } {
   const tab = tabs[target];
-  // The Design Files tab (index 0) is pinned — never closable.
-  if (!tab || tab.kind === 'files') return { tabs, activeIndex };
+  if (!tab) return { tabs, activeIndex };
+  // The pinned 'files' tab cannot be closed — it always anchors index 0.
+  if (tab.kind === 'files') return { tabs, activeIndex };
   const next = tabs.filter((_, i) => i !== target);
   let nextActive = activeIndex;
   if (activeIndex === target) {
-    // Fall back to previous neighbor or tab 0 (Design Files).
     nextActive = Math.max(0, target - 1);
   } else if (activeIndex > target) {
     nextActive = activeIndex - 1;
@@ -102,13 +87,6 @@ export function closeTabAt(
 }
 
 export interface UsageSnapshot {
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-}
-
-export interface WeekUsage {
-  isoWeek: string;
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
@@ -123,18 +101,31 @@ interface PromptRequest {
 interface CodesignState {
   messages: ChatMessage[];
   previewHtml: string | null;
+  /** LRU cache of `previewHtml` per design id, capped to PREVIEW_POOL_LIMIT.
+   *  PreviewPane renders one (display:none) iframe per entry so switching back
+   *  to a recently visited design is instant — no IPC, no srcDoc reparse. */
+  previewHtmlByDesign: Record<string, string>;
+  /** Most-recent-first list of design ids in the preview pool. */
+  recentDesignIds: string[];
   isGenerating: boolean;
   activeGenerationId: string | null;
+  /** Design id that owns the in-flight generation. Lets the user switch to
+   *  another design while a generation runs (it stays bound to its origin
+   *  design via designIdAtStart) — UI only shows "generating" affordances on
+   *  the design that actually has the run. */
+  generatingDesignId: string | null;
   generationStage: GenerationStage;
-  streamingTokenCount: number;
+  /** Live assistant text buffered during the current agent turn. Rendered as
+   *  an ephemeral chat bubble so the UI shows incremental output instead of
+   *  waiting for the turn to settle. Cleared on turn_end (the persisted
+   *  chat row takes over). */
+  streamingAssistantText: { designId: string; text: string } | null;
   lastUsage: UsageSnapshot | null;
-  weekUsage: WeekUsage;
   errorMessage: string | null;
   lastError: string | null;
   config: OnboardingState | null;
   configLoaded: boolean;
   toastMessage: string | null;
-  connectionStatus: ConnectionStatus;
 
   designs: Design[];
   currentDesignId: string | null;
@@ -145,12 +136,9 @@ interface CodesignState {
 
   theme: Theme;
   view: AppView;
+  previousView: AppView;
   hubTab: HubTab;
-  projects: Project[];
-  currentProjectId: string | null;
-  createProjectModalOpen: boolean;
   previewViewport: PreviewViewport;
-  commandPaletteOpen: boolean;
   toasts: Toast[];
   iframeErrors: string[];
 
@@ -164,9 +152,10 @@ interface CodesignState {
   // Sidebar v2 chat state
   chatMessages: ChatMessageRow[];
   chatLoaded: boolean;
-  sidebarTab: SidebarTab;
+  /** In-flight tool calls that haven't completed yet. Purely in-memory —
+   *  only persisted to SQLite when the result arrives (done/error). */
+  pendingToolCalls: ChatToolCallPayload[];
   sidebarCollapsed: boolean;
-  attachedSkills: BuiltinSkillId[];
 
   // Workstream D — comments
   comments: CommentRow[];
@@ -181,13 +170,25 @@ interface CodesignState {
 
   loadConfig: () => Promise<void>;
   completeOnboarding: (next: OnboardingState) => void;
-  setConnectionStatus: (status: ConnectionStatus) => void;
-  testConnection: () => Promise<void>;
   sendPrompt: (input: {
     prompt: string;
     attachments?: LocalInputFile[] | undefined;
     referenceUrl?: string | undefined;
+    /** Silent prompts skip the user chat bubble and the auto-rename trigger.
+     *  Used by the auto-polish flow so the injected "deepen" request isn't
+     *  visible as a user message — the agent still receives it and responds
+     *  normally, but the chat transcript reads as one continuous run. */
+    silent?: boolean | undefined;
   }) => Promise<void>;
+  /** Set of designIds for which the automatic polish / deepen follow-up has
+   *  already fired. Prevents infinite loops (polish round would otherwise
+   *  also end in agent_end and trigger itself). Cleared when a design is
+   *  deleted or the app restarts. */
+  autoPolishFired: Set<string>;
+  /** Fire the canned "deepen this design" follow-up prompt once per design,
+   *  if the condition is met (first round succeeded, no prior polish). Call
+   *  from useAgentStream's agent_end handler. */
+  tryAutoPolish: (designId: string, locale: string) => void;
   cancelGeneration: () => void;
   retryLastPrompt: () => Promise<void>;
   applyInlineComment: (comment: string) => Promise<void>;
@@ -212,13 +213,7 @@ interface CodesignState {
   toggleTheme: () => void;
   setView: (view: AppView) => void;
   setHubTab: (tab: HubTab) => void;
-  openCreateProjectModal: () => void;
-  closeCreateProjectModal: () => void;
-  createProject: (draft: ProjectDraft) => Project;
-  openProject: (id: string) => void;
   setPreviewViewport: (viewport: PreviewViewport) => void;
-  openCommandPalette: () => void;
-  closeCommandPalette: () => void;
 
   loadDesigns: () => Promise<void>;
   ensureCurrentDesign: () => Promise<void>;
@@ -240,10 +235,38 @@ interface CodesignState {
   loadChatForCurrentDesign: () => Promise<void>;
   appendChatMessage: (input: ChatAppendInput) => Promise<ChatMessageRow | null>;
   clearChatLocal: () => void;
-  setSidebarTab: (tab: SidebarTab) => void;
+  setStreamingAssistantText: (value: { designId: string; text: string } | null) => void;
+  pushPendingToolCall: (designId: string, call: ChatToolCallPayload) => void;
+  resolvePendingToolCall: (
+    designId: string,
+    toolName: string,
+    result?: string,
+    durationMs?: number,
+  ) => void;
+  /** Patch a persisted tool_call row's status and merge into local state.
+   *  Called when the agent's tool_call_result event lands after the row was
+   *  already inserted as 'running' at tool_call_start time. */
+  updateChatToolStatus: (input: {
+    designId: string;
+    seq: number;
+    status: 'done' | 'error';
+    result?: unknown;
+    durationMs?: number;
+    errorMessage?: string;
+  }) => Promise<void>;
+  /** Live preview update from the agent's virtual fs (text_editor tool).
+   *  Gated by designId match against the active or generating design so a
+   *  background run cannot stomp the preview the user is currently viewing. */
+  setPreviewHtmlFromAgent: (input: { designId: string; content: string }) => void;
+  /** Persist the current in-memory `previewHtml` for a finished agentic run as
+   *  a SQLite snapshot row. Without this, agentic runs never write to disk
+   *  and reload boots back into the empty welcome state even when the agent
+   *  produced a valid index.html. Fires-and-forgets — failures are toasted. */
+  persistAgentRunSnapshot: (input: { designId: string; finalText?: string }) => Promise<void>;
+  /** Replace the current preview source verbatim. Used by the host's tweak
+   *  panel to write a re-serialized EDITMODE block back into the artifact. */
+  setPreviewHtml: (content: string) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
-  toggleAttachedSkill: (skill: BuiltinSkillId) => void;
-  clearAttachedSkills: () => void;
 
   // Workstream D — comments
   loadCommentsForCurrentDesign: () => Promise<void>;
@@ -256,6 +279,8 @@ interface CodesignState {
     outerHTML: string;
     rect: CommentRect;
     text: string;
+    scope?: CommentScope;
+    parentOuterHTML?: string;
   }) => Promise<CommentRow | null>;
   updateComment: (id: string, patch: { text?: string }) => Promise<void>;
   removeComment: (id: string) => Promise<void>;
@@ -272,79 +297,38 @@ export interface CommentBubbleAnchor {
   tag: string;
   outerHTML: string;
   rect: CommentRect;
+  /** v2 enrichment — parent element outerHTML, truncated. */
+  parentOuterHTML?: string;
   /** If set, the bubble is editing an existing saved comment. */
   existingCommentId?: string;
   initialText?: string;
+  initialScope?: CommentScope;
 }
 
 const THEME_STORAGE_KEY = 'open-codesign:theme';
-const PROJECTS_STORAGE_KEY = 'open-codesign:projects:v1';
-const WEEK_USAGE_STORAGE_KEY = 'open-codesign:week-usage';
 
-type ProjectsReadResult = { projects: Project[]; error: string | null };
+// PreviewPane keeps an iframe per recently-visited design alive so switching
+// back is instant. Bound the pool so memory stays small for users with lots
+// of designs — 5 covers the typical "compare two or three" workflow with
+// headroom and only costs a few MB of iframe documents.
+const PREVIEW_POOL_LIMIT = 5;
 
-function readStoredProjects(): ProjectsReadResult {
-  if (typeof window === 'undefined') return { projects: [], error: null };
-  let raw: string | null;
-  try {
-    raw = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[open-codesign] Failed to read projects from storage:', err);
-    return { projects: [], error: msg };
+function recordPreviewInPool(
+  prevCache: Record<string, string>,
+  prevRecent: string[],
+  designId: string,
+  html: string | null,
+): { cache: Record<string, string>; recent: string[] } {
+  const recent = [designId, ...prevRecent.filter((x) => x !== designId)].slice(
+    0,
+    PREVIEW_POOL_LIMIT,
+  );
+  const merged = html !== null ? { ...prevCache, [designId]: html } : prevCache;
+  const cache: Record<string, string> = {};
+  for (const id of recent) {
+    if (merged[id] !== undefined) cache[id] = merged[id];
   }
-  if (!raw) return { projects: [], error: null };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[open-codesign] Failed to parse stored projects:', err);
-    return { projects: [], error: msg };
-  }
-  if (!Array.isArray(parsed)) {
-    const msg = 'Invalid projects storage payload: expected array';
-    console.warn(`[open-codesign] ${msg}`);
-    return { projects: [], error: msg };
-  }
-  const projects: Project[] = [];
-  let invalidCount = 0;
-  for (const item of parsed) {
-    const result = Project.safeParse(item);
-    if (result.success && result.data.schemaVersion === PROJECT_SCHEMA_VERSION) {
-      projects.push(result.data);
-    } else {
-      invalidCount += 1;
-    }
-  }
-  if (invalidCount > 0) {
-    const msg = `Skipped ${invalidCount} invalid project record(s) in storage`;
-    console.warn(`[open-codesign] ${msg}`);
-    return { projects, error: msg };
-  }
-  return { projects, error: null };
-}
-
-function persistProjects(projects: Project[]): { error: string | null } {
-  if (typeof window === 'undefined') return { error: null };
-  try {
-    window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
-    return { error: null };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn('[open-codesign] Failed to persist projects to storage:', err);
-    return { error: msg };
-  }
-}
-
-export function isoWeekKey(date: Date): string {
-  // ISO 8601 week-numbering: Thursday-anchored, Monday-start.
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  return { cache, recent };
 }
 
 function isFiniteUsageNumber(v: unknown): v is number {
@@ -370,89 +354,6 @@ export function coerceUsageSnapshot(result: {
       costUsd: pick('costUsd', result.costUsd),
     },
     rejected,
-  };
-}
-
-function readStoredWeekUsage(now: Date): WeekUsage {
-  const fresh: WeekUsage = {
-    isoWeek: isoWeekKey(now),
-    inputTokens: 0,
-    outputTokens: 0,
-    costUsd: 0,
-  };
-  if (typeof window === 'undefined') return fresh;
-  let warnReason: string | null = null;
-  try {
-    const raw = window.localStorage.getItem(WEEK_USAGE_STORAGE_KEY);
-    if (!raw) return fresh;
-    const parsed = JSON.parse(raw) as Partial<WeekUsage>;
-    if (
-      typeof parsed.isoWeek !== 'string' ||
-      !isFiniteUsageNumber(parsed.inputTokens) ||
-      !isFiniteUsageNumber(parsed.outputTokens) ||
-      !isFiniteUsageNumber(parsed.costUsd)
-    ) {
-      warnReason = 'weekly usage entry has unexpected shape';
-    } else if (parsed.isoWeek === fresh.isoWeek) {
-      return {
-        isoWeek: parsed.isoWeek,
-        inputTokens: parsed.inputTokens,
-        outputTokens: parsed.outputTokens,
-        costUsd: parsed.costUsd,
-      };
-    }
-    // else: stale week — silently roll over (not corruption).
-  } catch (err) {
-    warnReason = err instanceof Error ? err.message : String(err);
-  }
-  if (warnReason !== null) surfaceWeekUsageReadFailure(warnReason);
-  return fresh;
-}
-
-// Surface storage corruption to the user instead of silently dropping their
-// running totals. Deferred via setTimeout because this can run during store
-// initialisation, before the toast queue exists.
-function surfaceWeekUsageReadFailure(reason: string): void {
-  const fallback = () =>
-    console.warn('[open-codesign] failed to read weekly usage from storage:', reason);
-  if (typeof window === 'undefined') {
-    fallback();
-    return;
-  }
-  setTimeout(() => {
-    try {
-      useCodesignStore.getState().pushToast({
-        variant: 'error',
-        title: tr('errors.weekUsageReadFailed'),
-        description: reason,
-      });
-    } catch {
-      fallback();
-    }
-  }, 0);
-}
-
-function persistWeekUsage(usage: WeekUsage): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    window.localStorage.setItem(WEEK_USAGE_STORAGE_KEY, JSON.stringify(usage));
-    return null;
-  } catch (err) {
-    return err instanceof Error ? err.message : 'Failed to persist weekly usage';
-  }
-}
-
-export function accumulateWeekUsage(prev: WeekUsage, delta: UsageSnapshot, now: Date): WeekUsage {
-  const currentKey = isoWeekKey(now);
-  const base =
-    prev.isoWeek === currentKey
-      ? prev
-      : { isoWeek: currentKey, inputTokens: 0, outputTokens: 0, costUsd: 0 };
-  return {
-    isoWeek: currentKey,
-    inputTokens: base.inputTokens + Math.max(0, delta.inputTokens),
-    outputTokens: base.outputTokens + Math.max(0, delta.outputTokens),
-    costUsd: base.costUsd + Math.max(0, delta.costUsd),
   };
 }
 
@@ -626,7 +527,23 @@ async function maybeAutoRename(
   if (!window.codesign) return;
   const design = get().designs.find((d) => d.id === designId);
   if (!design || !isDefaultDesignName(design.name)) return;
-  const newName = autoNameFromPrompt(firstPrompt);
+  // Try an LLM-generated title first; fall back to a truncation of the prompt
+  // if the model call fails (missing key, offline, etc). The fallback is
+  // synchronous so the design never stays on "Untitled design N".
+  let newName = autoNameFromPrompt(firstPrompt);
+  try {
+    const api = window.codesign as unknown as {
+      generateTitle?: (prompt: string) => Promise<string>;
+    };
+    if (typeof api.generateTitle === 'function') {
+      const generated = await api.generateTitle(firstPrompt);
+      const trimmed = generated.trim();
+      if (trimmed.length > 0) newName = trimmed;
+    }
+  } catch {
+    // Fall through to the truncation fallback — don't surface a toast; the
+    // name itself is a nice-to-have and the user can always rename manually.
+  }
   try {
     await window.codesign.snapshots.renameDesign(designId, newName);
     await get().loadDesigns();
@@ -683,23 +600,44 @@ function applyGenerateSuccess(
   const firstArtifact = result.artifacts[0];
   const assistantMessage = result.message || tr('common.done');
   const { usage, rejected: rejectedUsageFields } = coerceUsageSnapshot(result);
-  let persistError: string | null = null;
   let didApply = false;
-  finishIfCurrent(set, generationId, (state) => {
-    const nextWeek = accumulateWeekUsage(state.weekUsage, usage, new Date());
-    persistError = persistWeekUsage(nextWeek);
+  finishIfCurrent(set, generationId, (_state) => {
     didApply = true;
+    const nextHtml = firstArtifact?.content ?? _state.previewHtml;
+    const pool =
+      _state.currentDesignId !== null && nextHtml !== null
+        ? recordPreviewInPool(
+            _state.previewHtmlByDesign,
+            _state.recentDesignIds,
+            _state.currentDesignId,
+            nextHtml,
+          )
+        : { cache: _state.previewHtmlByDesign, recent: _state.recentDesignIds };
     return {
-      messages: [...state.messages, { role: 'assistant', content: assistantMessage }],
-      previewHtml: firstArtifact?.content ?? state.previewHtml,
+      messages: [..._state.messages, { role: 'assistant', content: assistantMessage }],
+      previewHtml: nextHtml,
+      previewHtmlByDesign: pool.cache,
+      recentDesignIds: pool.recent,
       isGenerating: false,
       activeGenerationId: null,
+      generatingDesignId: null,
       generationStage: 'done' as GenerationStage,
-      streamingTokenCount: usage.inputTokens + usage.outputTokens,
       lastUsage: usage,
-      weekUsage: nextWeek,
     };
   });
+  // If the user switched designs mid-generation, didApply is false but we
+  // still want the fresh artifact in the pool so the design they generated
+  // for shows the new content the next time they switch back to it.
+  if (!didApply && firstArtifact?.content && designIdAtStart !== null) {
+    const state = get();
+    const pool = recordPreviewInPool(
+      state.previewHtmlByDesign,
+      state.recentDesignIds,
+      designIdAtStart,
+      firstArtifact.content,
+    );
+    set({ previewHtmlByDesign: pool.cache, recentDesignIds: pool.recent });
+  }
   if (didApply) {
     // Workstream G — auto-open the generated file as a tab so the user sees
     // the preview immediately. For Phase 1 the only file is `index.html`;
@@ -716,9 +654,13 @@ function applyGenerateSuccess(
     if (designId) {
       const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
       void persistDesignState(get, designId, get().messages, get().previewHtml, artifact);
-      // Sidebar v2: append chat_messages row so the new artifact renders in
-      // the chat pane. Assistant prose goes first, then artifact card.
-      if (assistantMessage.trim().length > 0) {
+      // Sidebar v2: append chat rows for artifact delivery.
+      // When agent runtime is active (tool_call rows exist), useAgentStream
+      // already persists assistant_text on turn_end with artifact stripping.
+      // Skip the legacy assistant_text append entirely to avoid duplicates
+      // and raw HTML leaking into chat.
+      const agentRuntimeActive = get().chatMessages.some((m) => m.kind === 'tool_call');
+      if (!agentRuntimeActive && assistantMessage.trim().length > 0) {
         void get().appendChatMessage({
           designId,
           kind: 'assistant_text',
@@ -734,19 +676,6 @@ function applyGenerateSuccess(
     if (rejectedUsageFields.length > 0) {
       const detail = rejectedUsageFields.join(', ');
       console.warn('[open-codesign] dropped non-finite usage values from provider:', detail);
-      get().pushToast({
-        variant: 'error',
-        title: tr('errors.weekUsageInvalid'),
-        description: detail,
-      });
-    }
-    if (persistError) {
-      console.warn('[open-codesign] failed to persist weekly usage:', persistError);
-      get().pushToast({
-        variant: 'error',
-        title: tr('errors.storageFailed'),
-        description: persistError,
-      });
     }
   }
 }
@@ -765,6 +694,8 @@ function applyGenerateError(
     messages: [...state.messages, { role: 'assistant', content: `Error: ${msg}` }],
     isGenerating: false,
     activeGenerationId: null,
+    generatingDesignId: null,
+    streamingAssistantText: null,
     errorMessage: msg,
     lastError: msg,
     generationStage: 'error' as GenerationStage,
@@ -851,51 +782,113 @@ function buildPromptRequest(
  * to specific elements and lets users accumulate a batch before submitting;
  * this mirrors that "pending changes accumulator" shape.
  */
-export function buildEnrichedPrompt(
-  userPrompt: string,
-  pendingEdits: Array<{ selector: string; tag: string; outerHTML: string; text: string }>,
-): string {
-  if (pendingEdits.length === 0) return userPrompt;
-  const lines: string[] = ['The user has pinned these elements and requested these changes:', ''];
-  pendingEdits.forEach((edit, i) => {
-    const html = edit.outerHTML.length > 280 ? `${edit.outerHTML.slice(0, 280)}…` : edit.outerHTML;
-    lines.push(`${i + 1}. [element: ${edit.tag} — ${edit.selector}]`);
-    lines.push(`   outerHTML: ${html}`);
-    lines.push(`   change: ${JSON.stringify(edit.text)}`);
-    lines.push('');
-  });
-  lines.push('---', '');
-  const trailer = userPrompt.trim().length === 0 ? 'Apply the pending changes.' : userPrompt;
-  lines.push(trailer);
-  return lines.join('\n');
+export interface PendingEditEnrichment {
+  selector: string;
+  tag: string;
+  outerHTML: string;
+  text: string;
+  scope?: CommentScope | undefined;
+  parentOuterHTML?: string | null | undefined;
 }
 
-const initialProjectsRead = readStoredProjects();
+export function buildEnrichedPrompt(
+  userPrompt: string,
+  pendingEdits: PendingEditEnrichment[],
+): string {
+  if (pendingEdits.length === 0) return userPrompt;
+
+  const MAX_HTML = 600;
+  const truncate = (s: string) => (s.length > MAX_HTML ? `${s.slice(0, MAX_HTML)}…` : s);
+
+  const lines: string[] = [
+    '## REQUIRED EDITS — you MUST apply every edit below to index.html',
+    '',
+    'Each edit targets a specific element identified by its selector and outerHTML.',
+    'Use text_editor str_replace to find and modify the element. Do NOT skip any edit.',
+    '',
+  ];
+
+  pendingEdits.forEach((edit, i) => {
+    const scope =
+      edit.scope === 'global' ? 'global (apply design-wide)' : 'element (this element only)';
+    lines.push(`### Edit ${i + 1}: ${edit.text}`);
+    lines.push(`- **Target**: \`<${edit.tag}>\` at \`${edit.selector}\``);
+    lines.push(`- **Current HTML**: \`${truncate(edit.outerHTML)}\``);
+    if (typeof edit.parentOuterHTML === 'string' && edit.parentOuterHTML.length > 0) {
+      lines.push(`- **Parent context**: \`${truncate(edit.parentOuterHTML)}\``);
+    }
+    lines.push(`- **Scope**: ${scope}`);
+    lines.push(`- **Instruction**: ${edit.text}`);
+    lines.push('');
+  });
+
+  if (userPrompt.trim().length > 0) {
+    lines.push('---', '', userPrompt);
+  }
+
+  return lines.join('\n');
+}
 
 export const useCodesignStore = create<CodesignState>((set, get) => ({
   messages: [],
   previewHtml: null,
+  previewHtmlByDesign: {},
+  recentDesignIds: [],
   isGenerating: false,
   activeGenerationId: null,
+  generatingDesignId: null,
   generationStage: 'idle' as GenerationStage,
-  streamingTokenCount: 0,
+  streamingAssistantText: null,
+  pendingToolCalls: [],
   lastUsage: null,
-  weekUsage: readStoredWeekUsage(new Date()),
   errorMessage: null,
   lastError: null,
   config: null,
   configLoaded: false,
   toastMessage: null,
-  connectionStatus: { state: 'no_provider', lastTestedAt: null, lastError: null },
+  autoPolishFired: new Set<string>(),
+  tryAutoPolish: (designId, locale) => {
+    const s = get();
+    if (s.autoPolishFired.has(designId)) return;
+    if (s.isGenerating) return;
+    // Require that the design has at least one completed assistant_text row
+    // for the just-finished round. If the agent ended without producing
+    // prose, the run likely errored or was trivial — skip polish.
+    const designMessages = s.chatMessages.filter((m) => m.designId === designId);
+    const hasAssistantText = designMessages.some((m) => m.kind === 'assistant_text');
+    if (!hasAssistantText) return;
+    // Don't pile polish onto a failed run. If the latest event on this design
+    // is an error (e.g. "prompt too long"), the artifact is broken and a
+    // follow-up would only amplify the damage (and burn more tokens).
+    const latest = designMessages[designMessages.length - 1];
+    if (latest?.kind === 'error') return;
+    // Skip polish if there was an error anywhere in the latest chain of
+    // events after the most recent user message — same rationale.
+    const lastUserIdx = designMessages.map((m) => m.kind).lastIndexOf('user');
+    if (
+      lastUserIdx >= 0 &&
+      designMessages.slice(lastUserIdx).some((m) => m.kind === 'error')
+    ) {
+      return;
+    }
+    // Mark fired *before* sending so a race with a second agent_end in the
+    // same tick can't double-trigger.
+    const nextFired = new Set(s.autoPolishFired);
+    nextFired.add(designId);
+    set({ autoPolishFired: nextFired });
+    // Local import to avoid a circular include with the hook file at module
+    // load time — the store is imported by the hook and vice-versa.
+    void import('./hooks/polishPrompt').then(({ pickPolishPrompt }) => {
+      const prompt = pickPolishPrompt(locale);
+      void get().sendPrompt({ prompt, silent: true });
+    });
+  },
 
   theme: readInitialTheme(),
   view: 'hub' as AppView,
+  previousView: 'hub' as AppView,
   hubTab: 'recent' as HubTab,
-  projects: initialProjectsRead.projects,
-  currentProjectId: null,
-  createProjectModalOpen: false,
   previewViewport: 'desktop' as PreviewViewport,
-  commandPaletteOpen: false,
   toasts: [],
   iframeErrors: [],
 
@@ -915,9 +908,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   chatMessages: [],
   chatLoaded: false,
-  sidebarTab: 'chat' as SidebarTab,
   sidebarCollapsed: false,
-  attachedSkills: [],
 
   comments: [],
   commentsLoaded: false,
@@ -957,29 +948,6 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   completeOnboarding(next: OnboardingState) {
     set({ config: next });
-  },
-
-  setConnectionStatus(status: ConnectionStatus) {
-    set({ connectionStatus: status });
-  },
-
-  async testConnection() {
-    const cfg = get().config;
-    if (!window.codesign || cfg === null || !cfg.hasKey || cfg.provider === null) {
-      set({ connectionStatus: { state: 'no_provider', lastTestedAt: null, lastError: null } });
-      return;
-    }
-    const result = await window.codesign.connection.testActive().catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : tr('errors.unknown');
-      return { ok: false as const, code: 'NETWORK' as const, message: msg, hint: msg };
-    });
-    if (result.ok) {
-      set({ connectionStatus: { state: 'connected', lastTestedAt: Date.now(), lastError: null } });
-    } else {
-      set({
-        connectionStatus: { state: 'error', lastTestedAt: Date.now(), lastError: result.message },
-      });
-    }
   },
 
   async pickInputFiles() {
@@ -1071,16 +1039,22 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     const pendingEditIds = pendingEdits.map((c) => c.id);
 
     const generationId = newId();
-    const history = get().messages;
-    const isFirstPrompt = history.length === 0;
+    // Cap cross-generate history to the most recent turns. The agent re-reads
+    // the current HTML via text_editor.view() when needed, so older prose in
+    // history offers diminishing value and pushes us toward the token ceiling.
+    const HISTORY_CAP = 12;
+    const fullHistory = get().messages;
+    const history =
+      fullHistory.length > HISTORY_CAP ? fullHistory.slice(-HISTORY_CAP) : fullHistory;
+    const isFirstPrompt = fullHistory.length === 0;
     const designIdAtStart = get().currentDesignId;
-    const attachedSkills = [...get().attachedSkills];
     set((s) => ({
       messages: [...s.messages, { role: 'user', content: request.prompt }],
       isGenerating: true,
       activeGenerationId: generationId,
+      generatingDesignId: designIdAtStart,
       generationStage: 'sending',
-      streamingTokenCount: 0,
+      streamingAssistantText: null,
       errorMessage: null,
       lastPromptInput: request,
       selectedElement: null,
@@ -1088,32 +1062,39 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     }));
 
     // Append to the new chat_messages table so Sidebar v2 reflects activity
-    // even before Workstream B starts emitting streaming tool events.
-    if (designIdAtStart) {
+    // even before Workstream B starts emitting streaming tool events. Silent
+    // prompts (auto-polish) skip this and the auto-rename: the agent still
+    // receives the prompt through runGenerate, but the chat UI reads as one
+    // continuous run instead of a second user bubble.
+    if (designIdAtStart && !input.silent) {
       void get().appendChatMessage({
         designId: designIdAtStart,
         kind: 'user',
-        payload: {
-          text: request.prompt,
-          ...(attachedSkills.length > 0 ? { attachedSkills } : {}),
-        },
+        payload: { text: request.prompt },
       });
     }
-    // Skills were consumed by this turn — clear the chip selection so the
-    // next prompt starts clean. Users re-toggle if they still want them.
-    if (attachedSkills.length > 0) get().clearAttachedSkills();
 
-    triggerAutoRenameIfFirst(get, isFirstPrompt, request.prompt);
+    if (!input.silent) {
+      triggerAutoRenameIfFirst(get, isFirstPrompt, request.prompt);
+    }
 
     try {
-      await runGenerate(get, set, generationId, {
-        prompt: enrichedPrompt,
-        history,
-        model: modelRef(cfg.provider, cfg.modelPrimary),
-        ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
-        attachments: request.attachments,
+      await runGenerate(
+        get,
+        set,
         generationId,
-      }, designIdAtStart);
+        {
+          prompt: enrichedPrompt,
+          history,
+          model: modelRef(cfg.provider, cfg.modelPrimary),
+          ...(request.referenceUrl ? { referenceUrl: request.referenceUrl } : {}),
+          attachments: request.attachments,
+          generationId,
+          ...(designIdAtStart ? { designId: designIdAtStart } : {}),
+          ...(get().previewHtml ? { previousHtml: get().previewHtml as string } : {}),
+        },
+        designIdAtStart,
+      );
       // After a successful generate, persistDesignState (called inside
       // applyGenerateSuccess) creates the new snapshot and updates
       // currentSnapshotId via loadCommentsForCurrentDesign. Mark any pending
@@ -1121,11 +1102,17 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       // overlay + chips flip state consistently with the new preview.
       if (pendingEditIds.length > 0 && designIdAtStart && window.codesign) {
         try {
-          // Re-fetch to pick up the freshly-created snapshot id (persist runs
-          // in the background; give it a tick).
-          await new Promise((r) => setTimeout(r, 0));
-          const snaps = await window.codesign.snapshots.list(designIdAtStart);
-          const appliedIn = snaps[0]?.id ?? null;
+          // Retry fetching the newest snapshot — persistDesignState runs
+          // asynchronously, so the snapshot may not be available immediately.
+          let appliedIn: string | null = null;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await new Promise((r) => setTimeout(r, attempt * 50));
+            const snaps = await window.codesign.snapshots.list(designIdAtStart);
+            if (snaps.length > 0 && snaps[0]?.id) {
+              appliedIn = snaps[0].id;
+              break;
+            }
+          }
           if (appliedIn) {
             const updated = await window.codesign.comments.markApplied(pendingEditIds, appliedIn);
             if (get().currentDesignId === designIdAtStart && updated.length > 0) {
@@ -1164,6 +1151,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         finishIfCurrent(set, id, () => ({
           isGenerating: false,
           activeGenerationId: null,
+          generatingDesignId: null,
+          streamingAssistantText: null,
           generationStage: 'idle' as GenerationStage,
         }));
       })
@@ -1209,6 +1198,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     set((s) => ({
       messages: [...s.messages, userMessage],
       isGenerating: true,
+      generatingDesignId: get().currentDesignId,
       errorMessage: null,
       iframeErrors: [],
     }));
@@ -1224,17 +1214,26 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       const firstArtifact = result.artifacts[0];
       const assistantText = result.message || tr('common.applied');
       const { usage, rejected: rejectedUsageFields } = coerceUsageSnapshot(result);
-      let persistError: string | null = null;
       set((s) => {
-        const nextWeek = accumulateWeekUsage(s.weekUsage, usage, new Date());
-        persistError = persistWeekUsage(nextWeek);
+        const nextHtml = firstArtifact?.content ?? s.previewHtml;
+        const pool =
+          s.currentDesignId !== null && nextHtml !== null
+            ? recordPreviewInPool(
+                s.previewHtmlByDesign,
+                s.recentDesignIds,
+                s.currentDesignId,
+                nextHtml,
+              )
+            : { cache: s.previewHtmlByDesign, recent: s.recentDesignIds };
         return {
           messages: [...s.messages, { role: 'assistant', content: assistantText }],
-          previewHtml: firstArtifact?.content ?? s.previewHtml,
+          previewHtml: nextHtml,
+          previewHtmlByDesign: pool.cache,
+          recentDesignIds: pool.recent,
           isGenerating: false,
+          generatingDesignId: null,
           selectedElement: null,
           lastUsage: usage,
-          weekUsage: nextWeek,
         };
       });
       const designId = get().currentDesignId;
@@ -1245,25 +1244,13 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       if (rejectedUsageFields.length > 0) {
         const detail = rejectedUsageFields.join(', ');
         console.warn('[open-codesign] dropped non-finite usage values from provider:', detail);
-        get().pushToast({
-          variant: 'error',
-          title: tr('errors.weekUsageInvalid'),
-          description: detail,
-        });
-      }
-      if (persistError) {
-        console.warn('[open-codesign] failed to persist weekly usage:', persistError);
-        get().pushToast({
-          variant: 'error',
-          title: tr('errors.storageFailed'),
-          description: persistError,
-        });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr('errors.unknown');
       set((s) => ({
         messages: [...s.messages, { role: 'assistant', content: `Error: ${msg}` }],
         isGenerating: false,
+        generatingDesignId: null,
         errorMessage: msg,
         lastError: msg,
       }));
@@ -1338,94 +1325,16 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   },
 
   setView(view) {
-    set({ view, commandPaletteOpen: false });
+    const prev = get().view;
+    set({ view, previousView: prev === view ? get().previousView : prev });
   },
 
   setHubTab(tab) {
     set({ hubTab: tab });
   },
 
-  openCreateProjectModal() {
-    set({ createProjectModalOpen: true });
-  },
-
-  closeCreateProjectModal() {
-    set({ createProjectModalOpen: false });
-  },
-
-  createProject(draft) {
-    const now = new Date().toISOString();
-    const project: Project = {
-      schemaVersion: PROJECT_SCHEMA_VERSION,
-      id: newId(),
-      name: draft.name.trim(),
-      type: draft.type,
-      createdAt: now,
-      updatedAt: now,
-      ...(draft.fidelity ? { fidelity: draft.fidelity } : {}),
-      ...(draft.speakerNotes !== undefined ? { speakerNotes: draft.speakerNotes } : {}),
-      ...(draft.templateId ? { templateId: draft.templateId } : {}),
-    };
-    const next = [project, ...get().projects];
-    const persist = persistProjects(next);
-    set({
-      projects: next,
-      currentProjectId: project.id,
-      view: 'workspace',
-      createProjectModalOpen: false,
-      messages: [],
-      previewHtml: null,
-      inputFiles: [],
-      referenceUrl: '',
-      selectedElement: null,
-      interactionMode: 'default',
-      lastPromptInput: null,
-      generationStage: 'idle' as GenerationStage,
-      isGenerating: false,
-      activeGenerationId: null,
-      errorMessage: null,
-      lastError: null,
-    });
-    if (persist.error) {
-      get().pushToast({
-        variant: 'error',
-        title: tr('errors.projectStorageFailed'),
-        description: persist.error,
-      });
-    }
-    return project;
-  },
-
-  openProject(id) {
-    const project = get().projects.find((p) => p.id === id);
-    if (!project) return;
-    set({
-      currentProjectId: id,
-      view: 'workspace',
-      messages: [],
-      previewHtml: null,
-      inputFiles: [],
-      referenceUrl: '',
-      selectedElement: null,
-      interactionMode: 'default',
-      lastPromptInput: null,
-      generationStage: 'idle' as GenerationStage,
-      isGenerating: false,
-      activeGenerationId: null,
-      errorMessage: null,
-      lastError: null,
-    });
-  },
-
   setPreviewViewport(viewport) {
     set({ previewViewport: viewport });
-  },
-
-  openCommandPalette() {
-    set({ commandPaletteOpen: true });
-  },
-  closeCommandPalette() {
-    set({ commandPaletteOpen: false });
   },
 
   async loadDesigns() {
@@ -1463,9 +1372,21 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   async createNewDesign() {
     if (!window.codesign) return null;
-    if (get().isGenerating) return null;
-    const existingCount = get().designs.length;
-    const name = `Untitled design ${existingCount + 1}`;
+    if (get().isGenerating) {
+      // Don't silently drop the request — callers like the Examples flow
+      // assume "clicked = new design". A hidden no-op makes the prompt appear
+      // to have vanished into the current design instead.
+      get().pushToast({
+        variant: 'info',
+        title: tr('projects.notifications.createFailed'),
+        description: tr('projects.notifications.busyGenerating'),
+      });
+      return null;
+    }
+    const existingNames = new Set(get().designs.map((d) => d.name));
+    let n = 1;
+    while (existingNames.has(`Untitled design ${n}`)) n += 1;
+    const name = `Untitled design ${n}`;
     try {
       const design = await window.codesign.snapshots.createDesign(name);
       set({
@@ -1479,6 +1400,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         designsViewOpen: false,
         chatMessages: [],
         chatLoaded: false,
+        pendingToolCalls: [],
         comments: [],
         commentsLoaded: false,
         commentBubble: null,
@@ -1503,27 +1425,42 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
 
   async switchDesign(id: string) {
     if (!window.codesign) return;
-    if (get().isGenerating) {
-      get().pushToast({
-        variant: 'info',
-        title: tr('projects.notifications.switchBlockedGenerating'),
-      });
-      return;
-    }
-    if (get().currentDesignId === id) {
+    const state = get();
+    if (state.currentDesignId === id) {
       set({ designsViewOpen: false });
       return;
     }
-    try {
-      const [messages, snapshots] = await Promise.all([
-        window.codesign.snapshots.listMessages(id),
-        window.codesign.snapshots.list(id),
-      ]);
-      const latest = snapshots[0] ?? null;
+
+    // Snapshot the OUTGOING design's preview into the pool so that switching
+    // back is instant. The cache key is the design id; PreviewPane keeps a
+    // hidden iframe per pool entry.
+    const outgoingPool =
+      state.currentDesignId !== null && state.previewHtml !== null
+        ? recordPreviewInPool(
+            state.previewHtmlByDesign,
+            state.recentDesignIds,
+            state.currentDesignId,
+            state.previewHtml,
+          )
+        : { cache: state.previewHtmlByDesign, recent: state.recentDesignIds };
+
+    // Cache hit on the incoming design — render instantly, refresh in the
+    // background so any external edits eventually land.
+    const cachedHtml = outgoingPool.cache[id];
+    if (cachedHtml !== undefined) {
+      const incomingPool = recordPreviewInPool(
+        outgoingPool.cache,
+        outgoingPool.recent,
+        id,
+        cachedHtml,
+      );
+      // Commit the visual switch instantly — iframe is already alive in the
+      // pool so no reparse cost.
       set({
         currentDesignId: id,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        previewHtml: latest ? latest.artifactSource : null,
+        previewHtml: cachedHtml,
+        previewHtmlByDesign: incomingPool.cache,
+        recentDesignIds: incomingPool.recent,
         errorMessage: null,
         iframeErrors: [],
         selectedElement: null,
@@ -1531,12 +1468,81 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         designsViewOpen: false,
         chatMessages: [],
         chatLoaded: false,
+        pendingToolCalls: [],
         comments: [],
         commentsLoaded: false,
         commentBubble: null,
         currentSnapshotId: null,
-        // Workstream G — reset tabs on design switch; auto-open index.html if
-        // the freshly-loaded design has an artifact.
+        canvasTabs: [FILES_TAB, { kind: 'file', path: 'index.html' }],
+        activeCanvasTab: 1,
+        messages: [],
+      });
+      void get().loadChatForCurrentDesign();
+      void get().loadCommentsForCurrentDesign();
+      // Messages list is tiny — await it so callers see fully-hydrated state
+      // when switchDesign resolves. Snapshots we can skip (preview came from
+      // cache); background-refresh them in case of external edits.
+      try {
+        const messages = await window.codesign.snapshots.listMessages(id);
+        if (get().currentDesignId === id) {
+          set({ messages: messages.map((m) => ({ role: m.role, content: m.content })) });
+        }
+      } catch {
+        // Chat list still loads via loadChatForCurrentDesign; tolerable.
+      }
+      void (async () => {
+        try {
+          const snapshots = await window.codesign?.snapshots.list(id);
+          if (!snapshots || get().currentDesignId !== id) return;
+          const latest = snapshots[0] ?? null;
+          const fresh = latest ? latest.artifactSource : null;
+          if (fresh !== null && fresh !== get().previewHtml) {
+            const refreshed = recordPreviewInPool(
+              get().previewHtmlByDesign,
+              get().recentDesignIds,
+              id,
+              fresh,
+            );
+            set({
+              previewHtml: fresh,
+              previewHtmlByDesign: refreshed.cache,
+              recentDesignIds: refreshed.recent,
+            });
+          }
+        } catch {
+          // Background refresh failure is harmless — cached preview remains.
+        }
+      })();
+      return;
+    }
+
+    // Cold path — first visit (or evicted from pool). Pay the IPC + parse cost.
+    try {
+      const [messages, snapshots] = await Promise.all([
+        window.codesign.snapshots.listMessages(id),
+        window.codesign.snapshots.list(id),
+      ]);
+      const latest = snapshots[0] ?? null;
+      const html = latest ? latest.artifactSource : null;
+      const incomingPool = recordPreviewInPool(outgoingPool.cache, outgoingPool.recent, id, html);
+      set({
+        currentDesignId: id,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        previewHtml: html,
+        previewHtmlByDesign: incomingPool.cache,
+        recentDesignIds: incomingPool.recent,
+        errorMessage: null,
+        iframeErrors: [],
+        selectedElement: null,
+        lastPromptInput: null,
+        designsViewOpen: false,
+        chatMessages: [],
+        chatLoaded: false,
+        pendingToolCalls: [],
+        comments: [],
+        commentsLoaded: false,
+        commentBubble: null,
+        currentSnapshotId: null,
         canvasTabs: latest ? [FILES_TAB, { kind: 'file', path: 'index.html' }] : [FILES_TAB],
         activeCanvasTab: latest ? 1 : 0,
       });
@@ -1615,7 +1621,13 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       await get().loadDesigns();
       if (wasCurrent) {
         const remaining = get().designs;
-        set({ currentDesignId: null, messages: [], previewHtml: null });
+        set({
+          currentDesignId: null,
+          messages: [],
+          previewHtml: null,
+          canvasTabs: [FILES_TAB],
+          activeCanvasTab: 0,
+        });
         if (remaining.length > 0 && remaining[0]) {
           await get().switchDesign(remaining[0].id);
         } else {
@@ -1706,27 +1718,165 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     set({ chatMessages: [], chatLoaded: false });
   },
 
-  setSidebarTab(tab: SidebarTab) {
-    set({ sidebarTab: tab });
+  setStreamingAssistantText(value) {
+    set({ streamingAssistantText: value });
+  },
+
+  pushPendingToolCall(designId, call) {
+    if (get().currentDesignId !== designId) return;
+    set((s) => ({ pendingToolCalls: [...s.pendingToolCalls, call] }));
+  },
+
+  resolvePendingToolCall(designId, toolName, result, durationMs) {
+    const s = get();
+    const idx = s.pendingToolCalls.findIndex(
+      (c) => c.toolName === toolName && c.status === 'running',
+    );
+    const resolved = idx >= 0 ? s.pendingToolCalls[idx] : null;
+    // Remove from pending
+    if (idx >= 0) {
+      const next = [...s.pendingToolCalls];
+      next.splice(idx, 1);
+      set({ pendingToolCalls: next });
+    }
+    // Persist the completed tool call to SQLite
+    if (resolved) {
+      void get().appendChatMessage({
+        designId,
+        kind: 'tool_call',
+        payload: {
+          ...resolved,
+          status: 'done' as const,
+          ...(result !== undefined ? { result } : {}),
+          ...(durationMs !== undefined ? { durationMs } : {}),
+        },
+      });
+    }
+  },
+
+  async updateChatToolStatus({ designId, seq, status, result, durationMs, errorMessage }) {
+    if (!window.codesign) return;
+    try {
+      await window.codesign.chat.updateToolStatus({
+        designId,
+        seq,
+        status,
+        ...(errorMessage !== undefined ? { errorMessage } : {}),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      console.warn('[open-codesign] updateChatToolStatus failed:', msg);
+      return;
+    }
+    // Mirror the patch into local chatMessages so WorkingCard re-renders
+    // immediately without waiting for a list reload.
+    if (get().currentDesignId !== designId) return;
+    set((s) => ({
+      chatMessages: s.chatMessages.map((m) => {
+        if (m.designId !== designId || m.seq !== seq || m.kind !== 'tool_call') return m;
+        const prev = (m.payload as ChatToolCallPayload | null) ?? null;
+        if (!prev) return m;
+        const nextPayload: ChatToolCallPayload = {
+          ...prev,
+          status,
+          ...(result !== undefined ? { result } : {}),
+          ...(durationMs !== undefined ? { durationMs } : {}),
+          ...(errorMessage !== undefined ? { error: { message: errorMessage } } : {}),
+        };
+        return { ...m, payload: nextPayload };
+      }),
+    }));
+  },
+
+  setPreviewHtmlFromAgent({ designId, content }) {
+    const state = get();
+    // Only adopt the live html when the event's design matches what the user
+    // is looking at OR what is actively generating. This prevents a background
+    // run on design A from blowing away the preview while the user has switched
+    // to design B.
+    if (state.currentDesignId !== designId && state.generatingDesignId !== designId) {
+      // The event's design isn't visible — still update its pool entry so
+      // switching back later reflects the streamed-in HTML.
+      const pool = recordPreviewInPool(
+        state.previewHtmlByDesign,
+        state.recentDesignIds,
+        designId,
+        content,
+      );
+      set({ previewHtmlByDesign: pool.cache, recentDesignIds: pool.recent });
+      return;
+    }
+    const pool = recordPreviewInPool(
+      state.previewHtmlByDesign,
+      state.recentDesignIds,
+      designId,
+      content,
+    );
+    set({
+      previewHtml: content,
+      previewHtmlByDesign: pool.cache,
+      recentDesignIds: pool.recent,
+    });
+  },
+
+  setPreviewHtml(content: string) {
+    const state = get();
+    if (state.currentDesignId === null) {
+      set({ previewHtml: content });
+      return;
+    }
+    const pool = recordPreviewInPool(
+      state.previewHtmlByDesign,
+      state.recentDesignIds,
+      state.currentDesignId,
+      content,
+    );
+    set({
+      previewHtml: content,
+      previewHtmlByDesign: pool.cache,
+      recentDesignIds: pool.recent,
+    });
+  },
+
+  async persistAgentRunSnapshot({ designId, finalText }) {
+    if (!window.codesign) return;
+    const state = get();
+    // Don't write a snapshot if the run produced nothing renderable, or if
+    // the user has already navigated to a different design (we'd persist the
+    // wrong html otherwise).
+    if (state.currentDesignId !== designId) return;
+    const html = state.previewHtml;
+    if (!html || html.trim().length === 0) return;
+    // The "prompt" associated with this snapshot is the most recent user
+    // message in the chat — that is what the agent was answering.
+    const lastUser = [...state.chatMessages].reverse().find((m) => m.kind === 'user');
+    const prompt = (lastUser?.payload as { text?: string } | undefined)?.text ?? null;
+    const artifact: PersistArtifact = {
+      type: 'html',
+      content: html,
+      prompt,
+      message: finalText && finalText.length > 0 ? finalText : null,
+    };
+    try {
+      const newSnapshotId = await persistArtifactSnapshot(designId, artifact);
+      // Refresh the design list so the hub thumbnail / updated_at land on
+      // disk for the next ensureCurrentDesign() boot.
+      await get().loadDesigns();
+      if (newSnapshotId && get().currentDesignId === designId) {
+        set({ currentSnapshotId: newSnapshotId });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr('errors.unknown');
+      get().pushToast({
+        variant: 'error',
+        title: tr('projects.notifications.saveFailed'),
+        description: msg,
+      });
+    }
   },
 
   setSidebarCollapsed(collapsed: boolean) {
     set({ sidebarCollapsed: collapsed });
-  },
-
-  toggleAttachedSkill(skill: BuiltinSkillId) {
-    set((s) => {
-      const has = s.attachedSkills.includes(skill);
-      return {
-        attachedSkills: has
-          ? s.attachedSkills.filter((x) => x !== skill)
-          : [...s.attachedSkills, skill],
-      };
-    });
-  },
-
-  clearAttachedSkills() {
-    set({ attachedSkills: [] });
   },
 
   async loadCommentsForCurrentDesign() {
@@ -1795,6 +1945,8 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
         outerHTML: input.outerHTML,
         rect: input.rect,
         text: input.text,
+        ...(input.scope ? { scope: input.scope } : {}),
+        ...(input.parentOuterHTML ? { parentOuterHTML: input.parentOuterHTML } : {}),
       });
       if (get().currentDesignId === designId) {
         set((s) => ({ comments: [...s.comments, row] }));
@@ -1869,14 +2021,3 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     set({ canvasTabs: [FILES_TAB], activeCanvasTab: 0 });
   },
 }));
-
-if (initialProjectsRead.error && typeof window !== 'undefined') {
-  // Defer so i18n + UI have a chance to mount before the toast renders.
-  setTimeout(() => {
-    useCodesignStore.getState().pushToast({
-      variant: 'error',
-      title: tr('errors.projectStorageFailed'),
-      description: initialProjectsRead.error ?? '',
-    });
-  }, 0);
-}

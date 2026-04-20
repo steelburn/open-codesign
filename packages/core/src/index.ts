@@ -34,6 +34,21 @@ export type { LoadAllSkillsOptions } from './skills/index.js';
 
 export { generateViaAgent } from './agent.js';
 export type { AgentEvent, GenerateViaAgentDeps } from './agent.js';
+export { FRAME_TEMPLATES, type FrameName } from './frames/index.js';
+export { DESIGN_SKILLS, type DesignSkillName } from './design-skills/index.js';
+export {
+  makeTextEditorTool,
+  type TextEditorFsCallbacks,
+  type TextEditorDetails,
+} from './tools/text-editor.js';
+export { makeSetTodosTool, type SetTodosDetails } from './tools/set-todos.js';
+export { makeListFilesTool, type ListFilesDetails } from './tools/list-files.js';
+export { makeReadUrlTool, type ReadUrlDetails } from './tools/read-url.js';
+export {
+  makeReadDesignSystemTool,
+  type ReadDesignSystemDetails,
+} from './tools/read-design-system.js';
+export { makeDoneTool, type DoneDetails, type DoneError, type DoneRuntimeVerifier } from './tools/done.js';
 
 export interface AttachmentContext {
   name: string;
@@ -165,30 +180,11 @@ function extractHtmlDocument(source: string): string | null {
   return null;
 }
 
-function extractFallbackArtifact(text: string): { artifact: Artifact | null; message: string } {
-  const fencedMatches = [...text.matchAll(/```(?:html)?\s*([\s\S]*?)```/gi)];
-  for (const match of fencedMatches) {
-    const block = match[1];
-    const matchedText = match[0];
-    if (!block || !matchedText) continue;
-
-    const html = extractHtmlDocument(block);
-    if (!html) continue;
-
-    return {
-      artifact: createHtmlArtifact(html, 0),
-      message: text.replace(matchedText, '').trim(),
-    };
-  }
-
-  const html = extractHtmlDocument(text);
-  if (!html) return { artifact: null, message: text.trim() };
-
-  return {
-    artifact: createHtmlArtifact(html, 0),
-    message: text.replace(html, '').trim(),
-  };
-}
+// Note: extractFallbackArtifact (prose ```html / bare <html> recovery) was
+// removed in the JSX-runtime overhaul. Artifacts now come exclusively from
+// the agent's `<artifact>` stream or the text_editor virtual fs; tolerating
+// inline source encouraged double-emission and spammed the chat view.
+void extractHtmlDocument;
 
 function escapeUntrustedXml(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
@@ -367,14 +363,6 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
     const collected: Collected = { text: '', artifacts: [] };
     collect(parser.feed(result.content), collected);
     collect(parser.flush(), collected);
-
-    if (collected.artifacts.length === 0) {
-      const fallback = extractFallbackArtifact(collected.text);
-      if (fallback.artifact) {
-        collected.artifacts.push(fallback.artifact);
-        collected.text = fallback.message;
-      }
-    }
 
     log.info(`[${scope}] step=parse_response.ok`, {
       ...ctx,
@@ -672,4 +660,89 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     logger: input.logger,
     logScope: 'apply_comment',
   });
+}
+
+// ---------------------------------------------------------------------------
+// Title generation — small synchronous completion used after the first prompt
+// to replace "Untitled design" with a 2-5 word summary. Uses the same provider
+// the user already configured so no extra key is needed. Failures bubble as
+// CodesignError so the caller can fall back to a simple truncation.
+// ---------------------------------------------------------------------------
+
+export interface GenerateTitleInput {
+  prompt: string;
+  model: ModelRef;
+  apiKey: string;
+  baseUrl?: string | undefined;
+  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  httpHeaders?: Record<string, string> | undefined;
+  signal?: AbortSignal | undefined;
+  logger?: CoreLogger | undefined;
+}
+
+const TITLE_SYSTEM_PROMPT = [
+  'You write short titles for UI design projects.',
+  'Output ONLY the title — 2 to 5 words, no quotes, no trailing punctuation, no emoji.',
+  'Match the language the user wrote in (Chinese prompt → Chinese title).',
+  'Describe WHAT is being designed, not the action verb.',
+  'Good: "金融科技演讲稿", "Calm Spaces 冥想 App", "移动端引导流程".',
+  'Bad: "A presentation for a fintech startup", "Design a slide deck for...".',
+].join('\n');
+
+function sanitizeTitle(raw: string): string {
+  const cleaned = raw
+    .replace(/```[a-zA-Z0-9]*\n?|```/g, '')
+    .replace(/^[\s'"“”‘’`*#\-•]+|[\s'"“”‘’`*#\-•。、，,.!?！？:：;；]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (cleaned.length === 0) return '';
+  // Guard against models that ignore the length hint and emit a paragraph.
+  if (cleaned.length > 40) return `${cleaned.slice(0, 40).trimEnd()}…`;
+  return cleaned;
+}
+
+export async function generateTitle(input: GenerateTitleInput): Promise<string> {
+  const log = input.logger ?? NOOP_LOGGER;
+  const trimmed = input.prompt.trim();
+  if (trimmed.length === 0) {
+    throw new CodesignError('generateTitle requires a non-empty prompt', 'INPUT_EMPTY_PROMPT');
+  }
+  const messages: ChatMessage[] = [
+    { role: 'system', content: TITLE_SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content: `Summarize this design prompt as a short title:\n\n${trimmed}`,
+    },
+  ];
+  const started = Date.now();
+  log.info('[title] step=send_request', {
+    provider: input.model.provider,
+    modelId: input.model.modelId,
+  });
+  try {
+    const result = await complete(
+      input.model,
+      messages,
+      {
+        apiKey: input.apiKey,
+        ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+        ...(input.wire !== undefined ? { wire: input.wire } : {}),
+        ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
+        ...(input.signal !== undefined ? { signal: input.signal } : {}),
+        maxTokens: 60,
+      },
+    );
+    log.info('[title] step=send_request.ok', { ms: Date.now() - started });
+    const title = sanitizeTitle(result.content);
+    if (title.length === 0) {
+      throw new CodesignError('Model returned empty title', 'PROVIDER_ERROR');
+    }
+    return title;
+  } catch (err) {
+    log.error('[title] step=send_request.fail', {
+      ms: Date.now() - started,
+      errorClass: err instanceof Error ? err.constructor.name : typeof err,
+    });
+    throw remapProviderError(err, input.model.provider);
+  }
 }

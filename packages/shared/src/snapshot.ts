@@ -127,6 +127,13 @@ export type CommentKind = z.infer<typeof CommentKind>;
 export const CommentStatus = z.enum(['pending', 'applied', 'dismissed']);
 export type CommentStatus = z.infer<typeof CommentStatus>;
 
+/** Whether a comment instructs the model to change just the pinned element
+ *  ("element") or to consider the change a global directive that may touch
+ *  the rest of the design ("global"). Defaults to "element" for back-compat
+ *  with rows written before the v2 enrichment landed. */
+export const CommentScope = z.enum(['element', 'global']);
+export type CommentScope = z.infer<typeof CommentScope>;
+
 export const CommentRect = z.object({
   top: z.number(),
   left: z.number(),
@@ -149,6 +156,11 @@ export const CommentRowV1 = z.object({
   status: CommentStatus,
   createdAt: z.string(),
   appliedInSnapshotId: z.string().nullable(),
+  /** v2 enrichment — defaults to 'element' for rows from v1. */
+  scope: CommentScope.default('element').optional(),
+  /** v2 enrichment — parent element's outerHTML (truncated). Optional so
+   *  pre-v2 rows still parse without it. */
+  parentOuterHTML: z.string().optional(),
 });
 export type CommentRow = z.infer<typeof CommentRowV1>;
 
@@ -161,6 +173,8 @@ export interface CommentCreateInput {
   outerHTML: string;
   rect: CommentRect;
   text: string;
+  scope?: CommentScope;
+  parentOuterHTML?: string;
 }
 
 export interface CommentUpdateInput {

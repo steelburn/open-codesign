@@ -94,6 +94,26 @@ function parseAddInput(raw: unknown): CommentCreateInput {
   if (typeof outerHTML !== 'string') {
     throw new CodesignError(`${channel}: outerHTML must be a string`, 'IPC_BAD_INPUT');
   }
+  const scopeRaw = r['scope'];
+  let scope: 'element' | 'global' = 'element';
+  if (scopeRaw !== undefined) {
+    if (scopeRaw !== 'element' && scopeRaw !== 'global') {
+      throw new CodesignError(
+        `${channel}: scope must be 'element' or 'global'`,
+        'IPC_BAD_INPUT',
+      );
+    }
+    scope = scopeRaw;
+  }
+  const parentRaw = r['parentOuterHTML'];
+  if (parentRaw !== undefined && parentRaw !== null && typeof parentRaw !== 'string') {
+    throw new CodesignError(
+      `${channel}: parentOuterHTML must be a string when present`,
+      'IPC_BAD_INPUT',
+    );
+  }
+  const parentOuterHTML =
+    typeof parentRaw === 'string' && parentRaw.length > 0 ? parentRaw : undefined;
   return {
     designId: parseNonEmptyString(r, 'designId', channel),
     snapshotId: parseNonEmptyString(r, 'snapshotId', channel),
@@ -103,6 +123,8 @@ function parseAddInput(raw: unknown): CommentCreateInput {
     outerHTML,
     rect: parseRect(r['rect'], channel),
     text,
+    scope,
+    ...(parentOuterHTML !== undefined ? { parentOuterHTML } : {}),
   };
 }
 

@@ -1,161 +1,148 @@
 import { useT } from '@open-codesign/i18n';
-import { IconButton, Tooltip, Wordmark } from '@open-codesign/ui';
-import { Command, FolderOpen, Settings as SettingsIcon } from 'lucide-react';
+import { IconButton, Wordmark } from '@open-codesign/ui';
+import { ArrowLeft, FolderOpen, Settings as SettingsIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
-import { useCodesignStore } from '../store';
-import { ConnectionStatusDot } from './ConnectionStatusDot';
+import { type HubTab, useCodesignStore } from '../store';
 import { LanguageToggle } from './LanguageToggle';
+import { ModelSwitcher } from './ModelSwitcher';
 import { ThemeToggle } from './ThemeToggle';
 
 const dragStyle = { WebkitAppRegion: 'drag' } as CSSProperties;
 const noDragStyle = { WebkitAppRegion: 'no-drag' } as CSSProperties;
 
-// Display the BYOK provider chip and accumulated weekly cost. Weekly totals are
-// persisted in localStorage under an ISO-week bucket; resets automatically.
-function ByokBadge() {
-  const t = useT();
-  const config = useCodesignStore((s) => s.config);
-  const weekCostUsd = useCodesignStore((s) => s.weekUsage.costUsd);
-  const lastUsage = useCodesignStore((s) => s.lastUsage);
+const HUB_TABS: HubTab[] = ['recent', 'your', 'examples', 'designSystems'];
 
-  const provider = config?.provider ?? null;
-  const model = config?.modelPrimary ?? null;
-
-  if (!provider || !model) return null;
-
-  // Shorten common provider names for display
-  const providerLabel =
-    provider === 'anthropic'
-      ? 'Claude'
-      : provider === 'openai'
-        ? 'OpenAI'
-        : provider === 'openrouter'
-          ? 'OpenRouter'
-          : provider;
-
-  // Truncate model slug to the key qualifier (e.g. "claude-sonnet-4-5" → "sonnet-4-5")
-  const modelLabel = model.replace(/^(claude-|gpt-|gemini-)/, '');
-  // Short label drops a leading provider segment (e.g. "openrouter/elephant-alpha" → "elephant-alpha")
-  const shortModelLabel = modelLabel.includes('/')
-    ? (modelLabel.split('/').pop() ?? modelLabel)
-    : modelLabel;
-  const hasFullForm = shortModelLabel !== modelLabel;
-
-  const costLabel = formatCostUsd(weekCostUsd);
-  const tooltipParts: string[] = [t('topbar.spendTooltip')];
-  if (lastUsage) {
-    tooltipParts.push(
-      t('topbar.lastUsageTooltip', {
-        input: lastUsage.inputTokens.toLocaleString(),
-        output: lastUsage.outputTokens.toLocaleString(),
-        cost: formatCostUsd(lastUsage.costUsd),
-      }),
-    );
-  }
-
-  return (
-    <div
-      className="group flex items-center gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-2)] py-[var(--space-1)] select-none"
-      title={`${t('topbar.byokTitle')} — ${providerLabel} · ${modelLabel}`}
-    >
-      {/* Provider + model chip — short slug always visible; full form expands on hover */}
-      <span className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-none">
-        {providerLabel}
-        <span className="mx-[var(--space-1)] text-[var(--color-border-strong)]">·</span>
-        {hasFullForm ? (
-          <>
-            <span className="text-[var(--color-text-muted)] group-hover:hidden">
-              {shortModelLabel}
-            </span>
-            <span className="hidden text-[var(--color-text-muted)] group-hover:inline">
-              {modelLabel}
-            </span>
-          </>
-        ) : (
-          <span className="text-[var(--color-text-muted)]">{modelLabel}</span>
-        )}
-      </span>
-
-      <span className="w-px h-[var(--size-icon-xs)] bg-[var(--color-border)]" aria-hidden="true" />
-
-      {/* Cost this week — tabular mono numerals */}
-      <Tooltip label={tooltipParts.join(' — ')}>
-        <span
-          className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-none"
-          style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
-        >
-          ${costLabel}
-          <span
-            className="ml-[var(--space-1)] text-[var(--color-text-muted)]"
-            style={{ fontFamily: 'var(--font-sans)' }}
-          >
-            {t('topbar.spendThisWeek')}
-          </span>
-        </span>
-      </Tooltip>
-    </div>
-  );
-}
-
-export function formatCostUsd(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return '0.00';
-  // Sub-cent costs are common for cheap providers — show 4 decimals so the
-  // user sees a non-zero number after the first request, then collapse to
-  // 2 decimals once the bucket grows past a cent.
-  if (value < 0.01) return value.toFixed(4);
-  return value.toFixed(2);
-}
 
 export function TopBar() {
   const t = useT();
   const setView = useCodesignStore((s) => s.setView);
-  const openCommandPalette = useCodesignStore((s) => s.openCommandPalette);
+  const view = useCodesignStore((s) => s.view);
+  const previousView = useCodesignStore((s) => s.previousView);
   const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const designs = useCodesignStore((s) => s.designs);
   const currentDesign = designs.find((d) => d.id === currentDesignId);
+  const hubTab = useCodesignStore((s) => s.hubTab);
+  const setHubTab = useCodesignStore((s) => s.setHubTab);
 
   return (
     <header
-      className="h-[var(--size-titlebar-height)] shrink-0 flex items-center justify-between pl-[var(--size-titlebar-pad-left)] pr-[var(--space-4)] border-b border-[var(--color-border)] bg-[var(--color-background)] select-none"
-      style={dragStyle}
+      className="h-[var(--size-titlebar-height)] shrink-0 flex items-center justify-between pr-[var(--space-6)] select-none"
+      style={{
+        ...dragStyle,
+        paddingLeft: 'var(--space-4)',
+        borderBottom: '1px solid oklch(0.22 0.025 50 / 0.08)',
+        background: 'var(--color-background)',
+      }}
     >
-      <div className="flex items-center gap-[var(--space-3)] min-w-0" style={noDragStyle}>
-        <Wordmark badge={t('common.preAlpha')} size="sm" />
-        <span className="text-[var(--color-text-muted)]">/</span>
-        <Tooltip label={t('topbar.openMyDesigns') ?? 'My designs'}>
-          <button
-            type="button"
-            onClick={() => setView('hub')}
-            className="inline-flex items-center gap-[var(--space-1)] rounded-[var(--radius-sm)] px-[var(--space-2)] py-[var(--space-1)] text-[var(--text-sm)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors max-w-[280px]"
+      <div className="flex items-center gap-[var(--space-8)] min-w-0 h-full" style={noDragStyle}>
+        <Wordmark badge={t('common.preAlpha')} size="md" />
+
+        {view === 'settings' ? (
+          <div className="flex items-center gap-[var(--space-2)]">
+            <span style={{ color: 'oklch(0.22 0.025 50 / 0.2)' }}>/</span>
+            <button
+              type="button"
+              onClick={() => setView(previousView === 'settings' ? 'hub' : previousView)}
+              aria-label={t('topbar.closeSettings')}
+              className="inline-flex items-center gap-[6px] rounded-[var(--radius-sm)] px-[var(--space-2)] py-[var(--space-1)] transition-colors duration-[var(--duration-faster)]"
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '19px',
+                letterSpacing: '-0.015em',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              <ArrowLeft className="w-4 h-4 shrink-0" aria-hidden />
+              <span>{t('topbar.settingsLabel')}</span>
+            </button>
+          </div>
+        ) : view === 'hub' ? (
+          <nav
+            className="flex items-center gap-[var(--space-8)] h-full"
+            aria-label={t('hub.tabs.your')}
           >
-            <FolderOpen className="w-3.5 h-3.5 shrink-0" aria-hidden />
-            <span className="truncate">
-              {currentDesign?.name ?? t('sidebar.noDesign')}
-            </span>
-          </button>
-        </Tooltip>
-        <ConnectionStatusDot />
+            {HUB_TABS.map((tab) => {
+              const active = tab === hubTab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setHubTab(tab)}
+                  aria-current={active ? 'page' : undefined}
+                  className="relative h-full inline-flex items-center transition-colors duration-[var(--duration-faster)]"
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: '19px',
+                    fontWeight: active ? 500 : 400,
+                    color: active
+                      ? 'var(--color-text-primary)'
+                      : 'var(--color-text-muted)',
+                    letterSpacing: '-0.015em',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) e.currentTarget.style.color = 'var(--color-text-secondary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) e.currentTarget.style.color = 'var(--color-text-muted)';
+                  }}
+                >
+                  {t(`hub.tabs.${tab}`)}
+                  {active ? (
+                    <span
+                      aria-hidden
+                      className="absolute left-0 right-0 bottom-[-1px] h-[2px] rounded-full"
+                      style={{ background: 'var(--color-accent)' }}
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </nav>
+        ) : (
+          <div className="flex items-center gap-[var(--space-2)]">
+            <span style={{ color: 'oklch(0.22 0.025 50 / 0.2)' }}>/</span>
+            <button
+              type="button"
+              onClick={() => setView('hub')}
+              aria-label={t('topbar.openMyDesigns')}
+              className="inline-flex items-center gap-[6px] rounded-[var(--radius-sm)] px-[var(--space-2)] py-[var(--space-1)] transition-colors duration-[var(--duration-faster)] max-w-[280px]"
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '19px',
+                letterSpacing: '-0.015em',
+                color: 'var(--color-text-secondary)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'var(--color-text-primary)';
+                e.currentTarget.style.background = 'var(--color-surface-hover)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--color-text-secondary)';
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <FolderOpen className="w-4 h-4 shrink-0" aria-hidden />
+              <span className="truncate">{currentDesign?.name ?? t('sidebar.noDesign')}</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center gap-[var(--space-2)]" style={noDragStyle}>
-        <ByokBadge />
-        <div className="flex items-center gap-[var(--space-1)]">
-          <Tooltip label={t('commands.tooltips.commandPalette')}>
-            <IconButton label={t('commands.openPalette')} size="sm" onClick={openCommandPalette}>
-              <Command className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" />
-            </IconButton>
-          </Tooltip>
+      <div className="flex items-center gap-[var(--space-3)]" style={noDragStyle}>
+        <ModelSwitcher variant="topbar" />
+        <div
+          className="flex items-center gap-[2px]"
+          style={{ marginLeft: 'var(--space-1)' }}
+        >
           <LanguageToggle />
           <ThemeToggle />
-          <Tooltip label={t('commands.tooltips.settings')}>
-            <IconButton
-              label={t('commands.items.openSettings')}
-              size="sm"
-              onClick={() => setView('settings')}
-            >
-              <SettingsIcon className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]" />
-            </IconButton>
-          </Tooltip>
+          <IconButton
+            label={t('settings.title')}
+            size="md"
+            onClick={() => setView('settings')}
+          >
+            <SettingsIcon className="w-[18px] h-[18px]" />
+          </IconButton>
         </div>
       </div>
     </header>

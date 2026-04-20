@@ -189,4 +189,52 @@ describe('comments table', () => {
     db.prepare('DELETE FROM designs WHERE id = ?').run(design.id);
     expect(listComments(db, design.id)).toHaveLength(0);
   });
+
+  it('persists scope and parentOuterHTML and defaults scope to element', () => {
+    const { db, design, snapshot } = makeFixture();
+    const elementOnly = createComment(db, {
+      designId: design.id,
+      snapshotId: snapshot.id,
+      kind: 'edit',
+      selector: 'button',
+      tag: 'button',
+      outerHTML: '<button/>',
+      rect: { top: 0, left: 0, width: 0, height: 0 },
+      text: 'tighter',
+    });
+    expect(elementOnly.scope).toBe('element');
+    expect(elementOnly.parentOuterHTML).toBeUndefined();
+
+    const global = createComment(db, {
+      designId: design.id,
+      snapshotId: snapshot.id,
+      kind: 'edit',
+      selector: 'h1',
+      tag: 'h1',
+      outerHTML: '<h1/>',
+      rect: { top: 0, left: 0, width: 0, height: 0 },
+      text: 'apply everywhere',
+      scope: 'global',
+      parentOuterHTML: '<header><h1/></header>',
+    });
+    expect(global.scope).toBe('global');
+    expect(global.parentOuterHTML).toBe('<header><h1/></header>');
+  });
+
+  it('truncates parentOuterHTML to 600 chars on insert', () => {
+    const { db, design, snapshot } = makeFixture();
+    const big = 'x'.repeat(2000);
+    const c = createComment(db, {
+      designId: design.id,
+      snapshotId: snapshot.id,
+      kind: 'edit',
+      selector: 'a',
+      tag: 'a',
+      outerHTML: '<a/>',
+      rect: { top: 0, left: 0, width: 0, height: 0 },
+      text: 'go',
+      parentOuterHTML: big,
+    });
+    expect(c.parentOuterHTML?.length).toBe(600);
+  });
 });

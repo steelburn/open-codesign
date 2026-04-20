@@ -94,9 +94,10 @@ export function toProviderRows(
       }
     }
 
-    const label =
-      entry?.name ??
-      (isSupportedOnboardingProvider(provider) ? PROVIDER_SHORTLIST[provider].label : provider);
+    const label = provider.startsWith('codex-')
+      ? 'Codex (imported)'
+      : (entry?.name ??
+        (isSupportedOnboardingProvider(provider) ? PROVIDER_SHORTLIST[provider].label : provider));
 
     rows.push({
       provider,
@@ -111,7 +112,9 @@ export function toProviderRows(
         (isSupportedOnboardingProvider(provider)
           ? PROVIDER_SHORTLIST[provider].defaultPrimary
           : ''),
-      hasKey: ref !== undefined,
+      // codex-* providers are treated as no-auth / IP-gated by default —
+      // absent secret is a legitimate state, not a "missing key" warning.
+      hasKey: ref !== undefined || provider.startsWith('codex-'),
       ...(rowError !== undefined ? { error: rowError } : {}),
     });
   }

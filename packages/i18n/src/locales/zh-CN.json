@@ -23,20 +23,40 @@
   },
   "loading": {
     "stage": {
-      "sending": "正在发送...",
-      "thinking": "模型思考中...",
-      "streaming": "接收响应中...",
-      "parsing": "解析中...",
-      "rendering": "渲染预览...",
+      "sending": "正在连接模型…",
+      "thinking": "模型思考中…",
+      "streaming": "生成中…",
+      "parsing": "整理结果…",
+      "rendering": "渲染预览…",
       "done": "完成"
     },
     "tokens": "{{count}} 个 token"
   },
+  "canvas": {
+    "filesTab": "文件",
+    "filesTabEmpty": "还没有文件",
+    "openInTab": "在新标签打开",
+    "previewHint": "缩略预览 · 双击文件名或点击「在新标签打开」可在独立标签查看",
+    "tabsAriaLabel": "已打开文件",
+    "closeTab": "关闭 {{name}}",
+    "closeTab": "关闭 {{name}}",
+    "files": {
+      "sectionTitle": "设计文件",
+      "sectionSubtitle": "共 {{count}} 个文件",
+      "empty": "还没有文件。发送一个 prompt 让 AI 生成设计后，文件会出现在这里。"
+    },
+    "rail": {
+      "title": "文件",
+      "collapse": "折叠文件",
+      "expand": "展开文件",
+      "empty": "还没有文件"
+    }
+  },
   "preview": {
     "empty": {
       "title": "用 AI 设计",
-      "body": "从左侧选一个范例，或直接描述你想做的设计。结果会渲染在右侧的沙箱预览里。",
-      "starterChip": "试试这些范例提示词："
+      "body": "从左侧选一个示例，或直接描述你想做的设计。结果会渲染在右侧的沙箱预览里。",
+      "starterChip": "试试这些示例提示词："
     },
     "loading": {
       "title": "正在生成你的设计…"
@@ -53,18 +73,22 @@
     "commentModeHint": "点击任意元素留评",
     "runtimeError": "预览运行时错误",
     "dismissErrors": "关闭预览错误",
-    "zoom": "缩放",
-    "viewport": {
-      "label": "视口",
-      "desktop": "桌面",
-      "tablet": "平板",
-      "mobile": "手机"
-    }
+    "zoom": "缩放"
+  },
+  "tweaks": {
+    "title": "微调",
+    "openLabel": "打开微调面板",
+    "close": "关闭",
+    "reset": "恢复默认",
+    "pickColor": "选择颜色",
+    "swatchAria": "{{key}} 颜色",
+    "emptyTitle": "暂无可调 token",
+    "emptyHint": "Agent 还没有声明 EDITMODE 区块。下次生成时会自动暴露设计 token。"
   },
   "chat": {
     "placeholder": "想设计什么？",
     "sendShortcut": "发送（回车）",
-    "emptyHint": "可以从范例开始，也可以直接说出你的想法。",
+    "emptyHint": "可以从示例开始，也可以直接说出你的想法。",
     "sendAction": "发送",
     "sendAnywhere": "任意位置发送",
     "send": "发送提示词",
@@ -83,34 +107,29 @@
     "clear": "清除",
     "designSystemHint": "关联一个仓库，提取颜色、排版、间距等样式线索，用于后续生成。",
     "startHint": "先写一段简要需求，再补充文件、链接或本地仓库，让生成结果更贴近你的上下文。",
+    "empty": {
+      "title": "想设计点什么？",
+      "subtitle": "在下方描述你的想法，或从这些示例开始。",
+      "eyebrow": "试试"
+    },
     "ariaLabel": "对话面板",
     "noDesign": "暂无设计",
     "newChat": "新对话",
     "collapse": "收起侧边栏",
     "expand": "展开侧边栏",
-    "tabs": {
-      "ariaLabel": "侧边栏标签",
-      "chat": "对话",
-      "comments": "批注"
-    },
     "chat": {
       "youLabel": "你",
       "claudeLabel": "Claude",
       "noModel": "未选择模型",
+      "thinking": "正在思考",
       "tokensLine": "约 {{count}} tokens",
       "artifactDelivered": "已生成",
       "artifactDefaultLabel": "design.html",
       "tool": {
         "done": "完成"
       },
-      "skills": {
-        "label": "附加 Skill"
-      },
-      "skill": {
-        "dashboard": "仪表盘",
-        "mobile-mock": "移动端",
-        "marketing": "营销页",
-        "editorial": "内容排版"
+      "working": {
+        "title": "处理中"
       }
     },
     "comments": {
@@ -131,7 +150,7 @@
       "backAria": "返回工作区"
     },
     "common": {
-      "loading": "加载中\u2026",
+      "loading": "加载中…",
       "cancel": "取消",
       "copy": "复制",
       "copied": "已复制",
@@ -186,10 +205,10 @@
         "title": "添加服务",
         "provider": "服务商",
         "apiKey": "API Key",
-        "getKey": "获取 Key \u2197",
+        "getKey": "获取 Key ↗",
         "apiKeyPlaceholder": "sk-...",
         "validate": "验证",
-        "validating": "验证中\u2026",
+        "validating": "验证中…",
         "valid": "已通过",
         "baseUrl": "接入地址",
         "baseUrlOptional": "（可选）",
@@ -202,6 +221,8 @@
         "loadFailed": "加载服务列表失败",
         "removed": "服务已删除",
         "deleteFailed": "删除失败",
+        "activateFailed": "无法激活此服务",
+        "missingModel": "该服务没有默认模型，请先添加。",
         "switchedTo": "已切换到 {{label}}",
         "switchFailed": "切换失败",
         "saved": "服务已保存",
@@ -366,44 +387,15 @@
         "click": "点击重新测试"
       }
     },
-    "spendThisWeek": "本周",
-    "byokTitle": "BYOK — 自带密钥，用量在本机统计。",
-    "spendTooltip": "本周预估花费",
-    "lastUsageTooltip": "上次：{{input}} 输入 / {{output}} 输出 · ${{cost}}"
+    "openMyDesigns": "查看全部设计",
+    "hubLabel": "我的设计",
+    "settingsLabel": "设置",
+    "closeSettings": "关闭设置"
   },
   "theme": {
     "toggleAria": "切换主题",
     "switchToLight": "切换到浅色",
     "switchToDark": "切换到深色"
-  },
-  "commands": {
-    "title": "命令面板",
-    "placeholder": "输入命令或搜索…",
-    "noMatches": "没有匹配项。",
-    "openPalette": "打开命令面板",
-    "items": {
-      "newDesign": "新建设计",
-      "toggleTheme": "切换主题",
-      "openSettings": "打开设置",
-      "export": "导出当前设计",
-      "browseDesigns": "查看所有设计",
-      "renameDesign": "重命名当前设计"
-    },
-    "hints": {
-      "newDesign": "开始一个新的设计 (Cmd+N)",
-      "toggleTheme": "在浅色和深色之间切换",
-      "openSettings": "模型、外观、存储",
-      "export": "使用顶部工具栏里的导出按钮",
-      "browseDesigns": "打开设计网格视图",
-      "renameDesign": "修改当前设计的名字"
-    },
-    "tooltips": {
-      "commandPalette": "命令面板  Ctrl/Cmd+K",
-      "settings": "设置  Ctrl/Cmd+,"
-    },
-    "cleared": "工作区已清空",
-    "exportUseToolbarTitle": "请使用顶部导出",
-    "exportUseToolbarBody": "请使用顶部工具栏里的“导出”按钮。"
   },
   "export": {
     "button": "导出",
@@ -460,7 +452,12 @@
     "saveNote": "仅标注",
     "sendToClaude": "交给 Claude",
     "saving": "保存中…",
-    "sending": "发送中…"
+    "sending": "发送中…",
+    "scope": {
+      "legend": "本条评论的作用范围",
+      "element": "仅此元素",
+      "global": "整个设计"
+    }
   },
   "pinOverlay": {
     "note": "标注 {{n}}",
@@ -468,7 +465,9 @@
   },
   "commentChip": {
     "dismiss": "移除待执行编辑",
-    "empty": "暂无待执行编辑"
+    "empty": "暂无待执行编辑",
+    "apply": "应用 ({{count}})",
+    "applyAll": "应用全部待执行编辑"
   },
   "commentsTab": {
     "empty": "开启批注模式后，点击预览中的任意元素即可留下笔记或编辑指令。",
@@ -477,6 +476,53 @@
     "appliedEdits": "已执行的编辑",
     "delete": "删除批注",
     "atSnapshot": "@ 版本 {{n}}"
+  },
+  "comments": {
+    "panel": {
+      "title": "评论",
+      "close": "关闭评论面板",
+      "empty": "还没有评论。在画布上点击元素留下评论。",
+      "delete": "删除评论",
+      "untitled": "（无内容）",
+      "status": {
+        "pending": "待处理",
+        "applied": "已应用"
+      },
+      "scope": {
+        "element": "元素",
+        "global": "全局",
+        "tooltip": "标注是只针对该元素，还是覆盖整个设计"
+      }
+    },
+    "quickActions": {
+      "label": "快捷动作",
+      "spacing": {
+        "more": "+ 间距",
+        "less": "− 间距"
+      },
+      "contrast": {
+        "more": "+ 对比",
+        "less": "− 对比"
+      },
+      "font": {
+        "bigger": "+ 字号",
+        "smaller": "− 字号"
+      },
+      "radius": {
+        "more": "+ 圆角",
+        "less": "− 圆角"
+      },
+      "text": {
+        "spacing-more": "increase spacing on this element",
+        "spacing-less": "tighten spacing on this element",
+        "contrast-more": "increase color contrast",
+        "contrast-less": "soften the color contrast",
+        "font-bigger": "increase font size on this element",
+        "font-smaller": "decrease font size on this element",
+        "radius-more": "make corners more rounded",
+        "radius-less": "make corners sharper"
+      }
+    }
   },
   "disabledReason": {
     "typePromptToSend": "输入提示词以开始",
@@ -514,11 +560,7 @@
     "onboardingIncomplete": "引导流程尚未完成。",
     "modelListFailed": "无法加载模型列表。",
     "unknown": "未知错误",
-    "localePersistFailed": "无法保存语言偏好",
-    "projectStorageFailed": "本机的项目数据读写失败，改动可能未保存。",
-    "storageFailed": "本地存储写入失败",
-    "weekUsageInvalid": "模型提供方返回了非法的用量值，已忽略以保证周用量统计准确。",
-    "weekUsageReadFailed": "无法从本地存储读取本周用量，已重置为新一轮统计。"
+    "localePersistFailed": "无法保存语言偏好"
   },
   "projects": {
     "untitled": "未命名设计",
@@ -572,6 +614,7 @@
       "createFailed": "无法创建新设计",
       "switchFailed": "无法切换设计",
       "switchBlockedGenerating": "等当前生成完成后再切换",
+      "busyGenerating": "当前生成还没完成，稍等一下再试",
       "renameFailed": "无法重命名设计",
       "duplicated": "已复制为“{{name}}”",
       "duplicateFailed": "无法复制设计",
@@ -639,10 +682,10 @@
     }
   },
   "examples": {
-    "tab": "范例",
-    "title": "范例",
+    "tab": "示例",
+    "title": "示例",
     "subtitle": "精选的起点。悬停预览，再把提示词带回输入框。",
-    "empty": "没有匹配该分类的范例。",
+    "empty": "没有匹配该分类的示例。",
     "useThisPrompt": "使用此提示",
     "categories": {
       "all": "全部",
@@ -659,23 +702,44 @@
     "promptUsedToast": "提示词已载入——编辑后即可发送。"
   },
   "emptyState": {
-    "heading": "用心设计。",
-    "subline": "描述你想要的。用评论迭代。",
+    "heading": "想设计点什么？",
+    "subline": "在左侧输入你的想法，AI 帮你实现。也可以从下面的模板快速开始。",
+    "tryThese": "快速开始",
     "starters": {
-      "landing": "AI 创业公司的落地页",
-      "pitch": "演讲稿 — 前 3 页",
-      "mobile": "移动端引导（3 屏）",
-      "dashboard": "带 3 张图的数据看板"
+      "landing": "AI 创业公司落地页",
+      "pitch": "路演演示稿",
+      "mobile": "移动端引导流程",
+      "dashboard": "数据分析看板",
+      "email": "产品欢迎邮件",
+      "portfolio": "摄影作品集",
+      "casestudy": "客户案例页",
+      "animation": "CSS 动画展示"
+    },
+    "starterDesc": {
+      "landing": "Hero + 特性卡片 + 社会证明 + CTA",
+      "pitch": "标题页 + 问题 + 解决方案，16:9",
+      "mobile": "3 屏引导流程，手机外框展示",
+      "dashboard": "趋势图 + 柱状图 + 表格，深色主题",
+      "email": "600px 单列邮件，含引导步骤",
+      "portfolio": "瀑布流 + 分类筛选 + 悬浮效果",
+      "casestudy": "核心指标 + 引言 + 实施步骤",
+      "animation": "纯 CSS/SVG 动画，60fps 流畅"
     }
   },
   "starterPrompts": {
-    "landing": "为一家 AI 创业公司做一个落地页。Hero 区一句有力的 slogan，3 个特性卡片，社会证明区，CTA。",
-    "pitch": "为一家金融科技创业公司生成演讲稿前 3 页：标题页、问题页、解决方案页。",
-    "mobile": "设计一个 3 屏的移动端引导流程：欢迎、权限请求、第一个动作。",
-    "dashboard": "做一个数据看板，含 3 张图：条形图（销量）、折线图（留存）、饼图（细分）。深色主题。"
+    "landing": "为一家 AI 创业公司做一个落地页。Hero 区一句有力的 slogan，3 个特性卡片，社会证明区，CTA。编辑风排版，大气留白。",
+    "pitch": "为一家金融科技创业公司生成演讲稿前 3 页：标题页、问题页、解决方案页。16:9 比例，深蓝色调，一个橙色强调色。",
+    "mobile": "设计一个 3 屏的移动端引导流程：欢迎、权限请求、第一个动作。在手机外框里展示，薄荷绿配色。",
+    "dashboard": "做一个数据看板，含 3 张图：条形图（月度销量）、折线图（用户留存）、饼图（渠道细分）。深色主题，真实数据。",
+    "email": "设计一封 SaaS 产品的欢迎邮件。单列 600px 宽，表格布局。含 logo 头部、问候语、三步引导、主 CTA 按钮和页脚。",
+    "portfolio": "设计一个摄影师作品集页面。瀑布流网格布局，用 CSS 渐变做图片占位。深色背景，分类筛选标签，悬浮时显示标题和相机参数。",
+    "casestudy": "做一个 B2B 金融科技的客户案例单页。含客户名 Hero 区、三个大指标（带变化值）、CFO 引言、三步实施流程、合作伙伴 Logo 条。深色主题，衬线标题，等宽数字。",
+    "animation": "做一个展示页，含六个有机风格的 CSS 加载动画。每个在独立卡片里：水滴变形、叶片摇摆、墨滴扩散、呼吸圆环、脉冲波纹、丝带编织。暖奶油色背景，柔和色彩，纯 CSS/SVG。"
   },
   "hub": {
     "newDesign": "新建设计",
+    "newDesignCardTitle": "新建设计",
+    "newDesignCardSub": "从空白开始 · 由 AI 生成",
     "backToHub": "全部设计",
     "tabs": {
       "recent": "最近",
@@ -694,7 +758,7 @@
     },
     "examples": {
       "title": "示例",
-      "comingSoon": "策划中的范例提示词画廊即将上线。"
+      "comingSoon": "策划中的示例提示词画廊即将上线。"
     },
     "designSystems": {
       "title": "设计系统",
@@ -707,7 +771,10 @@
         "template": "模板",
         "other": "其他"
       },
-      "createdAt": "创建于 {{date}}"
+      "createdAt": "创建于 {{date}}",
+      "moreActions": "更多操作：{{name}}",
+      "rename": "重命名",
+      "delete": "删除"
     }
   },
   "create": {
@@ -723,7 +790,7 @@
     "typeDescriptions": {
       "prototype": "带手机或浏览器外框的可点击 UI 原型。",
       "slideDeck": "用于演讲、路演或总结的多页演示稿。",
-      "template": "从内置范例提示词出发。",
+      "template": "从内置示例提示词出发。",
       "other": "空白画布 — 任何其他想法都可以。"
     },
     "fields": {

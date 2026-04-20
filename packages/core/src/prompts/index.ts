@@ -503,6 +503,16 @@ For dashboard / data / analytics artifacts, include these "live system" cues to 
 
 Slide decks substitute: cover → 3-7 content slides with strong hierarchy each → closing slide.
 
+## Full-bleed viewport rule
+
+Always set \`html, body { background: ... }\` to match the artifact's dominant background color. The preview host does NOT provide a default background — leaving it unset causes white flashes or mismatched edges.
+
+- Dark designs → dark body background (match the darkest section)
+- Light designs → light body background
+- Slides → body background should match the slide background, so the slide card blends seamlessly at the edges rather than floating on white
+
+For single-page artifacts, prefer full-width sections that stretch edge-to-edge. Avoid \`max-width\` on the outermost wrapper unless the design calls for a centered column layout — and even then, set the body background to extend behind it.
+
 ## Animation budget
 
 Cap your CSS keyframe library at **four named animations** per artifact. The Claude Design canon:
@@ -512,7 +522,30 @@ Cap your CSS keyframe library at **four named animations** per artifact. The Cla
 - \`pulse-ring\` — emphasis (scale + opacity → 0)
 - \`spin\` — rotation
 
-Apply with staggered \`animation-delay\` (0.1s, 0.2s, 0.3s) for section-by-section reveal. Never script a JS animation loop — CSS only.`;
+Apply with staggered \`animation-delay\` (0.1s, 0.2s, 0.3s) for section-by-section reveal. Never script a JS animation loop — CSS only.
+
+## Interactive depth
+
+A static mockup is a screenshot. A great design artifact feels alive. Apply these rules for any artifact that has navigation, tabs, or action buttons:
+
+### Multi-view navigation
+When the artifact has a tab bar, sidebar nav, or any navigation element with multiple items:
+- **Build a real view for every nav item**, not just the active one. Each view should have meaningful, domain-appropriate content — not a placeholder "Coming soon" screen.
+- Use JS state to switch between views on click. The simplest pattern: one container per view, toggle \`display:none\` / \`display:block\` (or swap a \`data-view\` attribute + CSS).
+- Add a **CSS transition on view switch** — a 200ms fade or a subtle slide feels alive. Use \`opacity\` + \`transform: translateX()\` with \`transition\`.
+
+### Micro-interactions
+Every interactive element should have tactile feedback:
+- **Buttons**: \`transform: scale(0.97)\` on \`:active\`, subtle \`box-shadow\` shift on \`:hover\`.
+- **Cards / list items**: slight lift (\`translateY(-2px)\` + shadow) on hover.
+- **Toggles / checkboxes**: animate the state change — don't just swap colors; use a 150ms \`transition\` on background + border + check icon scale.
+- **Scroll areas**: if a list might overflow, make it scrollable with \`-webkit-overflow-scrolling: touch\` for iOS momentum.
+
+### App screen completeness
+For mobile app screens specifically:
+- Fill every tab/screen with real, plausible content — a Stats tab should show actual charts, a Profile tab should show user info and settings rows, a Calendar tab should render an actual calendar grid.
+- The bottom tab bar active state should animate (color transition + optional icon scale bump).
+- Respect safe areas: leave room for the status bar notch at top and home indicator at bottom (especially inside device frames).`;
 
 const CHART_RENDERING = `# Chart rendering contract
 
@@ -769,6 +802,22 @@ const ANTI_SLOP_DIGEST = `# Anti-slop digest (forbidden patterns)
 - Center-aligned body paragraphs.
 - Pure black (\`#000\`) for text — use near-black with a slight hue cast.`;
 
+const DEVICE_FRAMES_HINT = `# Device frames (optional starter templates)
+
+When the design calls for a specific device — phone, tablet, watch — a set of HTML
+templates with accurate device chrome (rounded frame, status bar, dynamic island,
+home indicator, digital crown) is available under \`frames/\` in the virtual
+filesystem:
+
+  frames/iphone.html
+  frames/ipad.html
+  frames/watch.html
+
+If you decide the design benefits from device chrome, \`view\` the relevant frame
+first, then build your design inside its \`<div id="screen">\` container — keeping
+the chrome (status bar, island, home indicator) untouched. Otherwise ignore them
+and write a freeform layout. The choice is yours; nothing forces a frame.`;
+
 const MARKETING_FONT_HINT = `# Marketing typography hint
 
 Marketing / landing / case-study artifacts: prefer **Fraunces** (variable font, optical-size 9..144) for the display family — its 72pt+ optical size unlocks subtle character better than fixed-size DM Serif Display. Pair with **DM Sans** or **Geist** for body, and **JetBrains Mono** for any code / timestamp accents.`;
@@ -816,6 +865,7 @@ export const PROMPT_SECTIONS: Record<string, string> = {
   craftDirectives: CRAFT_DIRECTIVES,
   chartRendering: CHART_RENDERING,
   iosStarterTemplate: IOS_STARTER_TEMPLATE,
+  deviceFramesHint: DEVICE_FRAMES_HINT,
   antiSlop: ANTI_SLOP,
   antiSlopDigest: ANTI_SLOP_DIGEST,
   marketingFontHint: MARKETING_FONT_HINT,
@@ -834,6 +884,7 @@ export const PROMPT_SECTION_FILES: Record<keyof typeof PROMPT_SECTIONS, string> 
   craftDirectives: 'craft-directives.v1.txt',
   chartRendering: 'chart-rendering.v1.txt',
   iosStarterTemplate: 'ios-starter-template.v1.txt',
+  deviceFramesHint: 'device-frames-hint.v1.txt',
   antiSlop: 'anti-slop.v1.txt',
   antiSlopDigest: 'anti-slop-digest.v1.txt',
   marketingFontHint: 'marketing-font-hint.v1.txt',
@@ -945,6 +996,7 @@ function composeFull(mode: PromptComposeOptions['mode']): string[] {
   }
   if (mode === 'create') {
     sections.push(IOS_STARTER_TEMPLATE);
+    sections.push(DEVICE_FRAMES_HINT);
   }
   sections.push(ANTI_SLOP);
   sections.push(SAFETY);
@@ -963,6 +1015,7 @@ const LAYER_1_BASE: readonly string[] = [
   EDITMODE_PROTOCOL,
   SAFETY,
   ANTI_SLOP_DIGEST,
+  DEVICE_FRAMES_HINT,
 ];
 
 interface KeywordMatchPlan {

@@ -19,6 +19,7 @@ import type {
   CommentKind,
   CommentRect,
   CommentRow,
+  CommentScope,
   CommentStatus,
   CommentUpdateInput,
   Design,
@@ -179,6 +180,19 @@ function applyAdditiveMigrations(db: Database): void {
     db.exec('CREATE INDEX IF NOT EXISTS idx_designs_deleted_at ON designs(deleted_at)');
   }
 
+  // Comments v2 — add scope ('element'|'global') and parent_outer_html for
+  // richer prompt enrichment. Both are additive; old rows backfill to
+  // scope='element' / parent_outer_html=NULL.
+  const commentCols = (db.prepare('PRAGMA table_info(comments)').all() as ColumnInfo[]).map(
+    (c) => c.name,
+  );
+  if (!commentCols.includes('scope')) {
+    db.exec("ALTER TABLE comments ADD COLUMN scope TEXT NOT NULL DEFAULT 'element'");
+  }
+  if (!commentCols.includes('parent_outer_html')) {
+    db.exec('ALTER TABLE comments ADD COLUMN parent_outer_html TEXT');
+  }
+
   // One-shot cleanup: chat_messages rows written before the designId race
   // fixes (commits 2a316b7 / f41d1f8) may carry the wrong design_id and
   // cross-contaminate the Sidebar history. Clear the table once; the next
@@ -197,6 +211,44 @@ function applyAdditiveMigrations(db: Database): void {
     db.exec('DELETE FROM chat_messages');
     db.prepare('INSERT INTO db_meta (key, value) VALUES (?, ?)').run(
       'chat_messages_purged_2026_04_20',
+      new Date().toISOString(),
+    );
+  }
+
+  // One-shot normalization: pre-2026-04-20 builds wrote tool_call rows with
+  // status='running' at start time but never updated them when the result
+  // event arrived. Anything older than an hour is unreachable — flip it to
+  // 'done' so the WorkingCard renderer stops showing a stuck spinner. Newer
+  // rows are left alone so an in-flight generation isn't disturbed.
+  const toolStatusFlag = db
+    .prepare('SELECT value FROM db_meta WHERE key = ?')
+    .get('tool_status_normalize_2026_04_20') as { value?: string } | undefined;
+  if (toolStatusFlag === undefined) {
+    db.exec(
+      `UPDATE chat_messages
+         SET payload = json_set(payload, '$.status', 'done')
+       WHERE kind = 'tool_call'
+         AND json_extract(payload, '$.status') = 'running'
+         AND created_at < datetime('now','-1 hour')`,
+    );
+    db.prepare('INSERT INTO db_meta (key, value) VALUES (?, ?)').run(
+      'tool_status_normalize_2026_04_20',
+      new Date().toISOString(),
+    );
+  }
+
+  // Comments v2 schema bump marker — record once after the new columns are
+  // present so future migrations can branch on whether the v1→v2 backfill
+  // already ran for this database file.
+  const commentsV2 = db
+    .prepare('SELECT value FROM db_meta WHERE key = ?')
+    .get('comments_schema_v2') as { value?: string } | undefined;
+  if (commentsV2 === undefined) {
+    // Backfill: existing rows get scope='element' (safe default — same blast
+    // radius as before v2) and a NULL parent_outer_html.
+    db.exec("UPDATE comments SET scope = 'element' WHERE scope IS NULL OR scope = ''");
+    db.prepare('INSERT INTO db_meta (key, value) VALUES (?, ?)').run(
+      'comments_schema_v2',
       new Date().toISOString(),
     );
   }
@@ -613,6 +665,37 @@ export function appendChatMessage(db: Database, input: ChatAppendInput): ChatMes
 }
 
 /**
+ * Patch a tool_call row's status (and optional errorMessage) in place.
+ *
+ * Tool calls are persisted at start-time with status='running'; this is the
+ * counterpart that flips them to 'done' / 'error' when the result event lands.
+ * Silent no-op if the row doesn't exist or isn't a tool_call — the renderer
+ * may briefly race ahead of the persisted append, and we'd rather drop the
+ * update than throw on a not-yet-committed row.
+ */
+export function updateChatToolCallStatus(
+  db: Database,
+  designId: string,
+  seq: number,
+  status: 'done' | 'error',
+  errorMessage?: string,
+): void {
+  if (errorMessage === undefined) {
+    db.prepare(
+      `UPDATE chat_messages
+         SET payload = json_set(payload, '$.status', ?)
+       WHERE design_id = ? AND seq = ? AND kind = 'tool_call'`,
+    ).run(status, designId, seq);
+    return;
+  }
+  db.prepare(
+    `UPDATE chat_messages
+       SET payload = json_set(payload, '$.status', ?, '$.errorMessage', ?)
+     WHERE design_id = ? AND seq = ? AND kind = 'tool_call'`,
+  ).run(status, errorMessage, designId, seq);
+}
+
+/**
  * Idempotent — only runs if chat_messages is empty for this design. Walks
  * snapshots in chronological order and emits a (user) + (artifact_delivered)
  * pair per snapshot so pre-existing designs light up with a chat history on
@@ -677,6 +760,8 @@ interface CommentRowDb {
   status: string;
   created_at: string;
   applied_in_snapshot_id: string | null;
+  scope: string | null;
+  parent_outer_html: string | null;
 }
 
 function rowToComment(row: CommentRowDb): CommentRow {
@@ -692,6 +777,7 @@ function rowToComment(row: CommentRowDb): CommentRow {
   } catch {
     /* keep zero rect */
   }
+  const scope: CommentScope = row.scope === 'global' ? 'global' : 'element';
   return {
     schemaVersion: 1,
     id: row.id,
@@ -706,16 +792,25 @@ function rowToComment(row: CommentRowDb): CommentRow {
     status: row.status as CommentStatus,
     createdAt: row.created_at,
     appliedInSnapshotId: row.applied_in_snapshot_id,
+    scope,
+    ...(row.parent_outer_html !== null && row.parent_outer_html !== undefined
+      ? { parentOuterHTML: row.parent_outer_html }
+      : {}),
   };
 }
 
 export function createComment(db: Database, input: CommentCreateInput): CommentRow {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  const scope: CommentScope = input.scope === 'global' ? 'global' : 'element';
+  const parentOuterHTML =
+    typeof input.parentOuterHTML === 'string' && input.parentOuterHTML.length > 0
+      ? input.parentOuterHTML.slice(0, 600)
+      : null;
   db.prepare(
     `INSERT INTO comments
-       (id, schema_version, design_id, snapshot_id, kind, selector, tag, outer_html, rect, text, status, created_at, applied_in_snapshot_id)
-     VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL)`,
+       (id, schema_version, design_id, snapshot_id, kind, selector, tag, outer_html, rect, text, status, created_at, applied_in_snapshot_id, scope, parent_outer_html)
+     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, NULL, ?, ?)`,
   ).run(
     id,
     input.designId,
@@ -727,6 +822,8 @@ export function createComment(db: Database, input: CommentCreateInput): CommentR
     JSON.stringify(input.rect),
     input.text,
     now,
+    scope,
+    parentOuterHTML,
   );
   const row = db.prepare('SELECT * FROM comments WHERE id = ?').get(id) as CommentRowDb;
   return rowToComment(row);

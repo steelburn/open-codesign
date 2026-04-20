@@ -22,7 +22,12 @@
  *     events directly via `onEvent`.
  */
 
-import { Agent, type AgentEvent, type AgentMessage } from '@mariozechner/pi-agent-core';
+import {
+  Agent,
+  type AgentEvent,
+  type AgentMessage,
+  type AgentTool,
+} from '@mariozechner/pi-agent-core';
 import type { Message as PiAiMessage, Model as PiAiModel } from '@mariozechner/pi-ai';
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
 import type { RetryReason } from '@open-codesign/providers';
@@ -33,6 +38,8 @@ import {
   type ModelRef,
   type StoredDesignSystem,
 } from '@open-codesign/shared';
+import type { TSchema } from '@sinclair/typebox';
+import { buildTransformContext } from './context-prune.js';
 import { remapProviderError } from './errors.js';
 import type {
   AttachmentContext,
@@ -42,6 +49,13 @@ import type {
 } from './index.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import { composeSystemPrompt } from './prompts/index.js';
+import { makeDeclareTweakSchemaTool } from './tools/declare-tweak-schema.js';
+import { type DoneRuntimeVerifier, makeDoneTool } from './tools/done.js';
+import { makeListFilesTool } from './tools/list-files.js';
+import { makeReadDesignSystemTool } from './tools/read-design-system.js';
+import { makeReadUrlTool } from './tools/read-url.js';
+import { makeSetTodosTool } from './tools/set-todos.js';
+import { type TextEditorFsCallbacks, makeTextEditorTool } from './tools/text-editor.js';
 
 /** Local mirror of the assistant message shape that pi-agent-core emits (via
  *  pi-ai). Declared here so this file does not take a direct dependency on
@@ -176,39 +190,21 @@ function stripEmptyFences(text: string): string {
   return text.replace(/```[a-zA-Z0-9]*\s*```/g, '').trim();
 }
 
-function extractHtmlDocument(source: string): string | null {
-  const doctypeMatch = source.match(/<!doctype html[\s\S]*?<\/html>/i);
-  if (doctypeMatch) return doctypeMatch[0].trim();
-  const htmlMatch = source.match(/<html[\s\S]*?<\/html>/i);
-  if (htmlMatch) return htmlMatch[0].trim();
-  return null;
-}
-
-function extractFallbackArtifact(text: string): { artifact: Artifact | null; message: string } {
-  const fencedMatches = [...text.matchAll(/```(?:html)?\s*([\s\S]*?)```/gi)];
-  for (const match of fencedMatches) {
-    const block = match[1];
-    const matchedText = match[0];
-    if (!block || !matchedText) continue;
-    const html = extractHtmlDocument(block);
-    if (!html) continue;
-    return {
-      artifact: createHtmlArtifact(html, 0),
-      message: text.replace(matchedText, '').trim(),
-    };
-  }
-  const html = extractHtmlDocument(text);
-  if (!html) return { artifact: null, message: text.trim() };
-  return {
-    artifact: createHtmlArtifact(html, 0),
-    message: text.replace(html, '').trim(),
-  };
-}
+// Note: extractFallbackArtifact / extractHtmlDocument were removed in favour of
+// the text_editor + virtual fs path. See `if (collected.artifacts.length === 0
+// && deps.fs)` below for the only supported recovery.
 
 // ---------------------------------------------------------------------------
-// Model resolution — uses pi-ai's registry directly because pi-agent-core
-// wants a full `Model<Api>` object in `initialState.model`. Mirrors the
-// unknown-OpenRouter synthesis shim in packages/providers/src/index.ts.
+// Model resolution — unified single path. We never query pi-ai's registry;
+// instead we build the pi-ai Model shape directly from `cfg.providers[id]`
+// (wire + baseUrl + modelId). This means:
+//   - builtin providers (anthropic/openai/openrouter) take the same path as
+//     imported ones (claude-code-imported, codex-*, custom proxies)
+//   - there is no "unknown model" error — a missing entry is a config bug
+//     the caller must surface, not a fallback to swallow
+//   - cost / context-window metadata comes from pi-ai's registry historically,
+//     but the user has opted to drop cost display, so we use optimistic
+//     defaults (cost 0) that do not block requests
 // ---------------------------------------------------------------------------
 
 interface PiModel {
@@ -224,40 +220,52 @@ interface PiModel {
   maxTokens: number;
 }
 
-function synthesizeOpenRouterModel(modelId: string): PiModel {
+function apiForWire(wire: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined): string {
+  if (wire === 'anthropic') return 'anthropic-messages';
+  if (wire === 'openai-responses') return 'openai-responses';
+  // openai-chat is the canonical fallback for everything else that uses the
+  // openai chat-completions wire format (openai, openrouter, deepseek, etc.).
+  return 'openai-completions';
+}
+
+const BUILTIN_PUBLIC_BASE_URLS: Record<string, string> = {
+  anthropic: 'https://api.anthropic.com',
+  openai: 'https://api.openai.com/v1',
+  openrouter: 'https://openrouter.ai/api/v1',
+};
+
+function buildPiModel(
+  model: ModelRef,
+  wire: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined,
+  baseUrl: string | undefined,
+): PiModel {
+  // Fall through to the canonical public endpoint for the 3 first-party
+  // BYOK providers when the caller omitted baseUrl. This is a fact about
+  // those endpoints (api.anthropic.com is anthropic), not a fallback to a
+  // model registry — imported / custom providers still require baseUrl and
+  // will throw if absent.
+  const resolvedBaseUrl =
+    baseUrl && baseUrl.trim().length > 0
+      ? baseUrl
+      : (BUILTIN_PUBLIC_BASE_URLS[model.provider] ?? '');
+  if (resolvedBaseUrl.length === 0) {
+    throw new CodesignError(
+      `Provider "${model.provider}" has no baseUrl configured. Add one in Settings or re-import the config.`,
+      'PROVIDER_BASE_URL_MISSING',
+    );
+  }
   return {
-    id: modelId,
-    name: modelId,
-    api: 'openai-completions',
-    provider: 'openrouter',
-    baseUrl: 'https://openrouter.ai/api/v1',
+    id: model.modelId,
+    name: model.modelId,
+    api: apiForWire(wire),
+    provider: model.provider,
+    baseUrl: resolvedBaseUrl,
     reasoning: true,
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 131072,
-    maxTokens: 131072,
+    contextWindow: 200000,
+    maxTokens: 32000,
   };
-}
-
-async function resolvePiModel(model: ModelRef, baseUrlOverride?: string): Promise<PiModel> {
-  const pi = (await import('@mariozechner/pi-ai')) as unknown as {
-    getModel: (provider: string, modelId: string) => PiModel | undefined;
-  };
-  let piModel = pi.getModel(model.provider, model.modelId);
-  if (!piModel) {
-    if (model.provider === 'openrouter') {
-      piModel = synthesizeOpenRouterModel(model.modelId);
-    } else {
-      throw new CodesignError(
-        `Unknown model ${model.provider}:${model.modelId}`,
-        'PROVIDER_MODEL_UNKNOWN',
-      );
-    }
-  }
-  if (baseUrlOverride !== undefined && baseUrlOverride.length > 0) {
-    return { ...piModel, baseUrl: baseUrlOverride };
-  }
-  return piModel;
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +298,260 @@ async function collectSkills(
 }
 
 // ---------------------------------------------------------------------------
+// Tool-use guidance appended to the system prompt when agentic tools are
+// active. Keeps the base prompt (shared with the non-agent path) unchanged.
+// ---------------------------------------------------------------------------
+
+const AGENTIC_TOOL_GUIDANCE = [
+  '## Output format (STRICT — no exceptions)',
+  '',
+  'Your artifact lives in `index.html` and follows this template — write it via',
+  '`text_editor.create("index.html", ...)`:',
+  '',
+  '```jsx',
+  'const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{',
+  "  // tokens the user can tweak via the host's slider panel",
+  '  "accentColor": "#CC785C",',
+  '  "headingWeight": 500',
+  '}/*EDITMODE-END*/;',
+  '',
+  'const T = {',
+  '  // your design tokens (compose from TWEAK_DEFAULTS + literals)',
+  '};',
+  '',
+  'function App() {',
+  '  return <div>...</div>;',
+  '}',
+  '',
+  'ReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
+  '```',
+  '',
+  'The host wraps this in an iframe that pre-loads:',
+  '  - React 18 + ReactDOM (window.React, window.ReactDOM)',
+  '  - @babel/standalone (transpiles your script at runtime)',
+  '  - ios-frame.jsx → window.{IOSDevice, IOSStatusBar, IOSGlassPill, IOSNavBar, IOSList, IOSListRow, IOSKeyboard}',
+  '  - design-canvas.jsx → window.{DesignCanvas, DCSection, DCArtboard, DCPostIt}',
+  '  - Google Fonts: Fraunces, DM Serif Display, DM Sans, JetBrains Mono',
+  '',
+  'So you can write `<IOSDevice>...</IOSDevice>` directly without imports.',
+  '',
+  '### EDITMODE rules',
+  '- Always include the EDITMODE-BEGIN/END block, even if empty `{}`.',
+  '- Tokens are JSON-serializable: string / number / boolean / array / object of primitives.',
+  '- Reference them as `TWEAK_DEFAULTS.accentColor` in your JSX.',
+  "- Don't rewrite the marker block at runtime; the host edits it.",
+  '',
+  '### Required cadence',
+  '1. **First turn — plan.** Call `set_todos` with **7–10 checklist items** naming concrete sections AND an explicit `Interactive polish` step near the end (e.g. "Hero", "Metrics row", "CFO pull quote", "How we did it", "Logo strip", "Interactive polish: hover/press, tabs, empty states", "Final proof-read"). Each item is a single component or refinement pass — not "Build page". Mark all unchecked.',
+  '2. **Second turn — skeleton.** Use `text_editor.create("index.html", ...)` to write a minimal scaffold: the EDITMODE block, an empty `App` returning a basic layout container, and the `ReactDOM.createRoot` line. **Do not** include any section content yet. Then `set_todos` with skeleton ticked.',
+  '3. **One section per turn — fill.** For each remaining todo, in its own turn:',
+  '   1. One short prose line announcing what you\'re about to do ("Adding the metrics row now.").',
+  '   2. `view` the file (1 call).',
+  "   3. `str_replace` to add ONE section's JSX (1 call).",
+  '   4. One short prose line reflecting on what landed ("Three KPIs in place — the deltas use mono tnum so they line up.").',
+  '   5. Tick the matching todo via `set_todos`.',
+  '   That is **2 prose lines + 3 tool calls per turn**. Never batch multiple sections into a single str_replace; never run two str_replace tools in the same turn without a prose line in between.',
+  '4. **Polish passes — interactive depth.** At least ONE dedicated turn that ADDS interactive depth, not just cosmetic tweaks. Before `done`, make sure:',
+  '   (a) ≥2 state changes actually wire up (tab switch in a section, accordion open, favorite toggle, dropdown on avatar, drawer "See details", inline-edit click)',
+  '   (b) ≥1 list / grid / table has a believable empty state component defined (icon + reason + CTA), even if the current data is non-empty',
+  '   (c) all buttons / cards have hover + press feedback (`transition: transform 120ms var(--ease-out), background-color 120ms`; press = `scale(0.96)`; cards lift 2px on hover)',
+  '   (d) data is real-sounding, not Lorem: varied names, realistic numbers, relative dates ("3h ago")',
+  '   Add an explicit `Interactive polish` todo item in `set_todos` so the user sees it ticked.',
+  '5. **Final turn — summary.** 2–4 sentences of natural-language prose explaining 2–3 design decisions worth noting (e.g. "Used three distinct surface tones for depth"). Do NOT re-emit the file content; the host extracts it from the virtual fs.',
+  '',
+  '### File output policy (STRICT)',
+  "- Use `str_replace_based_edit_tool` for ALL file content. Do NOT emit `<artifact>` tags or fenced ```jsx/```html blocks containing the source in your prose — the host extracts the artifact from the virtual fs and any inline source spams the user's chat.",
+  '- Your assistant text is for explanation, planning, and progress notes only.',
+  '- Prefer small, specific `old_str` values so each edit is unambiguous.',
+  '- Minimum 6 tool calls per design; 10–15 is typical.',
+  '',
+  '### Token-budget discipline (CRITICAL)',
+  '- `view("index.html")` WITHOUT `view_range` returns the ENTIRE file — each call accumulates in your context window.',
+  '- **Full-file view at most ONCE per generation run**: right before your first `str_replace`, for initial orientation. After that the file WILL grow with every edit, so a second full-file view becomes very expensive.',
+  '- **For any re-inspection after the first view, pass `view_range`** — it takes `[startLine, endLine]` (1-indexed, inclusive; either bound may be `-1` for "end of file"). Examples:',
+  '    `view("index.html", view_range: [1, 40])` — re-read the top 40 lines to check imports / EDITMODE block',
+  '    `view("index.html", view_range: [200, 260])` — re-inspect a section you just edited',
+  '    `view("index.html", view_range: [-1, -1])` — wrong; use a real line number for start',
+  '- A second full-file view (no `view_range`) within the same run auto-truncates to a 400-char head snippet — the host enforces this to protect the context window. If you need to see a region, issue a ranged view; if you just need to pick an `old_str`, work from memory of the first view.',
+  '- Never `view` "just to verify" a str_replace succeeded — the tool reports errors when it fails; silence means success. Use `done` for verification, not re-view.',
+  '- Keep `str_replace` edits tight: `old_str` should be the minimum unique anchor (often 1-3 lines), and `new_str` should be the new JSX only. Large old_str + new_str pairs also live in context.',
+  '',
+  '## Frames (optional starters)',
+  '',
+  'For mobile / tablet / watch / desktop shells, view one of these first:',
+  '',
+  '  frames/iphone.jsx       — iPhone 16 Pro shell (Dynamic Island + home indicator)',
+  '  frames/ipad.jsx         — iPad chrome',
+  '  frames/watch.jsx        — Apple Watch Ultra (digital crown + side buttons)',
+  '  frames/android.jsx      — Android Material 3 phone (gesture or 3-button nav)',
+  '  frames/macos-safari.jsx — macOS Safari window (traffic lights + tabs)',
+  '',
+  'Frame files export their device components onto window (e.g. `AppleWatchUltra`, `AndroidPhone`, `MacOSSafari`) so you can drop them straight into your `App` after copying.',
+  '',
+  '## Design skills (optional starter snippets)',
+  '',
+  'For common patterns, view the matching skill before writing:',
+  '',
+  '  skills/slide-deck.jsx',
+  '  skills/dashboard.jsx',
+  '  skills/landing-page.jsx',
+  '  skills/chart-svg.jsx',
+  '  skills/glassmorphism.jsx',
+  '  skills/editorial-typography.jsx',
+  '  skills/heroes.jsx       — 5 hero section variants',
+  '  skills/pricing.jsx      — 4 pricing variants',
+  '  skills/footers.jsx      — 4 footer variants',
+  '  skills/chat-ui.jsx      — Chat UI primitives (bubbles, thinking, tool cards)',
+  '  skills/data-table.jsx   — Data table with sortable / filterable',
+  '  skills/calendar.jsx     — Month-view calendar',
+  '',
+  'Each declares a `// when_to_use:` hint at the top — read it before adopting.',
+  '',
+  '## Multi-view designs — when the brief implies navigation',
+  '',
+  'Many briefs (landing + pricing, product + docs, app with dashboard/settings/',
+  'inbox, multi-step onboarding) need more than one surface. The preview',
+  'sandbox has NO routing and blocks `<a href="/route">` navigation — clicking',
+  'any link with a real href would blank the iframe. So:',
+  '',
+  '**Always build multi-view designs as React view-state in one App**, not with',
+  'href navigation. Pattern:',
+  '',
+  '```jsx',
+  'function App() {',
+  '  const [view, setView] = React.useState("home");',
+  '  return (',
+  '    <>',
+  '      <Nav current={view} onNavigate={setView} />',
+  '      {view === "home" && <HomeView/>}',
+  '      {view === "pricing" && <PricingView/>}',
+  '      {view === "docs" && <DocsView/>}',
+  '    </>',
+  '  );',
+  '}',
+  '```',
+  '',
+  'Nav buttons use `onClick={() => setView(...)}`, NOT `<a href>`. If you must',
+  'use `<a>` for visual reasons, make it `<a href="#" onClick={e => { e.preventDefault(); setView(...); }}>`.',
+  '',
+  'When the brief implies depth, produce **3–5 distinct views**. Each view',
+  'should:',
+  '- Have its own section mix (pricing page has a table + FAQ; dashboard has',
+  "  KPI grid + chart + activity feed) — don't repeat the same hero across",
+  '  every view.',
+  '- Reach end-to-end: real content, real data, real empty-states — not',
+  '  placeholders like "Content goes here".',
+  '- Feel weighty: 4–8 sections per view, 800–1500 px of vertical content.',
+  '',
+  'For depth inside a single view (accordions, tabs, modals, drawers, detail',
+  'slide-overs) prefer local component state over global view-state.',
+  '',
+  '## Component reference discipline (CRITICAL — preview crashes otherwise)',
+  '',
+  "The iframe's `done` verifier loads your artifact for ~3 seconds and captures",
+  'console errors for **whatever actually renders** during that window. Tabs that',
+  'are not the default active tab, modals / drawers that are closed on load,',
+  'accordion panels that start collapsed — none of their JSX executes, so a',
+  "`<UndefinedComponent />` inside them slips past `done` and crashes the user's",
+  'preview the moment they click the trigger.',
+  '',
+  '**Before every `done` call, audit your own file:**',
+  '- For every `<PascalCase/>` or `<PascalCase>...</PascalCase>` tag in the JSX,',
+  '  confirm a matching `function PascalCase` or `const PascalCase = ...` exists',
+  '  in the same file (or is provided by the runtime: React, ReactDOM, IOSDevice,',
+  '  IOSStatusBar, IOSGlassPill, IOSNavBar, IOSList, IOSListRow, IOSKeyboard,',
+  '  DesignCanvas, DCSection, DCArtboard, DCPostIt, AppleWatchUltra, AndroidPhone,',
+  '  MacOSSafari — that is the complete window-scope list).',
+  '- Strategy: do a final `str_replace` pass that alphabetises a comment header',
+  '  listing all components you define (e.g. `// Components: App, Nav, Hero,',
+  '  Inbox, InputBar, MessageList, Sidebar`) so the list is grep-findable.',
+  '- If you introduced a tab / modal / drawer in a polish turn, ensure every',
+  '  component it references is defined — NOT just the default view.',
+  '',
+  'Common failure modes to avoid:',
+  '- Copy-pasted a `<ChatInput />` from a skill file, forgot to copy the',
+  '  definition along with it.',
+  '- Renamed `InputBar` → `MessageComposer` but left one stray `<InputBar />`',
+  '  reference in a secondary tab.',
+  '- Planned to use a future component (`<FooChart />`) as a stub, left the',
+  '  call in the JSX.',
+  '',
+  '## Self-check via `done`',
+  '',
+  '### TWEAK_SCHEMA — declare control hints for the tweak panel',
+  '',
+  'After your artifact is otherwise complete and `TWEAK_DEFAULTS` is stable,',
+  'call `declare_tweak_schema` ONCE to tell the host how to render each token',
+  'in the live Tweak panel. The host injects (or replaces) a sibling block:',
+  '',
+  '```jsx',
+  'const TWEAK_SCHEMA = /*TWEAK-SCHEMA-BEGIN*/{ ... }/*TWEAK-SCHEMA-END*/;',
+  '```',
+  '',
+  'right after `TWEAK_DEFAULTS`. Calling it again replaces the previous schema.',
+  '',
+  '**Picking a kind for each token**',
+  '- Hex / rgb color string → `{ kind: "color" }`',
+  '- Number that is a CSS pixel value → `{ kind: "number", min, max, step, unit: "px" }`',
+  '  - Padding / radius / gap: `min: 0, max: 32, step: 2`',
+  '  - Font size:               `min: 12, max: 72, step: 1`',
+  '  - Border / stroke width:   `min: 0, max: 8, step: 1`',
+  '- A small fixed set of string options (e.g. density, variant) → `{ kind: "enum", options: [...] }`',
+  '- True/false flag → `{ kind: "boolean" }`',
+  '- Free-form text (heading, label, caption) → `{ kind: "string", placeholder: "Hint text" }`',
+  '',
+  "Tokens you leave out of the schema fall back to the host's heuristic, so it",
+  'is fine to declare hints only for the tokens whose UI matters.',
+  '',
+  'Call `declare_tweak_schema` BEFORE `done` so the schema block is part of the',
+  'artifact that `done` verifies. Do not declare schema for tokens that are not',
+  'in `TWEAK_DEFAULTS` — they will be silently ignored.',
+  '',
+  'After producing a complete artifact, call `done` to verify it. The host runs',
+  'two checks: (a) static syntax lint (unclosed tags, duplicate IDs, missing',
+  'alt) and (b) a real runtime load — your JSX is mounted in a hidden',
+  'BrowserWindow for ~3s, and any console errors / warnings or load failures',
+  'come back as `errors`. If `status === "has_errors"`, fix with `str_replace`',
+  'and call `done` again. Stop after 3 rounds.',
+  '',
+  '**Important limitation of `done`:** the runtime load only exercises whatever',
+  'renders on first paint. Hidden tabs, closed modals, collapsed accordions,',
+  'and drawer bodies never execute, so their `<UndefinedComponent />` bugs',
+  'survive. Before each `done` call, **manually audit component references**',
+  'per the "Component reference discipline" section above — this is your',
+  "responsibility, not `done`'s.",
+  '',
+  '## Pacing — interleave tool calls and prose',
+  '',
+  'Do not batch every tool call up-front and then dump a wall of text at the',
+  'end. The chat UI shows tool rows and assistant text bubbles in arrival',
+  'order, so a long silent run feels like a black box.',
+  '',
+  'Aim for a rhythm like:',
+  '  brief intro text  →  1-3 tool calls  →  one-line progress / reflection',
+  '  →  next 1-3 tool calls  →  one-line note  →  …  →  final summary',
+  '',
+  'Each prose line should be short (≤2 sentences) and explain *what just',
+  'happened* or *what comes next* — not summarize the file content (the user',
+  'sees that in the live preview). Avoid repeating yourself across turns.',
+  '',
+  '## Typography rules',
+  '',
+  'Use the right typeface for the right job — Fraunces is editorial display, not data display:',
+  '',
+  '- Headlines / display text → Fraunces (`var(--font-display)`), italic OK',
+  '- Numerical data (KPIs, tables, charts) → DM Sans or JetBrains Mono with',
+  "  `font-feature-settings: 'tnum'` for tabular alignment. Never italic.",
+  '- Body / UI text → DM Sans (`var(--font-sans)`)',
+  '- Code / file paths → JetBrains Mono',
+  '',
+  'For currency / large numerical KPIs ($4.81M), use sans-serif bold or mono medium —',
+  'italic serif numbers visually collide and feel low-quality.',
+].join('\n');
+
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Public API.
 // ---------------------------------------------------------------------------
 
@@ -301,6 +563,32 @@ export interface GenerateViaAgentDeps {
   /** Retry callback — invoked with placeholder reasons today; present so the
    *  IPC layer can reuse the same onRetry signature as the legacy path. */
   onRetry?: ((info: RetryReason) => void) | undefined;
+  /**
+   * Phase 2 — tools the agent can call. When set, overrides the built-in
+   * default toolset (set_todos + text_editor when `fs` is provided). Pass
+   * `[]` to explicitly run with zero tools (single-turn behaviour).
+   */
+  tools?: AgentTool<TSchema, unknown>[] | undefined;
+  /**
+   * Virtual filesystem callbacks for the text_editor tool. When provided,
+   * the default toolset includes `str_replace_based_edit_tool` wired to
+   * these callbacks. When undefined, only `set_todos` is included.
+   */
+  fs?: TextEditorFsCallbacks | undefined;
+  /**
+   * When true, the agent system prompt is augmented with guidance to use
+   * set_todos for plans and str_replace_based_edit_tool to write/edit
+   * files. Default: true whenever at least one tool is active.
+   */
+  encourageToolUse?: boolean | undefined;
+  /**
+   * Optional host-injected runtime verifier for the `done` tool. When set,
+   * `done` invokes this callback with the artifact source so the host can
+   * mount it in a real runtime (e.g. hidden BrowserWindow) and surface
+   * console / load errors back to the agent. Without it, `done` falls back
+   * to static lint only.
+   */
+  runtimeVerify?: DoneRuntimeVerifier | undefined;
 }
 
 /**
@@ -326,6 +614,20 @@ export async function generateViaAgent(
   if (!input.prompt.trim()) {
     throw new CodesignError('Prompt cannot be empty', 'INPUT_EMPTY_PROMPT');
   }
+  // Empty apiKey reaches pi-ai's openai-completions provider as `apiKey: ""`
+  // and surfaces as the opaque "OpenAI API key is required" Error. Surface our
+  // own typed CodesignError instead so callers (and the renderer) get the same
+  // PROVIDER_AUTH_MISSING contract as the canonical codesign:v1:generate IPC.
+  // TODO(agent-http-headers): When `input.httpHeaders` carries a non-empty
+  // `x-api-key` / `Authorization`, the IP-auth coproxy use case should be
+  // supported here. Today httpHeaders is NOT threaded into pi-agent-core, so
+  // the safe behaviour is to refuse empty apiKey rather than silently fail.
+  if (input.apiKey.length === 0) {
+    throw new CodesignError(
+      `No API key configured for provider "${input.model.provider}". Open Settings to add one.`,
+      'PROVIDER_AUTH_MISSING',
+    );
+  }
   if (!input.systemPrompt && input.mode && input.mode !== 'create') {
     throw new CodesignError(
       'generateViaAgent() built-in prompt only supports mode "create".',
@@ -335,7 +637,7 @@ export async function generateViaAgent(
 
   log.info('[generate] step=resolve_model', ctx);
   const resolveStart = Date.now();
-  const piModel = await resolvePiModel(input.model, input.baseUrl);
+  const piModel = buildPiModel(input.model, input.wire, input.baseUrl);
   log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
 
   log.info('[generate] step=build_request', ctx);
@@ -360,6 +662,37 @@ export async function generateViaAgent(
     }),
   );
 
+  // Assemble the toolset. Caller can pass an explicit list (including []) to
+  // override the default. Defaults:
+  //   - set_todos       (always — no deps)
+  //   - read_url        (always — uses global fetch)
+  //   - read_design_system (always — closes over the caller's designSystem)
+  //   - text_editor + list_files + done (when fs callbacks are provided)
+  const defaultTools: AgentTool<TSchema, unknown>[] = [];
+  defaultTools.push(makeSetTodosTool() as unknown as AgentTool<TSchema, unknown>);
+  defaultTools.push(makeReadUrlTool() as unknown as AgentTool<TSchema, unknown>);
+  defaultTools.push(
+    makeReadDesignSystemTool(() => input.designSystem ?? null) as unknown as AgentTool<
+      TSchema,
+      unknown
+    >,
+  );
+  if (deps.fs) {
+    defaultTools.push(makeTextEditorTool(deps.fs) as unknown as AgentTool<TSchema, unknown>);
+    defaultTools.push(makeListFilesTool(deps.fs) as unknown as AgentTool<TSchema, unknown>);
+    defaultTools.push(
+      makeDeclareTweakSchemaTool(deps.fs) as unknown as AgentTool<TSchema, unknown>,
+    );
+    defaultTools.push(
+      makeDoneTool(deps.fs, deps.runtimeVerify) as unknown as AgentTool<TSchema, unknown>,
+    );
+  }
+  const tools = deps.tools ?? defaultTools;
+  const encourageToolUse = deps.encourageToolUse ?? tools.length > 0;
+  const augmentedSystemPrompt = encourageToolUse
+    ? `${systemPrompt}\n\n${AGENTIC_TOOL_GUIDANCE}`
+    : systemPrompt;
+
   // Seed the transcript with prior history (already in ChatMessage shape).
   const historyAsAgentMessages: AgentMessage[] = input.history.map((m, idx) =>
     chatMessageToAgentMessage(m, idx + 1, piModel),
@@ -376,16 +709,22 @@ export async function generateViaAgent(
   // types) to the LLM-visible Message subset.
   const agent = new Agent({
     initialState: {
-      systemPrompt,
+      systemPrompt: augmentedSystemPrompt,
       model: piModel as unknown as PiAiModel<'openai-completions'>,
       messages: historyAsAgentMessages,
-      tools: [],
+      tools,
     },
     convertToLlm: (messages) =>
       messages.filter(
         (m): m is PiAiMessage =>
           m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult',
       ),
+    // Sliding-window compaction — stubs toolResult.content for rounds older
+    // than the last 8 (or 4 if total size still exceeds the safety cap).
+    // Without this, assistant.toolCall.input + big view results grow O(N²)
+    // in LLM-facing size across a long tool-using run and blow past 1 M
+    // tokens. See context-prune.ts for the full strategy.
+    transformContext: buildTransformContext(),
     getApiKey: () => input.apiKey,
   });
 
@@ -449,10 +788,19 @@ export async function generateViaAgent(
   collect(parser.flush(), collected);
 
   if (collected.artifacts.length === 0) {
-    const fallback = extractFallbackArtifact(collected.text);
-    if (fallback.artifact) {
-      collected.artifacts.push(fallback.artifact);
-      collected.text = fallback.message;
+    // Prose `<artifact>` fallback (fenced ```html / bare <html>) was deliberately
+    // removed: the agent owns artifacts via the text_editor tool, and tolerating
+    // inline source encouraged the model to double-emit (tool + prose), spamming
+    // the user's chat view. The fs path below is the only supported recovery
+    // when the parser produced nothing.
+  }
+
+  // When the agent used the text_editor tool to write index.html, the final
+  // assistant text is just prose. Pull the artifact out of the virtual FS.
+  if (collected.artifacts.length === 0 && deps.fs) {
+    const file = deps.fs.view('index.html');
+    if (file !== null && file.content.trim().length > 0) {
+      collected.artifacts.push(createHtmlArtifact(file.content, 0));
     }
   }
   log.info('[generate] step=parse_response.ok', {

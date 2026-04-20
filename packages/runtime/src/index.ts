@@ -1,118 +1,103 @@
+/**
+ * Sandbox runtime for the preview iframe. JSX-only contract.
+ *
+ * The agent's artifact is always a bare module of the form
+ *
+ *     const TWEAK_DEFAULTS = /\* EDITMODE-BEGIN *\/{...}/\* EDITMODE-END *\/;
+ *     function App() { return <...>; }
+ *     ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+ *
+ * `buildSrcdoc` wraps it in a vendored React 18 + ReactDOM + @babel/standalone
+ * skeleton (plus our window-scoped component library — IOSDevice,
+ * DesignCanvas, …) so the model never has to think about the runtime
+ * plumbing. Anything passed in — including a full `<!doctype html>` payload —
+ * is embedded verbatim inside a `<script type="text/babel">`; if it isn't
+ * valid JSX, Babel will surface a syntax error via the iframe error overlay.
+ */
+
+import { ensureEditmodeMarkers } from '@open-codesign/shared';
+
+import BABEL_STANDALONE from '../vendor/babel.standalone.js?raw';
+import DESIGN_CANVAS_JSX from '../vendor/design-canvas.jsx?raw';
+import IOS_FRAME_JSX from '../vendor/ios-frame.jsx?raw';
+import REACT_DOM_UMD from '../vendor/react-dom.umd.js?raw';
+import REACT_UMD from '../vendor/react.umd.js?raw';
+
 import { OVERLAY_SCRIPT } from './overlay';
+import { TWEAKS_BRIDGE_LISTENER, TWEAKS_BRIDGE_SETUP } from './tweaks-bridge';
 
 export { OVERLAY_SCRIPT, isOverlayMessage } from './overlay';
 export type { OverlayMessage } from './overlay';
 export { isIframeErrorMessage } from './iframe-errors';
 export type { IframeErrorMessage } from './iframe-errors';
 
-/**
- * Baseline background so the iframe falls back to a neutral surface when the
- * artifact doesn't set its own body background. Sourced from the
- * `--color-artifact-bg` design token (packages/ui), with a `#ffffff` fallback
- * for sandboxed contexts where the parent's CSS vars aren't propagated.
- * Injected before the artifact's own styles so any explicit
- * `body { background: ... }` in the artifact wins via cascade order.
- */
-const BASELINE_STYLE =
-  '<style>html,body{margin:0;padding:0;background:var(--color-artifact-bg, #ffffff);min-height:100%;}</style>';
+const JSX_TEMPLATE_BEGIN = '<!-- AGENT_BODY_BEGIN -->';
+const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
 
-const HTML_RE = /<html[^>]*>/i;
-const HEAD_OPEN_RE = /<head[^>]*>/i;
-const HEAD_CLOSE_RE = /<\/head\s*>/i;
-const BODY_OPEN_RE = /<body[^>]*>/i;
-const BODY_CLOSE_RE = /<\/body\s*>/i;
-
-/**
- * Ensure the document has matching <body>...</body> tags so downstream
- * baseline/overlay injection can rely on them. Handles all four input
- * shapes: both tags, opener only, closer only, neither.
- */
-function closeBody(html: string): string {
-  return /<\/html\s*>/i.test(html)
-    ? html.replace(/<\/html\s*>/i, '</body></html>')
-    : `${html}</body>`;
+function escapeForScriptLiteral(jsx: string): string {
+  // JSON.stringify handles quotes/newlines; the </script> escape prevents the
+  // outer <script> from being closed early if the agent's source happens to
+  // contain that literal string.
+  return JSON.stringify(jsx).replace(/<\/script>/g, '<\\/script>');
 }
 
-function normalizeBodyTags(html: string): string {
-  const hasOpen = BODY_OPEN_RE.test(html);
-  const hasClose = BODY_CLOSE_RE.test(html);
-
-  if (hasOpen && hasClose) return html;
-
-  if (hasOpen && !hasClose) return closeBody(html);
-
-  if (!hasOpen && hasClose) {
-    if (HEAD_CLOSE_RE.test(html)) {
-      return html.replace(HEAD_CLOSE_RE, (m) => `${m}<body>`);
-    }
-    if (HTML_RE.test(html)) {
-      return html.replace(HTML_RE, (m) => `${m}<body>`);
-    }
-    return `<body>${html}`;
-  }
-
-  // Neither opener nor closer.
-  if (HEAD_CLOSE_RE.test(html)) return closeBody(html.replace(HEAD_CLOSE_RE, (m) => `${m}<body>`));
-  if (HTML_RE.test(html)) return closeBody(html.replace(HTML_RE, (m) => `${m}<body>`));
-  return `<body>${html}</body>`;
-}
-
-/**
- * Build a complete srcdoc HTML string for the preview iframe.
- * Strips CSP <meta> tags from user content to allow overlay injection.
- *
- * Tier 1: assumes user content is full HTML document or fragment.
- * Tier 2 will inject Tailwind via local stylesheet, esbuild-wasm hooks, etc.
- */
-export function buildSrcdoc(userHtml: string): string {
-  const stripped = userHtml.replace(
-    /<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi,
-    '',
-  );
-
-  const hasAnyStructure =
-    HTML_RE.test(stripped) ||
-    HEAD_OPEN_RE.test(stripped) ||
-    BODY_OPEN_RE.test(stripped) ||
-    BODY_CLOSE_RE.test(stripped);
-
-  if (!hasAnyStructure) {
-    return `<!doctype html>
+function wrapJsxAsSrcdoc(jsx: string): string {
+  // Auto-recover bare `const TWEAK_DEFAULTS = {...}` (no markers) into the
+  // canonical EDITMODE form before embedding, so the in-iframe bridge regex
+  // always matches and live tweaks work even on agent output that forgot the
+  // markers. Side-benefit: TweakPanel's parser sees the same canonical form.
+  const normalized = ensureEditmodeMarkers(jsx);
+  // The boundary markers let us round-trip extract the agent's payload from
+  // a fully-built srcdoc later (used by EDITMODE replace flows).
+  const agentScriptLiteral = escapeForScriptLiteral(normalized);
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-${BASELINE_STYLE}
-<style>html,body{font-family:system-ui,sans-serif;}</style>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400&family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}html,body,#root{height:100%;}body{font-family:'DM Sans',system-ui,sans-serif;background:var(--color-artifact-bg, #ffffff);}</style>
 </head>
 <body>
-${stripped}
+<div id="root"></div>
+<script>${REACT_UMD}</script>
+<script>${REACT_DOM_UMD}</script>
+<script>${BABEL_STANDALONE}</script>
+<script>${TWEAKS_BRIDGE_SETUP}</script>
+<script type="text/babel" data-presets="react">${IOS_FRAME_JSX}</script>
+<script type="text/babel" data-presets="react">${DESIGN_CANVAS_JSX}</script>
+${JSX_TEMPLATE_BEGIN}
+<script type="text/babel" data-presets="react">
+${jsx}
+</script>
+${JSX_TEMPLATE_END}
+<script>if(window.__codesign_tweaks__){window.__codesign_tweaks__.originalScript=${agentScriptLiteral};}</script>
+<script>${TWEAKS_BRIDGE_LISTENER}</script>
 <script>${OVERLAY_SCRIPT}</script>
 </body>
 </html>`;
-  }
-
-  const normalized = normalizeBodyTags(stripped);
-
-  let withBaseline: string;
-  if (HEAD_OPEN_RE.test(normalized)) {
-    withBaseline = normalized.replace(HEAD_OPEN_RE, (match) => `${match}${BASELINE_STYLE}`);
-  } else if (HTML_RE.test(normalized)) {
-    withBaseline = normalized.replace(HTML_RE, (match) => `${match}<head>${BASELINE_STYLE}</head>`);
-  } else {
-    withBaseline = `<html><head>${BASELINE_STYLE}</head>${normalized}</html>`;
-  }
-
-  return withBaseline.replace(
-    /<\/body\s*>(?![\s\S]*<\/body\s*>)/i,
-    `<script>${OVERLAY_SCRIPT}</script></body>`,
-  );
 }
 
 /**
- * Apply a CSS-variable update inside the iframe without re-rendering the document.
- * Caller passes the iframe's contentDocument.
+ * Wrap an agent artifact in the vendored React + Babel skeleton, ready for
+ * use as an iframe `srcdoc`. Already-wrapped payloads pass through unchanged.
  */
-export function applyCssVar(iframeDoc: Document, cssVar: string, value: string): void {
-  iframeDoc.documentElement.style.setProperty(cssVar, value);
+export function extractAndUpgradeArtifact(source: string): string {
+  if (source.includes(JSX_TEMPLATE_BEGIN)) return source;
+  return wrapJsxAsSrcdoc(source);
+}
+
+/**
+ * Build a complete srcdoc HTML string for the preview iframe. Strips any
+ * stray CSP meta tags from the agent payload, then wraps it as JSX.
+ */
+export function buildSrcdoc(userSource: string): string {
+  const stripped = userSource.replace(
+    /<meta[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi,
+    '',
+  );
+  if (stripped.includes(JSX_TEMPLATE_BEGIN)) return stripped;
+  return wrapJsxAsSrcdoc(stripped);
 }

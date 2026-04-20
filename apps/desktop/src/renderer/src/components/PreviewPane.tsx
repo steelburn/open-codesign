@@ -6,14 +6,16 @@ import {
   isIframeErrorMessage,
   isOverlayMessage,
 } from '@open-codesign/runtime';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { EmptyState } from '../preview/EmptyState';
 import { ErrorState } from '../preview/ErrorState';
-import { LoadingState } from '../preview/LoadingState';
 import { useCodesignStore } from '../store';
 import { CanvasErrorBar } from './CanvasErrorBar';
+import { CanvasTabBar } from './CanvasTabBar';
+import { FilesTabView } from './FilesTabView';
 import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
+import { TweakPanel } from './TweakPanel';
 import { CommentBubble } from './comment/CommentBubble';
 import { PinOverlay } from './comment/PinOverlay';
 
@@ -38,9 +40,6 @@ export function isTrustedPreviewMessageSource(
   return source !== null && source === previewWindow;
 }
 
-// Send the SET_MODE control message to the preview iframe. Failures (iframe
-// torn down, cross-origin race) MUST surface — silent catches mask mode-sync
-// bugs that leave the preview stuck in the wrong interaction state.
 export function postModeToPreviewWindow(
   win: Window | null | undefined,
   mode: string,
@@ -57,10 +56,6 @@ export function postModeToPreviewWindow(
   }
 }
 
-// Convert a rect reported from inside the sandbox iframe (iframe-internal
-// viewport coords) into the parent renderer's viewport coords. The wrapper
-// applies `transform: scale(zoom/100)` to a div sized at `100/scale %`, so a
-// child at iframe-internal position P appears in the parent at P * scale.
 export function scaleRectForZoom(
   rect: { top: number; left: number; width: number; height: number },
   zoomPercent: number,
@@ -74,12 +69,6 @@ export function scaleRectForZoom(
   };
 }
 
-/**
- * Trust boundary: parent → iframe is the ONLY direction allowed for control
- * messages like SET_MODE. The iframe runs untrusted, model-generated code, so
- * any message it sends back must be matched against an explicit allowlist.
- * Adding a new accepted type requires updating both the union and the switch.
- */
 export type AllowedPreviewMessageType = 'ELEMENT_SELECTED' | 'IFRAME_ERROR';
 
 export interface PreviewMessageHandlers {
@@ -124,10 +113,139 @@ export function handlePreviewMessage(
 const COMMENT_HINT_CLASS =
   'absolute left-[var(--space-5)] top-[var(--space-5)] z-10 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-[var(--space-3)] py-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur';
 
+interface PreviewSlotProps {
+  designId: string;
+  html: string;
+  active: boolean;
+  viewport: 'mobile' | 'tablet' | 'desktop';
+  zoom: number;
+  showCommentUi: boolean;
+  commentHintLabel: string;
+  pinOverlay: React.ReactNode;
+  registerIframe: (designId: string, el: HTMLIFrameElement | null) => void;
+}
+
+// One iframe per pool entry. Hidden (display:none) when not active, but kept
+// in the DOM so its document — already parsed HTML, executed scripts, laid
+// out — survives design switches. That's the whole point of the pool. The
+// srcDocStableKey trick is per-slot so token-only tweaks via postMessage
+// don't rebuild the document (~300-500ms blank on JSX cards).
+function PreviewSlot({
+  designId,
+  html,
+  active,
+  viewport,
+  zoom,
+  showCommentUi,
+  commentHintLabel,
+  pinOverlay,
+  registerIframe,
+}: PreviewSlotProps) {
+  const srcDocStableKey = useMemo(() => {
+    return html
+      .replace(
+        /\/\*\s*EDITMODE-BEGIN\s*\*\/[\s\S]*?\/\*\s*EDITMODE-END\s*\*\//g,
+        '/*EDITMODE-BEGIN*/__STABLE__/*EDITMODE-END*/',
+      )
+      .replace(
+        /\/\*\s*TWEAK-SCHEMA-BEGIN\s*\*\/[\s\S]*?\/\*\s*TWEAK-SCHEMA-END\s*\*\//g,
+        '/*TWEAK-SCHEMA-BEGIN*/__STABLE__/*TWEAK-SCHEMA-END*/',
+      );
+  }, [html]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: srcDocStableKey is the intentional dependency. html flows through naturally because the factory closes over it and re-runs whenever the stable key flips, which is exactly when structural changes (anything outside EDITMODE / TWEAK_SCHEMA markers) are present.
+  const srcDoc = useMemo(() => buildSrcdoc(html), [srcDocStableKey]);
+
+  const setRef = useCallback(
+    (el: HTMLIFrameElement | null) => registerIframe(designId, el),
+    [designId, registerIframe],
+  );
+
+  const isMobile = viewport === 'mobile';
+  const scale = zoom / 100;
+  const inversePct = `${10000 / zoom}%`;
+
+  const rawIframe = (
+    <iframe
+      ref={setRef}
+      title={`design-preview-${designId}`}
+      sandbox="allow-scripts"
+      srcDoc={srcDoc}
+      className={
+        isMobile
+          ? 'block w-full h-full bg-transparent border-0'
+          : 'w-full h-full bg-transparent border-0'
+      }
+    />
+  );
+  const iframe =
+    zoom === 100 ? (
+      rawIframe
+    ) : (
+      <div
+        className="origin-top-left"
+        style={{ transform: `scale(${scale})`, width: inversePct, height: inversePct }}
+      >
+        {rawIframe}
+      </div>
+    );
+
+  let body: React.ReactNode;
+  if (isMobile) {
+    body = (
+      <div className="min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
+        <div className="relative inline-flex">
+          <PhoneFrame>{iframe}</PhoneFrame>
+          {active ? pinOverlay : null}
+        </div>
+      </div>
+    );
+  } else if (viewport === 'tablet') {
+    body = (
+      <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
+        <div
+          className="relative"
+          style={{
+            width: 'var(--size-preview-tablet-width)',
+            height: 'var(--size-preview-tablet-height)',
+            flexShrink: 0,
+          }}
+        >
+          {showCommentUi && active ? (
+            <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
+          ) : null}
+          {iframe}
+          {active ? pinOverlay : null}
+        </div>
+      </div>
+    );
+  } else {
+    body = (
+      <div className="h-full w-full relative">
+        {showCommentUi && active ? (
+          <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
+        ) : null}
+        {iframe}
+        {active ? pinOverlay : null}
+      </div>
+    );
+  }
+
+  return (
+    <div hidden={!active} className="h-full w-full">
+      {body}
+    </div>
+  );
+}
+
 export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const t = useT();
   const previewHtml = useCodesignStore((s) => s.previewHtml);
-  const isGenerating = useCodesignStore((s) => s.isGenerating);
+  const previewHtmlByDesign = useCodesignStore((s) => s.previewHtmlByDesign);
+  const recentDesignIds = useCodesignStore((s) => s.recentDesignIds);
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
+  const canvasTabs = useCodesignStore((s) => s.canvasTabs);
+  const activeCanvasTab = useCodesignStore((s) => s.activeCanvasTab);
   const errorMessage = useCodesignStore((s) => s.errorMessage);
   const retry = useCodesignStore((s) => s.retryLastPrompt);
   const clearError = useCodesignStore((s) => s.clearError);
@@ -142,20 +260,48 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
   const openCommentBubble = useCodesignStore((s) => s.openCommentBubble);
   const closeCommentBubble = useCodesignStore((s) => s.closeCommentBubble);
   const addComment = useCodesignStore((s) => s.addComment);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Memoize the srcdoc string so we only re-run the (regex-heavy) builder when
-  // previewHtml actually changes. Without this, every unrelated store update
-  // (toasts, theme, errors) re-ran buildSrcdoc and React still diffed an
-  // identical srcDoc prop — but the regex cost is non-trivial on large designs.
-  const srcDoc = useMemo(() => (previewHtml ? buildSrcdoc(previewHtml) : null), [previewHtml]);
+  // Active iframe ref consumed by TweakPanel (postMessage target) and by the
+  // window.message guard. We re-point this whenever the active design changes
+  // or the active iframe element re-mounts.
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const iframesByDesign = useRef<Map<string, HTMLIFrameElement>>(new Map());
 
+  const registerIframe = useCallback(
+    (designId: string, el: HTMLIFrameElement | null) => {
+      if (el) {
+        iframesByDesign.current.set(designId, el);
+        if (designId === currentDesignId) iframeRef.current = el;
+      } else {
+        iframesByDesign.current.delete(designId);
+        if (iframeRef.current && designId === currentDesignId) {
+          iframeRef.current = null;
+        }
+      }
+    },
+    [currentDesignId],
+  );
+
+  // When the active design changes, retarget iframeRef and re-broadcast the
+  // current interaction mode. Background iframes keep their last mode — fine,
+  // they're inert until reactivated.
   useEffect(() => {
-    postModeToPreviewWindow(iframeRef.current?.contentWindow, interactionMode, pushIframeError);
-  }, [interactionMode, pushIframeError]);
+    if (currentDesignId === null) {
+      iframeRef.current = null;
+      return;
+    }
+    const el = iframesByDesign.current.get(currentDesignId) ?? null;
+    iframeRef.current = el;
+    if (el) {
+      postModeToPreviewWindow(el.contentWindow, interactionMode, pushIframeError);
+    }
+  }, [currentDesignId, interactionMode, pushIframeError]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
+      // Only accept messages from the ACTIVE iframe — background pool members
+      // are inert from the user's POV and their messages would race with the
+      // foreground design's state.
       if (!isTrustedPreviewMessageSource(event.source, iframeRef.current?.contentWindow)) return;
 
       const outcome = handlePreviewMessage(event.data, {
@@ -171,10 +317,10 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
             selector: msg.selector,
             tag: msg.tag,
             outerHTML: msg.outerHTML,
-            // store raw rect (unscaled) — the bubble is portaled to body and
-            // is anchored by the scaled rect the browser reports via its own
-            // getBoundingClientRect; we pass `scaled` so it lands correctly.
             rect: scaled,
+            ...(typeof msg.parentOuterHTML === 'string' && msg.parentOuterHTML.length > 0
+              ? { parentOuterHTML: msg.parentOuterHTML }
+              : {}),
           });
         },
         onIframeError: (msg) =>
@@ -190,8 +336,68 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
     return () => window.removeEventListener('message', onMessage);
   }, [pushIframeError, selectCanvasElement, openCommentBubble, previewZoom]);
 
+  // Pool entries: active design first (using the freshest in-memory
+  // previewHtml), then any other recently-visited designs that still have a
+  // cached preview. Store-side LRU bounds the size; we just render what's
+  // handed to us.
+  const poolEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ id: string; html: string }> = [];
+    if (currentDesignId !== null) {
+      const html = previewHtml ?? previewHtmlByDesign[currentDesignId];
+      if (typeof html === 'string' && html.length > 0) {
+        out.push({ id: currentDesignId, html });
+        seen.add(currentDesignId);
+      }
+    }
+    for (const id of recentDesignIds) {
+      if (seen.has(id)) continue;
+      const html = previewHtmlByDesign[id];
+      if (typeof html === 'string' && html.length > 0) {
+        out.push({ id, html });
+        seen.add(id);
+      }
+    }
+    return out;
+  }, [currentDesignId, previewHtml, previewHtmlByDesign, recentDesignIds]);
+
+  const activeTab = canvasTabs[activeCanvasTab];
+  const showCommentUi = interactionMode === 'comment';
+  const snapshotComments = currentSnapshotId
+    ? comments.filter((c) => c.snapshotId === currentSnapshotId)
+    : [];
+  const pinOverlay = (
+    <PinOverlay
+      comments={snapshotComments}
+      zoom={previewZoom}
+      onPinClick={(c) =>
+        openCommentBubble({
+          selector: c.selector,
+          tag: c.tag,
+          outerHTML: c.outerHTML,
+          rect: {
+            top: c.rect.top * (previewZoom / 100),
+            left: c.rect.left * (previewZoom / 100),
+            width: c.rect.width * (previewZoom / 100),
+            height: c.rect.height * (previewZoom / 100),
+          },
+          existingCommentId: c.id,
+          initialText: c.text,
+        })
+      }
+    />
+  );
+
+  const activeHasHtml =
+    currentDesignId !== null && poolEntries.some((e) => e.id === currentDesignId);
+
   let body: React.ReactNode;
-  if (errorMessage) {
+  // Only take over the whole pane with ErrorState when there's nothing to
+  // show yet. If the agent produced a preview before failing on the last
+  // step (common with token-overflow / validation errors), keep the preview
+  // visible — the user can still inspect and tweak what did generate.
+  // A small dismissible error banner surfaces via CanvasErrorBar / toast.
+  if (errorMessage && !previewHtml) {
     body = (
       <ErrorState
         message={errorMessage}
@@ -201,164 +407,100 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
         onDismiss={clearError}
       />
     );
-  } else if (isGenerating && !previewHtml) {
-    body = <LoadingState />;
-  } else if (previewHtml) {
-    const isMobile = previewViewport === 'mobile';
-    const showCommentUi = interactionMode === 'comment';
-    const snapshotComments = currentSnapshotId
-      ? comments.filter((c) => c.snapshotId === currentSnapshotId)
-      : [];
-    const pinOverlay = (
-      <PinOverlay
-        comments={snapshotComments}
-        zoom={previewZoom}
-        onPinClick={(c) =>
-          openCommentBubble({
-            selector: c.selector,
-            tag: c.tag,
-            outerHTML: c.outerHTML,
-            rect: {
-              top: c.rect.top * (previewZoom / 100),
-              left: c.rect.left * (previewZoom / 100),
-              width: c.rect.width * (previewZoom / 100),
-              height: c.rect.height * (previewZoom / 100),
-            },
-            existingCommentId: c.id,
-            initialText: c.text,
-          })
-        }
-      />
-    );
-    const rawIframe = (
-      <iframe
-        ref={iframeRef}
-        title="design-preview"
-        sandbox="allow-scripts"
-        srcDoc={srcDoc ?? ''}
-        onLoad={() => {
-          postModeToPreviewWindow(
-            iframeRef.current?.contentWindow,
-            interactionMode,
-            pushIframeError,
-          );
-        }}
-        className={
-          isMobile
-            ? 'block w-full h-full bg-transparent border-0'
-            : 'w-full h-full bg-transparent rounded-[var(--radius-2xl)] shadow-[var(--shadow-card)] border border-[var(--color-border)]'
-        }
-      />
-    );
-    const scale = previewZoom / 100;
-    const inversePct = `${10000 / previewZoom}%`;
-    const iframe =
-      previewZoom === 100 ? (
-        rawIframe
-      ) : (
-        <div
-          className="origin-top-left"
-          style={{
-            transform: `scale(${scale})`,
-            width: inversePct,
-            height: inversePct,
-          }}
-        >
-          {rawIframe}
-        </div>
-      );
-
-    if (isMobile) {
-      body = (
-        <div className="min-h-full p-6 flex flex-col items-center justify-center overflow-auto">
-          <div className="relative inline-flex">
-            <PhoneFrame>{iframe}</PhoneFrame>
-            {pinOverlay}
-          </div>
-        </div>
-      );
-    } else if (previewViewport === 'tablet') {
-      body = (
-        <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
-          <div
-            className="relative"
-            style={{
-              width: 'var(--size-preview-tablet-width)',
-              height: 'var(--size-preview-tablet-height)',
-              flexShrink: 0,
-            }}
-          >
-            {showCommentUi && (
-              <div className={COMMENT_HINT_CLASS}>{t('preview.commentModeHint')}</div>
-            )}
-            {iframe}
-            {pinOverlay}
-          </div>
-        </div>
-      );
-    } else {
-      body = (
-        <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
-          <div
-            className="relative"
-            style={{
-              width: 'min(100%, var(--size-preview-desktop-width))',
-              height: 'min(100%, var(--size-preview-desktop-height))',
-              flexShrink: 0,
-            }}
-          >
-            {showCommentUi && (
-              <div className={COMMENT_HINT_CLASS}>{t('preview.commentModeHint')}</div>
-            )}
-            {iframe}
-            {pinOverlay}
-          </div>
-        </div>
-      );
-    }
+  } else if (activeTab?.kind === 'files' && previewHtml) {
+    body = <FilesTabView />;
   } else {
-    body = <EmptyState onPickStarter={onPickStarter} />;
+    // Pool slots stay mounted even when the current design has no preview —
+    // background iframes for recently-visited designs keep their documents
+    // alive for instant switch-back. EmptyState is overlaid in the same
+    // stacking context when the active design has no content yet.
+    body = (
+      <div className="relative h-full w-full">
+        {poolEntries.map((entry) => (
+          <PreviewSlot
+            key={entry.id}
+            designId={entry.id}
+            html={entry.html}
+            active={entry.id === currentDesignId}
+            viewport={previewViewport}
+            zoom={previewZoom}
+            showCommentUi={showCommentUi}
+            commentHintLabel={t('preview.commentModeHint')}
+            pinOverlay={pinOverlay}
+            registerIframe={registerIframe}
+          />
+        ))}
+        {!activeHasHtml ? <EmptyState onPickStarter={onPickStarter} /> : null}
+      </div>
+    );
   }
 
+  const hasTabs = canvasTabs.length > 0;
+  const isWelcome = !errorMessage && !previewHtml;
+
   return (
-    <div className="flex flex-col min-h-0 flex-1">
-      <PreviewToolbar />
-      <CanvasErrorBar />
-      <div className="flex-1 overflow-auto">{body}</div>
-      {commentBubble && interactionMode === 'comment' ? (
-        <CommentBubble
-          selector={commentBubble.selector}
-          tag={commentBubble.tag}
-          outerHTML={commentBubble.outerHTML}
-          rect={commentBubble.rect}
-          {...(commentBubble.initialText !== undefined
-            ? { initialText: commentBubble.initialText }
-            : {})}
-          onClose={closeCommentBubble}
-          onSaveNote={async (text) => {
-            await addComment({
-              kind: 'note',
-              selector: commentBubble.selector,
-              tag: commentBubble.tag,
-              outerHTML: commentBubble.outerHTML,
-              rect: commentBubble.rect,
-              text,
-            });
-            closeCommentBubble();
-          }}
-          onSendToClaude={async (text) => {
-            await addComment({
-              kind: 'edit',
-              selector: commentBubble.selector,
-              tag: commentBubble.tag,
-              outerHTML: commentBubble.outerHTML,
-              rect: commentBubble.rect,
-              text,
-            });
-            closeCommentBubble();
-          }}
-        />
-      ) : null}
+    <div className="flex min-h-0 flex-1">
+      <div className="flex flex-col min-h-0 flex-1">
+        {isWelcome ? null : (
+          <div className="flex items-stretch justify-between gap-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] pl-[var(--space-2)]">
+            {hasTabs ? <CanvasTabBar /> : <div />}
+            <PreviewToolbar />
+          </div>
+        )}
+        <CanvasErrorBar />
+        <div className="relative flex-1 overflow-auto">
+          {body}
+          {previewHtml ? <TweakPanel iframeRef={iframeRef} /> : null}
+        </div>
+        {commentBubble && interactionMode === 'comment' ? (
+          <CommentBubble
+            key={commentBubble.selector}
+            selector={commentBubble.selector}
+            tag={commentBubble.tag}
+            outerHTML={commentBubble.outerHTML}
+            rect={commentBubble.rect}
+            {...(commentBubble.initialText !== undefined
+              ? { initialText: commentBubble.initialText }
+              : {})}
+            onClose={() => {
+              const win = iframeRef.current?.contentWindow;
+              if (win) {
+                try {
+                  win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
+                } catch {
+                  /* noop */
+                }
+              }
+              closeCommentBubble();
+            }}
+            onSendToClaude={async (text: string) => {
+              await addComment({
+                kind: 'edit',
+                selector: commentBubble.selector,
+                tag: commentBubble.tag,
+                outerHTML: commentBubble.outerHTML,
+                rect: commentBubble.rect,
+                text,
+                scope: 'element',
+                ...(commentBubble.parentOuterHTML
+                  ? { parentOuterHTML: commentBubble.parentOuterHTML }
+                  : {}),
+              });
+              const win = iframeRef.current?.contentWindow;
+              if (win) {
+                try {
+                  win.postMessage({ __codesign: true, type: 'CLEAR_PIN' }, '*');
+                } catch {
+                  /* noop */
+                }
+              }
+              closeCommentBubble();
+              // Stage only — user clicks the "Apply" button on the chip bar
+              // to send all accumulated edits in one go.
+            }}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -129,6 +129,14 @@ export const GeneratePayloadV1 = z.object({
   referenceUrl: z.string().url().optional(),
   attachments: z.array(LocalInputFile).max(12).default([]),
   generationId: z.string().min(1),
+  /** Optional so older clients / tests that don't set it still parse.
+   *  Present in the renderer path so agent stream events can route to
+   *  the right design's chat bubble. */
+  designId: z.string().min(1).optional(),
+  /** Current HTML for this design (if any). Seeded into the agent's
+   *  virtual FS as `index.html` so the text_editor tool can view/edit
+   *  incrementally instead of always rewriting from scratch. */
+  previousHtml: z.string().optional(),
 });
 export type GeneratePayloadV1 = z.infer<typeof GeneratePayloadV1>;
 
@@ -273,6 +281,7 @@ export type {
   ChatUserPayload,
   CommentCreateInput,
   CommentRow,
+  CommentScope,
   CommentUpdateInput,
   Design,
   DesignFile,
@@ -291,3 +300,12 @@ export type {
   DiagnoseContext,
   ErrorCode,
 } from './diagnostics';
+
+export {
+  ensureEditmodeMarkers,
+  parseEditmodeBlock,
+  parseTweakSchema,
+  replaceEditmodeBlock,
+  replaceTweakSchema,
+} from './editmode';
+export type { EditmodeBlock, TokenSchemaEntry, TweakSchema } from './editmode';

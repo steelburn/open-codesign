@@ -34,11 +34,11 @@ export function LanguageToggle() {
       type="button"
       onClick={() => void handleToggle()}
       style={noDragStyle}
-      className="inline-flex items-center gap-[var(--space-2)] h-[var(--size-control-sm)] px-[var(--space-3)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--text-xs)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
+      className="inline-flex items-center gap-[var(--space-2)] h-[40px] px-[var(--space-3)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--text-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-colors"
       aria-label={t('settings.language.label')}
       title={t('settings.language.label')}
     >
-      <Globe className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)] text-[var(--color-text-secondary)]" />
+      <Globe className="w-[18px] h-[18px] text-[var(--color-text-secondary)]" />
       <span>{localeLabel(locale)}</span>
     </button>
   );

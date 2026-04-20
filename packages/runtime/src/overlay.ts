@@ -19,6 +19,7 @@
 export const OVERLAY_SCRIPT = `(function() {
   'use strict';
   var hovered = null;
+  var pinned = null;
   var warned = Object.create(null);
   function warnOnce(key, err) {
     if (warned[key]) return;
@@ -27,9 +28,22 @@ export const OVERLAY_SCRIPT = `(function() {
   }
   var currentMode = 'default';
 
+  var HOVER_OUTLINE = '2px solid #c96442';
+  var PINNED_OUTLINE = '2.5px solid #b5441a';
+
   function clearHover() {
-    if (hovered) { try { hovered.style.outline = ''; } catch (_) {} }
+    // Don't clear if this element is pinned — pinned takes precedence.
+    if (hovered && hovered !== pinned) {
+      try { hovered.style.outline = ''; } catch (_) {}
+    }
     hovered = null;
+  }
+
+  function clearPinned() {
+    if (pinned) {
+      try { pinned.style.outline = ''; } catch (_) {}
+    }
+    pinned = null;
   }
 
 
@@ -49,30 +63,69 @@ export const OVERLAY_SCRIPT = `(function() {
 
   function onMouseOver(e) {
     if (currentMode !== 'comment') return;
-    if (hovered) hovered.style.outline = '';
+    // Don't override pinned outline on hover-in of a different element.
+    if (hovered && hovered !== pinned) {
+      try { hovered.style.outline = ''; } catch (_) {}
+    }
     hovered = e.target;
-    if (hovered) hovered.style.outline = '2px solid #c96442';
+    if (hovered && hovered !== pinned) {
+      try { hovered.style.outline = HOVER_OUTLINE; } catch (_) {}
+    }
   }
   function onMouseOut() {
     if (currentMode !== 'comment') return;
     clearHover();
   }
   function onClick(e) {
-    if (currentMode !== 'comment') return;
-    e.preventDefault();
-    e.stopPropagation();
-    var el = e.target;
-    var rect = el.getBoundingClientRect();
-    try {
-      window.parent.postMessage({
-        __codesign: true,
-        type: 'ELEMENT_SELECTED',
-        selector: getXPath(el),
-        tag: el.tagName.toLowerCase(),
-        outerHTML: (el.outerHTML || '').slice(0, 800),
-        rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
-      }, '*');
-    } catch (err) { console.warn('[overlay] postMessage ELEMENT_SELECTED failed:', err); }
+    if (currentMode === 'comment') {
+      e.preventDefault();
+      e.stopPropagation();
+      var el = e.target;
+      // Pin the clicked element — its outline will persist until parent
+      // sends CLEAR_PIN (bubble closed).
+      if (pinned && pinned !== el) {
+        try { pinned.style.outline = ''; } catch (_) {}
+      }
+      pinned = el;
+      try { el.style.outline = PINNED_OUTLINE; } catch (_) {}
+      var rect = el.getBoundingClientRect();
+      var parentHtml = '';
+      try {
+        if (el.parentElement && el.parentElement.outerHTML) {
+          parentHtml = String(el.parentElement.outerHTML).slice(0, 600);
+        }
+      } catch (_) { /* parent inaccessible — leave blank */ }
+      try {
+        window.parent.postMessage({
+          __codesign: true,
+          type: 'ELEMENT_SELECTED',
+          selector: getXPath(el),
+          tag: el.tagName.toLowerCase(),
+          outerHTML: (el.outerHTML || '').slice(0, 800),
+          parentOuterHTML: parentHtml,
+          rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+        }, '*');
+      } catch (err) { console.warn('[overlay] postMessage ELEMENT_SELECTED failed:', err); }
+      return;
+    }
+    // Default mode: block ALL navigating links — the sandbox iframe has no
+    // routing and any real navigation (including hash jumps to non-existent
+    // ids) would blank the preview. Agent should use React view-state for
+    // multi-page designs; see agent.ts AGENTIC_TOOL_GUIDANCE.
+    var anchor = e.target;
+    while (anchor && anchor.tagName !== 'A') anchor = anchor.parentElement;
+    if (anchor && (anchor.href || anchor.getAttribute('href'))) {
+      var href = anchor.getAttribute('href') || '';
+      // Allow hash-jump ONLY when it resolves to an existing element on page.
+      if (href.charAt(0) === '#' && href.length > 1) {
+        var id = href.slice(1);
+        var target = null;
+        try { target = document.getElementById(id); } catch (_) {}
+        if (target) return; // let the browser scroll
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    }
   }
   function onParentMessage(ev) {
     // Trust boundary: control messages must originate from the embedding
@@ -82,11 +135,21 @@ export const OVERLAY_SCRIPT = `(function() {
     // future control type added to the switch is structurally protected.
     if (!ev || ev.source !== window.parent) return;
     var data = ev.data;
-    if (!data || data.__codesign !== true || data.type !== 'SET_MODE') return;
-    var next = data.mode === 'comment' ? 'comment' : 'default';
-    if (next === currentMode) return;
-    currentMode = next;
-    if (currentMode === 'default') clearHover();
+    if (!data || data.__codesign !== true) return;
+    if (data.type === 'SET_MODE') {
+      var next = data.mode === 'comment' ? 'comment' : 'default';
+      if (next === currentMode) return;
+      currentMode = next;
+      if (currentMode === 'default') {
+        clearHover();
+        clearPinned();
+      }
+      return;
+    }
+    if (data.type === 'CLEAR_PIN') {
+      clearPinned();
+      return;
+    }
   }
   function onError(ev) {
     try {
@@ -124,7 +187,8 @@ export const OVERLAY_SCRIPT = `(function() {
   var installs = [
     { evt: 'mouseover', fn: onMouseOver },
     { evt: 'mouseout', fn: onMouseOut },
-    { evt: 'click', fn: onClick }
+    { evt: 'click', fn: onClick },
+    { evt: 'submit', fn: function(e) { e.preventDefault(); } }
   ];
   function reattach() {
     for (var i = 0; i < installs.length; i++) {
@@ -144,6 +208,24 @@ export const OVERLAY_SCRIPT = `(function() {
   }
   reattach();
   try { setInterval(reattach, 200); } catch (err) { console.warn('[overlay] setInterval reattach failed:', err); }
+
+  // Neutralize programmatic navigation — generated code may call
+  // window.location = '/foo', location.assign('/x'), or window.open(...)
+  // in button onclick handlers. None of those routes exist in the sandbox and
+  // they'd all blank the preview. We no-op them once, idempotently.
+  try {
+    if (!window.__cs_navguard) {
+      window.__cs_navguard = true;
+      var nopNav = function() { /* navigation suppressed in preview sandbox */ };
+      try { window.open = function() { return null; }; } catch (_) {}
+      try {
+        var loc = window.location;
+        try { loc.assign = nopNav; } catch (_) {}
+        try { loc.replace = nopNav; } catch (_) {}
+        try { loc.reload = nopNav; } catch (_) {}
+      } catch (_) {}
+    }
+  } catch (err) { try { console.warn('[overlay] navguard install failed:', err); } catch (_) {} }
 })();`;
 
 export interface OverlayMessage {
@@ -152,6 +234,9 @@ export interface OverlayMessage {
   selector: string;
   tag: string;
   outerHTML: string;
+  /** Optional v2 enrichment — parent element's outerHTML, truncated to 600
+   *  chars. Older overlays may omit this; consumers must treat it as optional. */
+  parentOuterHTML?: string;
   rect: { top: number; left: number; width: number; height: number };
 }
 

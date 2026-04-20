@@ -1,7 +1,6 @@
 import { useT } from '@open-codesign/i18n';
 import { ChevronLeft } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { CommandPalette } from './components/CommandPalette';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
 import { PreviewPane } from './components/PreviewPane';
@@ -10,6 +9,7 @@ import { Settings } from './components/Settings';
 import { Sidebar } from './components/Sidebar';
 import { ToastViewport } from './components/Toast';
 import { TopBar } from './components/TopBar';
+import { CommentsPanel } from './components/comment/CommentsPanel';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useCodesignStore } from './store';
 import { HubView } from './views/HubView';
@@ -22,12 +22,12 @@ export function App() {
   const loadDesigns = useCodesignStore((s) => s.loadDesigns);
   const switchDesign = useCodesignStore((s) => s.switchDesign);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
-  const isGenerating = useCodesignStore((s) => s.isGenerating);
+  const isGenerating = useCodesignStore(
+    (s) => s.isGenerating && s.generatingDesignId === s.currentDesignId,
+  );
   const setView = useCodesignStore((s) => s.setView);
-  const openCommandPalette = useCodesignStore((s) => s.openCommandPalette);
-  const closeCommandPalette = useCodesignStore((s) => s.closeCommandPalette);
   const view = useCodesignStore((s) => s.view);
-  const commandPaletteOpen = useCodesignStore((s) => s.commandPaletteOpen);
+  const previousView = useCodesignStore((s) => s.previousView);
   const designsViewOpen = useCodesignStore((s) => s.designsViewOpen);
   const closeDesignsView = useCodesignStore((s) => s.closeDesignsView);
   const createNewDesign = useCodesignStore((s) => s.createNewDesign);
@@ -37,8 +37,49 @@ export function App() {
   const requestRenameDesign = useCodesignStore((s) => s.requestRenameDesign);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
   const setInteractionMode = useCodesignStore((s) => s.setInteractionMode);
+  const sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
 
   const [prompt, setPrompt] = useState('');
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    Math.max(320, Math.round(window.innerWidth * 0.25)),
+  );
+  const [isResizing, setIsResizing] = useState(false);
+  // Once the user has visited Hub we keep HubView mounted (toggled via
+  // `hidden`) so going Workspace → Hub doesn't tear down the design-card
+  // iframes and pay the srcDoc parse cost again.
+  const [hubMounted, setHubMounted] = useState(view === 'hub');
+  useEffect(() => {
+    if (view === 'hub') setHubMounted(true);
+  }, [view]);
+  // Same trick for workspace — once visited, keep PreviewPane mounted so the
+  // iframe pool survives Workspace ↔ Hub round trips. Without this, the pool
+  // rebuilds 5 iframes from srcDoc every time you come back (2-3s of parse).
+  const [workspaceMounted, setWorkspaceMounted] = useState(view === 'workspace');
+  useEffect(() => {
+    if (view === 'workspace') setWorkspaceMounted(true);
+  }, [view]);
+
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+
+    const onMove = (ev: MouseEvent) => {
+      const maxW = Math.round(window.innerWidth * 0.55);
+      const clamped = Math.min(Math.max(ev.clientX, 280), maxW);
+      setSidebarWidth(clamped);
+    };
+    const onUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   useEffect(() => {
     async function bootstrap(): Promise<void> {
@@ -81,13 +122,6 @@ export function App() {
         },
       },
       {
-        combo: 'mod+k',
-        handler: () => {
-          if (!ready) return;
-          openCommandPalette();
-        },
-      },
-      {
         combo: 'mod+n',
         handler: () => {
           if (!ready) return;
@@ -105,10 +139,6 @@ export function App() {
             requestRenameDesign(null);
             return;
           }
-          if (commandPaletteOpen) {
-            closeCommandPalette();
-            return;
-          }
           if (designsViewOpen) {
             closeDesignsView();
             return;
@@ -118,11 +148,7 @@ export function App() {
             return;
           }
           if (view === 'settings') {
-            setView('workspace');
-            return;
-          }
-          if (view === 'workspace') {
-            setView('hub');
+            setView(previousView === 'settings' ? 'hub' : previousView);
           }
         },
         preventDefault: false,
@@ -134,15 +160,13 @@ export function App() {
       ready,
       sendPrompt,
       view,
-      commandPaletteOpen,
+      previousView,
       designsViewOpen,
       designToDelete,
       designToRename,
       interactionMode,
       setInteractionMode,
       setView,
-      openCommandPalette,
-      closeCommandPalette,
       closeDesignsView,
       createNewDesign,
       requestDeleteDesign,
@@ -162,42 +186,52 @@ export function App() {
   return (
     <div className="h-full flex flex-col bg-[var(--color-background)]">
       <TopBar />
-      <div className="flex-1 min-h-0">
-        {view === 'settings' ? (
-          <Settings />
-        ) : view === 'hub' ? (
-          <HubView
-            onUseExamplePrompt={(p) => {
-              setPrompt(p);
-              setView('workspace');
-            }}
-          />
-        ) : (
-          <div className="h-full flex flex-col">
-            <div className="px-[var(--space-5)] py-[var(--space-2)] border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)]">
-              <button
-                type="button"
-                onClick={() => setView('hub')}
-                className="inline-flex items-center gap-[var(--space-1)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                <ChevronLeft className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" />
-                {t('hub.backToHub')}
-              </button>
-            </div>
-            <div className="flex-1 min-h-0 grid grid-cols-[var(--size-hub-sidebar)_1fr]">
-              <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
-              <main className="flex flex-col min-h-0">
+      <div className="flex-1 min-h-0 relative">
+        {view === 'settings' ? <Settings /> : null}
+        {hubMounted ? (
+          <div hidden={view !== 'hub'} className="h-full">
+            <HubView
+              onUseExamplePrompt={async (p) => {
+                // Clicking an example is an explicit "start a new thing"
+                // intent — always create a fresh design and preload the
+                // prompt into IT, never into whatever design the user was
+                // last on. If createNewDesign fails (e.g. another run is in
+                // flight) it surfaces a toast; we bail so the example prompt
+                // doesn't quietly land in the current design's input box.
+                const created = await createNewDesign();
+                if (!created) return;
+                setPrompt(p);
+                setView('workspace');
+              }}
+            />
+          </div>
+        ) : null}
+        {workspaceMounted ? (
+          <div hidden={view !== 'workspace'} className="h-full flex flex-col">
+            <div className="flex-1 min-h-0 flex relative">
+              {isResizing && <div className="absolute inset-0 z-20 cursor-col-resize" />}
+              <div className="relative shrink-0" style={{ width: sidebarWidth }}>
+                <Sidebar prompt={prompt} setPrompt={setPrompt} onSubmit={submit} />
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  onMouseDown={onResizeStart}
+                  className="absolute top-0 right-0 w-[5px] h-full cursor-col-resize z-10 hover:bg-[var(--color-accent)]/15 active:bg-[var(--color-accent)]/25 transition-colors duration-100"
+                  style={{ transform: 'translateX(50%)' }}
+                />
+              </div>
+              <main className="flex flex-col min-h-0 flex-1 min-w-0">
                 <PreviewPane onPickStarter={(p) => setPrompt(p)} />
               </main>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
-      <CommandPalette />
       <DesignsView />
       <RenameDesignDialog />
       <DeleteDesignDialog />
       <ToastViewport />
+      <CommentsPanel />
     </div>
   );
 }

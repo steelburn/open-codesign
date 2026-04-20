@@ -1,6 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { Tooltip } from '@open-codesign/ui';
-import { Download, MessageSquare, Monitor, Smartphone, Tablet } from 'lucide-react';
+import { Download, MessageSquare } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { ExportFormat } from '../../../preload/index';
 import type { PreviewViewport } from '../store';
@@ -13,12 +12,6 @@ interface ExportItem {
   ready: boolean;
 }
 
-interface ViewportItem {
-  value: PreviewViewport;
-  label: string;
-  icon: ReactElement;
-}
-
 const ZOOM_OPTIONS = [50, 75, 90, 100, 110, 125, 150, 175, 200] as const;
 
 export function PreviewToolbar(): ReactElement {
@@ -28,7 +21,6 @@ export function PreviewToolbar(): ReactElement {
   const toastMessage = useCodesignStore((s) => s.toastMessage);
   const dismissToast = useCodesignStore((s) => s.dismissToast);
   const previewViewport = useCodesignStore((s) => s.previewViewport);
-  const setPreviewViewport = useCodesignStore((s) => s.setPreviewViewport);
   const previewZoom = useCodesignStore((s) => s.previewZoom);
   const setPreviewZoom = useCodesignStore((s) => s.setPreviewZoom);
   const interactionMode = useCodesignStore((s) => s.interactionMode);
@@ -97,121 +89,47 @@ export function PreviewToolbar(): ReactElement {
     },
   ];
 
-  const viewportItems: ViewportItem[] = [
-    {
-      value: 'desktop',
-      label: t('preview.viewport.desktop'),
-      icon: (
-        <Monitor className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" aria-hidden="true" />
-      ),
-    },
-    {
-      value: 'tablet',
-      label: t('preview.viewport.tablet'),
-      icon: (
-        <Tablet className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" aria-hidden="true" />
-      ),
-    },
-    {
-      value: 'mobile',
-      label: t('preview.viewport.mobile'),
-      icon: (
-        <Smartphone
-          className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]"
-          aria-hidden="true"
-        />
-      ),
-    },
-  ];
-
   return (
-    <div className="flex items-center justify-end gap-2 px-6 py-2 border-b border-[var(--color-border-muted)] bg-[var(--color-background-secondary)]">
+    <div className="ml-auto flex items-center justify-end gap-[var(--space-1)] pr-[var(--space-4)] py-[3px]">
       {toastMessage && (
         <output className="mr-auto text-[var(--text-xs)] text-[var(--color-text-secondary)] truncate max-w-[60%]">
           {toastMessage}
         </output>
       )}
 
-      <fieldset
-        aria-label={t('preview.viewport.label')}
-        className="flex items-center rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden"
-        style={{ margin: 0, padding: 0 }}
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={commentActive}
+        onClick={() => setInteractionMode(commentActive ? 'default' : 'comment')}
+        className={`inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)] disabled:opacity-40 disabled:pointer-events-none ${
+          commentActive
+            ? 'text-[var(--color-accent)]'
+            : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'
+        }`}
       >
-        <legend className="sr-only">{t('preview.viewport.label')}</legend>
-        {viewportItems.map((item) => {
-          const active = previewViewport === item.value;
-          return (
-            <button
-              key={item.value}
-              type="button"
-              title={item.label}
-              aria-label={item.label}
-              aria-pressed={active}
-              onClick={() => setPreviewViewport(item.value)}
-              className={[
-                'inline-flex items-center justify-center w-[var(--size-control-xs)] h-[var(--size-control-xs)] transition-[background-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]',
-                active
-                  ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]'
-                  : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-secondary)]',
-              ].join(' ')}
-            >
-              {item.icon}
-            </button>
-          );
-        })}
-      </fieldset>
+        <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
+        {t('preview.commentMode')}
+      </button>
 
-      <Tooltip
-        label={
-          disabled
-            ? t('disabledReason.noDesignToExport')
-            : commentActive
-              ? t('preview.commentModeHint')
-              : t('preview.commentMode')
-        }
-        side="bottom"
-      >
+      <div className="relative" ref={zoomRef}>
         <button
           type="button"
           disabled={disabled}
-          aria-pressed={commentActive}
-          onClick={() => setInteractionMode(commentActive ? 'default' : 'comment')}
-          className={`inline-flex items-center gap-1.5 h-[var(--size-control-xs)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border transition-[background-color,border-color,color] duration-[var(--duration-fast)] ease-[var(--ease-out)] disabled:opacity-40 disabled:pointer-events-none ${
-            commentActive
-              ? 'border-[var(--color-accent)] bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:bg-[var(--color-accent-hover)]'
-              : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)]'
-          }`}
+          onClick={() => setZoomOpen((v) => !v)}
+          className="inline-flex items-center justify-end w-[56px] h-[26px] pr-[10px] text-[12px] tabular-nums text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
+          aria-haspopup="menu"
+          aria-expanded={zoomOpen}
+          aria-label={t('preview.zoom')}
+          style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
         >
-          <MessageSquare
-            className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]"
-            aria-hidden="true"
-          />
-          {t('preview.commentMode')}
+          {previewZoom}%
         </button>
-      </Tooltip>
-
-      <div className="relative" ref={zoomRef}>
-        <Tooltip
-          label={disabled ? t('disabledReason.noDesignToExport') : t('preview.zoom')}
-          side="bottom"
-        >
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setZoomOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 h-[var(--size-control-xs)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
-            aria-haspopup="menu"
-            aria-expanded={zoomOpen}
-            aria-label={t('preview.zoom')}
-          >
-            {previewZoom}%
-          </button>
-        </Tooltip>
 
         {zoomOpen && (
           <div
             role="menu"
-            className="absolute right-0 top-full mt-2 min-w-[var(--size-menu-compact)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1 z-10"
+            className="absolute right-0 top-full mt-[var(--space-1_5)] w-[56px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] p-[var(--space-1)] z-10"
           >
             {ZOOM_OPTIONS.map((value) => (
               <button
@@ -223,7 +141,8 @@ export function PreviewToolbar(): ReactElement {
                   setPreviewZoom(value);
                   setZoomOpen(false);
                 }}
-                className={`w-full px-3 py-2 text-[var(--text-sm)] text-left transition-colors duration-100 hover:bg-[var(--color-surface-hover)] ${previewZoom === value ? 'text-[var(--color-accent)] font-medium' : 'text-[var(--color-text-primary)]'}`}
+                className={`block w-full pr-[10px] py-[var(--space-1)] text-[12px] text-right rounded-[var(--radius-sm)] tabular-nums transition-colors duration-100 hover:bg-[var(--color-surface-hover)] ${previewZoom === value ? 'text-[var(--color-accent)] font-medium' : 'text-[var(--color-text-primary)]'}`}
+                style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
               >
                 {value}%
               </button>
@@ -233,27 +152,22 @@ export function PreviewToolbar(): ReactElement {
       </div>
 
       <div className="relative" ref={ref}>
-        <Tooltip label={disabled ? t('disabledReason.noDesignToExport') : undefined} side="bottom">
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1.5 h-[var(--size-control-xs)] px-3 rounded-[var(--radius-md)] text-[var(--text-sm)] font-medium border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-border-strong)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,border-color] duration-[var(--duration-fast)] ease-[var(--ease-out)]"
-            aria-haspopup="menu"
-            aria-expanded={open}
-          >
-            <Download
-              className="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]"
-              aria-hidden="true"
-            />
-            {t('export.button')}
-          </button>
-        </Tooltip>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setOpen((v) => !v)}
+          className="inline-flex items-center gap-[6px] h-[26px] px-[10px] text-[12px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:pointer-events-none transition-[background-color,color,transform] duration-[var(--duration-faster)] active:scale-[var(--scale-press-down)]"
+          aria-haspopup="menu"
+          aria-expanded={open}
+        >
+          <Download className="w-3.5 h-3.5" aria-hidden="true" />
+          {t('export.button')}
+        </button>
 
         {open && (
           <div
             role="menu"
-            className="absolute right-0 top-full mt-2 min-w-[var(--size-stage-min)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] py-1 z-10"
+            className="absolute right-0 top-full mt-[var(--space-1_5)] min-w-[320px] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] p-[var(--space-1)] z-10"
           >
             {exportItems.map((item) => (
               <button
@@ -261,16 +175,17 @@ export function PreviewToolbar(): ReactElement {
                 type="button"
                 role="menuitem"
                 disabled={!item.ready}
-                title={item.hint}
                 onClick={() => {
                   setOpen(false);
                   void exportActive(item.format);
                 }}
-                className="w-full flex items-center justify-between gap-3 px-3 py-2 text-[var(--text-sm)] text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors duration-100"
+                className="w-full flex flex-col items-start gap-[2px] px-[var(--space-3)] py-[var(--space-2)] text-left rounded-[var(--radius-sm)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors duration-100"
               >
-                <span>{item.label}</span>
+                <span className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
+                  {item.label}
+                </span>
                 {item.hint && (
-                  <span className="text-[var(--text-xs)] text-[var(--color-text-muted)] truncate max-w-[60%]">
+                  <span className="text-[11px] text-[var(--color-text-muted)] leading-[var(--leading-ui)]">
                     {item.hint}
                   </span>
                 )}

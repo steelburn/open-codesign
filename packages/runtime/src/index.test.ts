@@ -1,23 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildSrcdoc } from './index';
-
-const BODY_OPEN_RE = /<body[^>]*>/i;
+import { buildSrcdoc, extractAndUpgradeArtifact } from './index';
 
 describe('buildSrcdoc', () => {
-  it('wraps a fragment in a full document', () => {
-    const out = buildSrcdoc('<div>hi</div>');
-    expect(out).toContain('<!doctype html>');
-    expect(out).toContain('<div>hi</div>');
-    expect(out).toContain('ELEMENT_SELECTED');
-  });
-
-  it('injects overlay before </body> in a full document', () => {
-    const html = '<html><body><p>x</p></body></html>';
-    const out = buildSrcdoc(html);
-    expect(out).toContain('<p>x</p>');
-    expect(out.indexOf('ELEMENT_SELECTED')).toBeLessThan(out.indexOf('</body>'));
-  });
-
   it('strips CSP meta tags', () => {
     const html =
       '<html><head><meta http-equiv="Content-Security-Policy" content="default-src none"></head><body></body></html>';
@@ -25,149 +9,71 @@ describe('buildSrcdoc', () => {
     expect(out).not.toContain('Content-Security-Policy');
   });
 
-  it('injects baseline artifact-bg token before artifact head styles so artifact dark body bg wins', () => {
-    const html =
-      '<html><head><style>body { background: #0a0a0a; color: white; }</style></head><body><div>dark</div></body></html>';
-    const out = buildSrcdoc(html);
-    const baselineIdx = out.indexOf('background:var(--color-artifact-bg, #ffffff)');
-    const artifactIdx = out.indexOf('background: #0a0a0a');
-    expect(baselineIdx).toBeGreaterThanOrEqual(0);
-    expect(artifactIdx).toBeGreaterThanOrEqual(0);
-    expect(baselineIdx).toBeLessThan(artifactIdx);
-  });
-
-  it('injects baseline bg into a fragment template', () => {
-    const out = buildSrcdoc('<div>hi</div>');
-    expect(out).toContain('background:var(--color-artifact-bg, #ffffff)');
-  });
-
-  it('synthesises a head when artifact has <html> but no <head>', () => {
-    const html = '<html><body><style>body { background: #000 }</style>x</body></html>';
-    const out = buildSrcdoc(html);
-    expect(out).toContain('background:var(--color-artifact-bg, #ffffff)');
-    expect(out.indexOf('background:var(--color-artifact-bg, #ffffff)')).toBeLessThan(
-      out.indexOf('background: #000'),
-    );
-  });
-
-  it('wraps a body-only document (no <html>/<head>) and injects baseline', () => {
-    const html = '<body><style>body { background: #111 }</style><p>x</p></body>';
-    const out = buildSrcdoc(html);
-    expect(out).toContain('background:var(--color-artifact-bg, #ffffff)');
+  it('wraps bare HTML through the JSX path (no legacy HTML branch)', () => {
+    // Under the JSX-only contract, anything without EDITMODE / createRoot
+    // still goes through the React+Babel wrapper. Babel will surface a
+    // syntax error in the iframe overlay if the payload isn't valid JSX,
+    // but the wrapping itself is unconditional.
+    const out = buildSrcdoc('<html><body><p>x</p></body></html>');
+    expect(out).toContain('AGENT_BODY_BEGIN');
+    expect(out).toContain('<script type="text/babel"');
     expect(out).toContain('<p>x</p>');
-    expect(out).toContain('ELEMENT_SELECTED');
-    expect(out.indexOf('background:var(--color-artifact-bg, #ffffff)')).toBeLessThan(
-      out.indexOf('background: #111'),
-    );
-    // overlay script must land inside the body, before </body>
-    expect(out.indexOf('ELEMENT_SELECTED')).toBeLessThan(out.indexOf('</body>'));
   });
 
-  it('wraps a plain fragment with no html/head/body and injects baseline', () => {
+  it('wraps a fragment via the JSX path (no legacy HTML branch)', () => {
     const out = buildSrcdoc('<div>plain</div>');
-    expect(out).toContain('<!doctype html>');
-    expect(out).toContain('background:var(--color-artifact-bg, #ffffff)');
+    expect(out).toContain('AGENT_BODY_BEGIN');
+    expect(out).toContain('<script type="text/babel"');
     expect(out).toContain('<div>plain</div>');
+  });
+});
+
+describe('buildSrcdoc — JSX path', () => {
+  const jsxArtifact = `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"a":1}/*EDITMODE-END*/;
+function App() { return <div>hi</div>; }
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
+
+  it('routes JSX artifacts through the React+Babel template', () => {
+    const out = buildSrcdoc(jsxArtifact);
+    expect(out).toContain('AGENT_BODY_BEGIN');
+    expect(out).toContain('AGENT_BODY_END');
+    expect(out).toContain('text/babel');
+    // Vendored runtime + frame snippets must be inlined.
+    expect(out).toContain('IOSDevice');
+    expect(out).toContain('DesignCanvas');
+    // Overlay still present so element-selection / error reporting work.
     expect(out).toContain('ELEMENT_SELECTED');
+    // The agent's payload is embedded between the markers.
+    expect(out).toContain('TWEAK_DEFAULTS');
   });
 
-  describe('body tag shape normalization', () => {
-    it('shape 1: leaves matched <body>...</body> intact', () => {
-      const html = '<html><head></head><body><p>both</p></body></html>';
-      const out = buildSrcdoc(html);
-      expect(out).toContain('<p>both</p>');
-      expect(out.match(/<body[^>]*>/gi)?.length).toBe(1);
-      expect(out.match(/<\/body\s*>/gi)?.length).toBe(1);
-      expect(out.indexOf('<body')).toBeLessThan(out.indexOf('<p>both</p>'));
-      expect(out.indexOf('<p>both</p>')).toBeLessThan(out.indexOf('</body>'));
-    });
-
-    it('shape 2: appends </body> when only opener is present', () => {
-      const html = '<html><head></head><body><p>open only</p>';
-      const out = buildSrcdoc(html);
-      expect(out.match(/<body[^>]*>/gi)?.length).toBe(1);
-      expect(out.match(/<\/body\s*>/gi)?.length).toBe(1);
-      expect(out.indexOf('<p>open only</p>')).toBeLessThan(out.indexOf('</body>'));
-      expect(out.indexOf('ELEMENT_SELECTED')).toBeLessThan(out.indexOf('</body>'));
-    });
-
-    it('shape 3: injects <body> opener before content when only </body> is present', () => {
-      const html = '<p>close only</p></body>';
-      const out = buildSrcdoc(html);
-      const bodyOpen = out.search(BODY_OPEN_RE);
-      const contentIdx = out.indexOf('<p>close only</p>');
-      const bodyClose = out.indexOf('</body>');
-      expect(bodyOpen).toBeGreaterThanOrEqual(0);
-      expect(bodyOpen).toBeLessThan(contentIdx);
-      expect(contentIdx).toBeLessThan(bodyClose);
-      expect(out.match(/<body[^>]*>/gi)?.length).toBe(1);
-      expect(out.match(/<\/body\s*>/gi)?.length).toBe(1);
-    });
-
-    it('shape 3: injects <body> after <head> when </body> present without opener', () => {
-      const html = '<html><head><title>t</title></head><p>x</p></body></html>';
-      const out = buildSrcdoc(html);
-      const headClose = out.indexOf('</head>');
-      const bodyOpen = out.search(BODY_OPEN_RE);
-      const contentIdx = out.indexOf('<p>x</p>');
-      expect(headClose).toBeGreaterThanOrEqual(0);
-      expect(bodyOpen).toBeGreaterThan(headClose);
-      expect(bodyOpen).toBeLessThan(contentIdx);
-    });
-
-    it('shape 2 with </html>: inserts </body> BEFORE </html>, not after', () => {
-      const html = '<html><head></head><body><p>open only</p></html>';
-      const out = buildSrcdoc(html);
-      const bodyClose = out.indexOf('</body>');
-      const htmlClose = out.indexOf('</html>');
-      expect(bodyClose).toBeGreaterThanOrEqual(0);
-      expect(htmlClose).toBeGreaterThan(bodyClose);
-      expect(out).not.toMatch(/<\/html\s*>[\s\S]*<\/body\s*>/i);
-    });
-
-    it('shape 4 with <html>...</html> shell: <body> after <html>, </body> before </html>', () => {
-      const html = '<html><p>shell only</p></html>';
-      const out = buildSrcdoc(html);
-      const htmlOpen = out.search(/<html[^>]*>/i);
-      const bodyOpen = out.search(BODY_OPEN_RE);
-      const content = out.indexOf('<p>shell only</p>');
-      const bodyClose = out.indexOf('</body>');
-      const htmlClose = out.indexOf('</html>');
-      expect(htmlOpen).toBeLessThan(bodyOpen);
-      expect(bodyOpen).toBeLessThan(content);
-      expect(content).toBeLessThan(bodyClose);
-      expect(bodyClose).toBeLessThan(htmlClose);
-    });
-
-    it('shape 4 with </head> + </html>: <body> after </head>, </body> before </html>', () => {
-      const html = '<html><head><title>t</title></head><p>x</p></html>';
-      const out = buildSrcdoc(html);
-      const headClose = out.indexOf('</head>');
-      const bodyOpen = out.search(BODY_OPEN_RE);
-      const content = out.indexOf('<p>x</p>');
-      const bodyClose = out.indexOf('</body>');
-      const htmlClose = out.indexOf('</html>');
-      expect(headClose).toBeLessThan(bodyOpen);
-      expect(bodyOpen).toBeLessThan(content);
-      expect(content).toBeLessThan(bodyClose);
-      expect(bodyClose).toBeLessThan(htmlClose);
-    });
-
-    it('shape 4: wraps content in <body>...</body> when neither tag is present', () => {
-      const out = buildSrcdoc('<div>none</div>');
-      expect(out).toContain('<body>');
-      expect(out).toContain('</body>');
-      expect(out.indexOf('<body>')).toBeLessThan(out.indexOf('<div>none</div>'));
-      expect(out.indexOf('<div>none</div>')).toBeLessThan(out.indexOf('</body>'));
-    });
+  it('detects JSX via ReactDOM.createRoot signature even without EDITMODE', () => {
+    const src = `function App() { return <div/>; } ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
+    const out = buildSrcdoc(src);
+    expect(out).toContain('AGENT_BODY_BEGIN');
   });
 
-  it('injects baseline into a full document with <head>', () => {
-    const html = '<!doctype html><html><head><title>t</title></head><body>y</body></html>';
-    const out = buildSrcdoc(html);
-    expect(out).toContain('background:var(--color-artifact-bg, #ffffff)');
-    expect(out.indexOf('background:var(--color-artifact-bg, #ffffff)')).toBeLessThan(
-      out.indexOf('<title>t</title>'),
-    );
+  it('extractAndUpgradeArtifact wraps JSX payloads', () => {
+    const wrapped = extractAndUpgradeArtifact(jsxArtifact);
+    expect(wrapped).toContain('AGENT_BODY_BEGIN');
+    expect(wrapped).toContain('TWEAK_DEFAULTS');
+  });
+
+  it('extractAndUpgradeArtifact also wraps bare HTML (JSX-only contract)', () => {
+    const wrapped = extractAndUpgradeArtifact('<html><body>x</body></html>');
+    expect(wrapped).toContain('AGENT_BODY_BEGIN');
+    expect(wrapped).toContain('<script type="text/babel"');
+  });
+
+  it('extractAndUpgradeArtifact passes already-wrapped payloads through unchanged', () => {
+    const wrapped = extractAndUpgradeArtifact(jsxArtifact);
+    const wrappedTwice = extractAndUpgradeArtifact(wrapped);
+    expect(wrappedTwice).toBe(wrapped);
+  });
+
+  it('buildSrcdoc passes already-wrapped payloads through unchanged', () => {
+    const wrapped = buildSrcdoc(jsxArtifact);
+    const wrappedTwice = buildSrcdoc(wrapped);
+    expect(wrappedTwice).toBe(wrapped);
   });
 });

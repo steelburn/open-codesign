@@ -1,5 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import { IconButton, Tooltip } from '@open-codesign/ui';
+import { Tooltip } from '@open-codesign/ui';
 import { ArrowUp, Square } from 'lucide-react';
 import {
   type FormEvent,
@@ -9,7 +9,9 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from 'react';
+import { useCodesignStore } from '../../store';
 
 const MAX_TEXTAREA_ROWS = 6;
 
@@ -60,6 +62,47 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
 ) {
   const t = useT();
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const generationStage = useCodesignStore((s) => s.generationStage);
+
+  const runningLabel = isGenerating
+    ? (() => {
+        switch (generationStage) {
+          case 'sending':
+            return t('loading.stage.sending');
+          case 'thinking':
+            return t('loading.stage.thinking');
+          case 'streaming':
+            return t('loading.stage.streaming');
+          case 'parsing':
+            return t('loading.stage.parsing');
+          case 'rendering':
+            return t('loading.stage.rendering');
+          default:
+            return t('loading.stage.thinking');
+        }
+      })()
+    : null;
+
+  // Elapsed timer — reassures users that long agent runs are still alive.
+  // Only ticks while isGenerating; resets to 0 on each new run.
+  const [elapsedSec, setElapsedSec] = useState(0);
+  useEffect(() => {
+    if (!isGenerating) {
+      setElapsedSec(0);
+      return;
+    }
+    const start = Date.now();
+    setElapsedSec(0);
+    const id = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - start) / 1000));
+    }, 500);
+    return () => clearInterval(id);
+  }, [isGenerating]);
+
+  const elapsedText =
+    elapsedSec < 60
+      ? `${elapsedSec}s`
+      : `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`;
 
   useEffect(() => {
     if (taRef.current) resizeTextarea(taRef.current);
@@ -94,7 +137,7 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="relative rounded-[var(--radius-lg)] bg-[var(--color-surface)] border border-[var(--color-border)] focus-within:border-[var(--color-accent)] transition-colors duration-[var(--duration-faster)] ease-[var(--ease-out)]">
+      <div className="group relative rounded-[16px] bg-[var(--color-surface)] border border-[var(--color-border-muted)] focus-within:border-[var(--color-accent)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-accent)_12%,transparent)] transition-all duration-150 ease-out">
         <textarea
           ref={taRef}
           value={prompt}
@@ -104,49 +147,64 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
           }}
           onKeyDown={handleKeyDown}
           placeholder={t('chat.placeholderRich')}
-          disabled={isGenerating}
           rows={1}
-          className="block w-full resize-none bg-transparent px-[var(--space-3)] pt-[var(--space-3)] pb-[calc(var(--space-6)+var(--space-4))] text-[14px] leading-relaxed text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[var(--space-6)] overflow-y-auto"
+          className="codesign-prompt-textarea block w-full resize-none bg-transparent px-[14px] pt-[12px] pb-[44px] text-[14px] leading-[1.55] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none min-h-[24px] overflow-y-auto"
+          style={{ fontFamily: 'var(--font-sans)' }}
         />
 
         {leadingAction ? (
-          <div className="absolute bottom-[var(--space-1_5)] left-[var(--space-1_5)]">
-            {leadingAction}
-          </div>
+          <div className="absolute bottom-[8px] left-[8px]">{leadingAction}</div>
         ) : null}
 
-        <div className="absolute bottom-[var(--space-1_5)] right-[var(--space-1_5)]">
+        {/* Send / Stop button — bottom right, modern circular */}
+        <div className="absolute bottom-[8px] right-[8px]">
           {isGenerating ? (
-            <IconButton
-              size="sm"
-              label={t('chat.stop')}
+            <button
+              type="button"
               onClick={onCancel}
-              className="bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:bg-[var(--color-accent-hover)] hover:text-[var(--color-on-accent)] hover:scale-[var(--scale-hover-up)] active:scale-[var(--scale-press-down)] transition-[transform,background-color,color] duration-[var(--duration-faster)] ease-[var(--ease-out)]"
+              aria-label={t('chat.stop')}
+              className="relative inline-flex items-center justify-center w-[32px] h-[32px] rounded-full bg-[var(--color-accent)] text-white shadow-[0_2px_6px_color-mix(in_srgb,var(--color-accent)_35%,transparent)] hover:bg-[var(--color-accent-hover)] active:scale-[0.92] transition-all duration-150"
             >
-              <Square
-                className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]"
-                strokeWidth={0}
-                fill="currentColor"
+              <span
+                aria-hidden
+                className="absolute inset-0 rounded-full bg-[var(--color-accent)] opacity-40 animate-ping"
               />
-            </IconButton>
+              <Square className="relative w-[10px] h-[10px]" strokeWidth={0} fill="currentColor" />
+            </button>
           ) : (
             <Tooltip label={!canSend ? sendDisabledReason : undefined} side="top">
-              <IconButton
-                size="sm"
+              <button
                 type="submit"
-                label={t('chat.send')}
                 disabled={!canSend}
-                className="bg-[var(--color-accent)] text-[var(--color-on-accent)] shadow-[var(--shadow-soft)] hover:bg-[var(--color-accent-hover)] hover:text-[var(--color-on-accent)] hover:scale-[var(--scale-hover-up)] active:scale-[var(--scale-press-down)] disabled:opacity-30 disabled:hover:scale-100 transition-[transform,background-color,opacity,color] duration-[var(--duration-faster)] ease-[var(--ease-out)]"
+                aria-label={t('chat.send')}
+                className="inline-flex items-center justify-center w-[32px] h-[32px] rounded-full bg-[var(--color-accent)] text-white shadow-[0_2px_6px_color-mix(in_srgb,var(--color-accent)_30%,transparent)] hover:bg-[var(--color-accent-hover)] hover:shadow-[0_3px_10px_color-mix(in_srgb,var(--color-accent)_40%,transparent)] active:scale-[0.92] disabled:opacity-25 disabled:shadow-none disabled:cursor-not-allowed transition-all duration-150"
               >
-                <ArrowUp
-                  className="w-[var(--size-icon-md)] h-[var(--size-icon-md)]"
-                  strokeWidth={2.4}
-                />
-              </IconButton>
+                <ArrowUp className="w-[16px] h-[16px]" strokeWidth={2.5} />
+              </button>
             </Tooltip>
           )}
         </div>
       </div>
+      {runningLabel ? (
+        <div
+          aria-live="polite"
+          className="mt-[var(--space-2)] flex items-center justify-between gap-[var(--space-2)] px-[var(--space-1)]"
+        >
+          <div className="inline-flex items-center gap-[var(--space-1_5)] rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface)] px-[var(--space-2)] py-[3px] text-[11px] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)]">
+            <span aria-hidden className="relative inline-flex h-[6px] w-[6px] shrink-0">
+              <span className="absolute inset-0 rounded-full bg-[var(--color-accent)] opacity-45 animate-ping" />
+              <span className="relative inline-block h-full w-full rounded-full bg-[var(--color-accent)]" />
+            </span>
+            <span className="whitespace-nowrap">{runningLabel}</span>
+          </div>
+          <span
+            className="text-[11px] text-[var(--color-text-muted)]"
+            style={{ fontFamily: 'var(--font-mono)', fontFeatureSettings: "'tnum'" }}
+          >
+            {elapsedText}
+          </span>
+        </div>
+      ) : null}
     </form>
   );
 });

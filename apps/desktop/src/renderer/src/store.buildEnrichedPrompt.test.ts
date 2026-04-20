@@ -6,7 +6,7 @@ describe('buildEnrichedPrompt', () => {
     expect(buildEnrichedPrompt('make it blue', [])).toBe('make it blue');
   });
 
-  it('prepends pinned element context and preserves the user prompt', () => {
+  it('emits the REQUIRED EDITS preamble and preserves the user prompt as a trailing block', () => {
     const prompt = buildEnrichedPrompt('tweak the page', [
       {
         selector: 'button.cta',
@@ -15,18 +15,18 @@ describe('buildEnrichedPrompt', () => {
         text: 'Make this darker',
       },
     ]);
-    expect(prompt).toContain('The user has pinned these elements');
+    expect(prompt).toContain('## REQUIRED EDITS');
     expect(prompt).toContain('button.cta');
     expect(prompt).toContain('<button class="cta">Try free</button>');
-    expect(prompt).toContain('"Make this darker"');
+    expect(prompt).toContain('Make this darker');
     expect(prompt).toContain('tweak the page');
-    // ordering: pins come first, user prompt last
-    const pinsIdx = prompt.indexOf('The user has pinned');
+    // ordering: edit block comes first, user prompt last
+    const editsIdx = prompt.indexOf('### Edit 1');
     const userIdx = prompt.indexOf('tweak the page');
-    expect(pinsIdx).toBeLessThan(userIdx);
+    expect(editsIdx).toBeLessThan(userIdx);
   });
 
-  it('substitutes a default trailer when the user prompt is empty', () => {
+  it('omits the trailing user-prompt block when the prompt is empty', () => {
     const prompt = buildEnrichedPrompt('', [
       {
         selector: 'h1',
@@ -35,16 +35,18 @@ describe('buildEnrichedPrompt', () => {
         text: 'Shorter',
       },
     ]);
-    expect(prompt).toContain('Apply the pending changes.');
+    expect(prompt).toContain('### Edit 1');
+    expect(prompt).not.toContain('---');
   });
 
-  it('truncates very long outerHTML blobs', () => {
-    const big = 'x'.repeat(500);
+  it('truncates very long outerHTML blobs (cap is 600 chars)', () => {
+    const big = 'x'.repeat(800);
     const prompt = buildEnrichedPrompt('p', [
       { selector: '#x', tag: 'div', outerHTML: big, text: 'ok' },
     ]);
-    expect(prompt.length).toBeLessThan(500 + 400); // truncation applied
     expect(prompt).toContain('…');
+    // The big blob must not survive in full
+    expect(prompt).not.toContain(big);
   });
 
   it('numbers multiple edits sequentially', () => {
@@ -52,7 +54,61 @@ describe('buildEnrichedPrompt', () => {
       { selector: 'a', tag: 'a', outerHTML: '<a/>', text: 'A' },
       { selector: 'b', tag: 'b', outerHTML: '<b/>', text: 'B' },
     ]);
-    expect(prompt).toMatch(/1\. \[element: a/);
-    expect(prompt).toMatch(/2\. \[element: b/);
+    expect(prompt).toContain('### Edit 1: A');
+    expect(prompt).toContain('### Edit 2: B');
+  });
+
+  it('emits Scope: element when scope is omitted (back-compat default)', () => {
+    const prompt = buildEnrichedPrompt('go', [
+      { selector: 'a', tag: 'a', outerHTML: '<a/>', text: 'A' },
+    ]);
+    expect(prompt).toMatch(/Scope.*?: element/);
+  });
+
+  it('emits Scope: global when an edit is flagged global', () => {
+    const prompt = buildEnrichedPrompt('go', [
+      {
+        selector: 'a',
+        tag: 'a',
+        outerHTML: '<a/>',
+        text: 'A',
+        scope: 'global',
+      },
+    ]);
+    expect(prompt).toMatch(/Scope.*?: global/);
+  });
+
+  it('emits a Parent context line only when parentOuterHTML is present and non-empty', () => {
+    const withParent = buildEnrichedPrompt('go', [
+      {
+        selector: 'a',
+        tag: 'a',
+        outerHTML: '<a/>',
+        text: 'A',
+        parentOuterHTML: '<nav><a/></nav>',
+      },
+    ]);
+    expect(withParent).toContain('Parent context');
+    expect(withParent).toContain('<nav><a/></nav>');
+
+    const withoutParent = buildEnrichedPrompt('go', [
+      { selector: 'a', tag: 'a', outerHTML: '<a/>', text: 'A' },
+    ]);
+    expect(withoutParent).not.toContain('Parent context');
+  });
+
+  it('truncates very long parentOuterHTML blobs', () => {
+    const bigParent = 'p'.repeat(800);
+    const prompt = buildEnrichedPrompt('go', [
+      {
+        selector: 'a',
+        tag: 'a',
+        outerHTML: '<a/>',
+        text: 'A',
+        parentOuterHTML: bigParent,
+      },
+    ]);
+    expect(prompt).toContain('…');
+    expect(prompt).not.toContain(bigParent);
   });
 });

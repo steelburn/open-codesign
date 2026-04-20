@@ -153,7 +153,7 @@ describe('Workstream B Phase 1 — A/B parity', () => {
     expect(agentPath.message).toBe(legacy.message);
   });
 
-  it('produces the same artifact HTML for fenced markdown fallback', async () => {
+  it('both paths now ignore fenced markdown source (prose fallback removed in JSX overhaul)', async () => {
     const fenced = `Here is the revised HTML artifact.
 
 \`\`\`html
@@ -180,7 +180,10 @@ ${SAMPLE_HTML}
       apiKey: 'sk-test',
     });
 
-    expect(agentPath.artifacts[0]?.content).toBe(legacy.artifacts[0]?.content);
-    expect(agentPath.message).toBe(legacy.message);
+    // Both paths now require the structured artifact channel — the legacy
+    // ```html``` rescue was removed because it encouraged the model to
+    // double-emit (tool call + prose) and spammed the chat view.
+    expect(legacy.artifacts).toHaveLength(0);
+    expect(agentPath.artifacts).toHaveLength(0);
   });
 });

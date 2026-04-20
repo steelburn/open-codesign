@@ -33,4 +33,32 @@ export const zhCNExamples: Record<string, ExampleContent> = {
     title: '习惯追踪移动端首屏',
     description: '带手机外框的首屏：连续天数、习惯列表、底部 Tab 栏。',
   },
+  'pricing-page': {
+    title: 'SaaS 定价页',
+    description: '三档定价卡片，含功能对比表和月/年切换开关。',
+  },
+  'blog-article': {
+    title: '编辑风格博客文章',
+    description: '长文排版：目录侧栏、拉引引言、相关文章网格。',
+  },
+  'event-calendar': {
+    title: '团队日历视图',
+    description: '月度网格日历，带多日事件色条和即将到来的事件侧栏。',
+  },
+  'chat-interface': {
+    title: '聊天消息界面',
+    description: '移动端消息 UI：气泡、输入指示器、图片消息。',
+  },
+  'portfolio-gallery': {
+    title: '摄影作品集画廊',
+    description: '深色瀑布流网格，带悬浮遮罩、分类筛选和灯箱效果。',
+  },
+  'receipt-invoice': {
+    title: '可打印发票',
+    description: '简洁 A4 发票：明细表格、税额计算、付款条款。',
+  },
+  'settings-panel': {
+    title: '应用设置页面',
+    description: '侧栏导航的设置页：表单、开关、危险操作区。',
+  },
 };

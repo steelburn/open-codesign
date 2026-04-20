@@ -1,4 +1,6 @@
 import { useT } from '@open-codesign/i18n';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface AssistantTextProps {
   text: string;
@@ -6,30 +8,22 @@ interface AssistantTextProps {
   streaming?: boolean;
 }
 
-/**
- * Claude.ai-style assistant prose: full-width plain text, no role label —
- * user messages get a tinted bubble + right alignment, so role is
- * inferable from layout alone. Streaming indicator is three pulsing dots
- * rendered after the partial text.
- */
 export function AssistantText({ text, streaming }: AssistantTextProps) {
   const t = useT();
   return (
-    <div className="text-[14px] leading-relaxed text-[var(--color-text-primary)] whitespace-pre-wrap break-words [&>p+p]:mt-[var(--space-2)]">
-      {text}
+    <div className="space-y-[var(--space-1_5)]">
+      <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-[var(--color-surface)] shadow-[0_1px_3px_rgba(0,0,0,0.06)] border border-[var(--color-border-muted)] px-[var(--space-3)] py-[var(--space-2)] text-[14px] leading-relaxed text-[var(--color-text-primary)] break-words codesign-prose">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      </div>
       {streaming ? (
-        <span
-          className="inline-flex ml-[var(--space-1)] align-baseline"
+        <div
+          className="flex items-center gap-[5px] pl-[var(--space-2)] h-[16px]"
           aria-label={t('sidebar.chat.streamingLabel')}
         >
-          <span className="codesign-stream-dot">.</span>
-          <span className="codesign-stream-dot" style={{ animationDelay: '150ms' }}>
-            .
-          </span>
-          <span className="codesign-stream-dot" style={{ animationDelay: '300ms' }}>
-            .
-          </span>
-        </span>
+          <span className="codesign-stream-dot" />
+          <span className="codesign-stream-dot" style={{ animationDelay: '150ms' }} />
+          <span className="codesign-stream-dot" style={{ animationDelay: '300ms' }} />
+        </div>
       ) : null}
     </div>
   );

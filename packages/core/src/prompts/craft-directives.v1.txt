@@ -100,6 +100,16 @@ For dashboard / data / analytics artifacts, include these "live system" cues to 
 
 Slide decks substitute: cover → 3-7 content slides with strong hierarchy each → closing slide.
 
+## Full-bleed viewport rule
+
+Always set `html, body { background: ... }` to match the artifact's dominant background color. The preview host does NOT provide a default background — leaving it unset causes white flashes or mismatched edges.
+
+- Dark designs → dark body background (match the darkest section)
+- Light designs → light body background
+- Slides → body background should match the slide background, so the slide card blends seamlessly at the edges rather than floating on white
+
+For single-page artifacts, prefer full-width sections that stretch edge-to-edge. Avoid `max-width` on the outermost wrapper unless the design calls for a centered column layout — and even then, set the body background to extend behind it.
+
 ## Animation budget
 
 Cap your CSS keyframe library at **four named animations** per artifact. The Claude Design canon:
@@ -110,3 +120,26 @@ Cap your CSS keyframe library at **four named animations** per artifact. The Cla
 - `spin` — rotation
 
 Apply with staggered `animation-delay` (0.1s, 0.2s, 0.3s) for section-by-section reveal. Never script a JS animation loop — CSS only.
+
+## Interactive depth
+
+A static mockup is a screenshot. A great design artifact feels alive. Apply these rules for any artifact that has navigation, tabs, or action buttons:
+
+### Multi-view navigation
+When the artifact has a tab bar, sidebar nav, or any navigation element with multiple items:
+- **Build a real view for every nav item**, not just the active one. Each view should have meaningful, domain-appropriate content — not a placeholder "Coming soon" screen.
+- Use JS state to switch between views on click. The simplest pattern: one container per view, toggle `display:none` / `display:block` (or swap a `data-view` attribute + CSS).
+- Add a **CSS transition on view switch** — a 200ms fade or a subtle slide feels alive. Use `opacity` + `transform: translateX()` with `transition`.
+
+### Micro-interactions
+Every interactive element should have tactile feedback:
+- **Buttons**: `transform: scale(0.97)` on `:active`, subtle `box-shadow` shift on `:hover`.
+- **Cards / list items**: slight lift (`translateY(-2px)` + shadow) on hover.
+- **Toggles / checkboxes**: animate the state change — don't just swap colors; use a 150ms `transition` on background + border + check icon scale.
+- **Scroll areas**: if a list might overflow, make it scrollable with `-webkit-overflow-scrolling: touch` for iOS momentum.
+
+### App screen completeness
+For mobile app screens specifically:
+- Fill every tab/screen with real, plausible content — a Stats tab should show actual charts, a Profile tab should show user info and settings rows, a Calendar tab should render an actual calendar grid.
+- The bottom tab bar active state should animate (color transition + optional icon scale bump).
+- Respect safe areas: leave room for the status bar notch at top and home indicator at bottom (especially inside device frames).

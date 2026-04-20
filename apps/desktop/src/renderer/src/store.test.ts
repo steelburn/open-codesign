@@ -1,8 +1,7 @@
 import { initI18n } from '@open-codesign/i18n';
-import type { LocalInputFile, OnboardingState, SelectedElement } from '@open-codesign/shared';
+import type { OnboardingState, SelectedElement } from '@open-codesign/shared';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GenerationStage } from './store';
-import { accumulateWeekUsage, coerceUsageSnapshot, isoWeekKey, useCodesignStore } from './store';
+import { coerceUsageSnapshot, useCodesignStore } from './store';
 
 const READY_CONFIG: OnboardingState = {
   hasKey: true,
@@ -235,11 +234,9 @@ describe('useCodesignStore view navigation', () => {
     expect(useCodesignStore.getState().view).toBe('hub');
   });
 
-  it('setView("settings") switches to settings and closes command palette', () => {
-    useCodesignStore.setState({ commandPaletteOpen: true });
+  it('setView("settings") switches to settings', () => {
     useCodesignStore.getState().setView('settings');
     expect(useCodesignStore.getState().view).toBe('settings');
-    expect(useCodesignStore.getState().commandPaletteOpen).toBe(false);
   });
 
   it('setView("workspace") switches back from settings', () => {
@@ -254,7 +251,7 @@ describe('useCodesignStore token usage tracking', () => {
     await initI18n('en');
   });
 
-  it('records lastUsage and accumulates weekUsage when generate resolves with usage fields', async () => {
+  it('records lastUsage when generate resolves with usage fields', async () => {
     const generate = vi.fn(() =>
       Promise.resolve({
         artifacts: [{ content: '<html>ok</html>' }],
@@ -268,27 +265,14 @@ describe('useCodesignStore token usage tracking', () => {
     vi.stubGlobal('window', {
       codesign: { generate },
       setTimeout,
-      localStorage: {
-        getItem: () => null,
-        setItem: () => {
-          /* noop */
-        },
-      },
     });
 
-    useCodesignStore.setState({
-      weekUsage: { isoWeek: '2099-W01', inputTokens: 0, outputTokens: 0, costUsd: 0 },
-      lastUsage: null,
-    });
+    useCodesignStore.setState({ lastUsage: null });
 
     await useCodesignStore.getState().sendPrompt({ prompt: 'design landing' });
 
     const state = useCodesignStore.getState();
     expect(state.lastUsage).toEqual({ inputTokens: 1200, outputTokens: 800, costUsd: 0.0125 });
-    expect(state.weekUsage.inputTokens).toBe(1200);
-    expect(state.weekUsage.outputTokens).toBe(800);
-    expect(state.weekUsage.costUsd).toBeCloseTo(0.0125, 6);
-    expect(state.streamingTokenCount).toBe(2000);
   });
 
   it('treats missing usage fields as zero without crashing', async () => {
@@ -302,102 +286,12 @@ describe('useCodesignStore token usage tracking', () => {
     vi.stubGlobal('window', {
       codesign: { generate },
       setTimeout,
-      localStorage: { getItem: () => null, setItem: () => undefined },
     });
 
     await useCodesignStore.getState().sendPrompt({ prompt: 'fallback' });
 
     const state = useCodesignStore.getState();
     expect(state.lastUsage).toEqual({ inputTokens: 0, outputTokens: 0, costUsd: 0 });
-  });
-
-  it('surfaces a toast and preserves in-memory weekUsage when localStorage write throws', async () => {
-    const generate = vi.fn(() =>
-      Promise.resolve({
-        artifacts: [{ content: '<html>ok</html>' }],
-        message: 'Done.',
-        inputTokens: 100,
-        outputTokens: 50,
-        costUsd: 0.01,
-      }),
-    );
-
-    const setItem = vi.fn(() => {
-      throw new Error('QuotaExceeded');
-    });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-    vi.stubGlobal('window', {
-      codesign: { generate },
-      setTimeout,
-      localStorage: { getItem: () => null, setItem },
-    });
-
-    useCodesignStore.setState({
-      weekUsage: {
-        isoWeek: isoWeekKey(new Date()),
-        inputTokens: 7,
-        outputTokens: 3,
-        costUsd: 0.02,
-      },
-      lastUsage: null,
-    });
-
-    await useCodesignStore.getState().sendPrompt({ prompt: 'persist failure' });
-
-    const state = useCodesignStore.getState();
-    expect(setItem).toHaveBeenCalled();
-    expect(state.weekUsage.inputTokens).toBe(107);
-    expect(state.weekUsage.outputTokens).toBe(53);
-    expect(state.weekUsage.costUsd).toBeCloseTo(0.03, 6);
-    expect(state.lastUsage).toEqual({ inputTokens: 100, outputTokens: 50, costUsd: 0.01 });
-    expect(state.toasts.at(-1)).toMatchObject({
-      variant: 'error',
-      description: 'QuotaExceeded',
-    });
-    expect(warnSpy).toHaveBeenCalled();
-
-    warnSpy.mockRestore();
-  });
-});
-
-describe('accumulateWeekUsage', () => {
-  it('adds delta to current bucket when isoWeek matches', () => {
-    const prev = { isoWeek: '2026-W16', inputTokens: 100, outputTokens: 50, costUsd: 0.5 };
-    const next = accumulateWeekUsage(
-      prev,
-      { inputTokens: 30, outputTokens: 20, costUsd: 0.25 },
-      new Date('2026-04-19T12:00:00Z'),
-    );
-    expect(next.isoWeek).toBe('2026-W16');
-    expect(next.inputTokens).toBe(130);
-    expect(next.outputTokens).toBe(70);
-    expect(next.costUsd).toBeCloseTo(0.75, 6);
-  });
-
-  it('resets bucket when the ISO week has rolled over', () => {
-    const prev = { isoWeek: '2025-W01', inputTokens: 999, outputTokens: 999, costUsd: 9 };
-    const next = accumulateWeekUsage(
-      prev,
-      { inputTokens: 5, outputTokens: 7, costUsd: 0.01 },
-      new Date('2026-04-19T12:00:00Z'),
-    );
-    expect(next.isoWeek).not.toBe('2025-W01');
-    expect(next.inputTokens).toBe(5);
-    expect(next.outputTokens).toBe(7);
-    expect(next.costUsd).toBeCloseTo(0.01, 6);
-  });
-
-  it('clamps negative deltas to zero', () => {
-    const prev = { isoWeek: isoWeekKey(new Date()), inputTokens: 10, outputTokens: 10, costUsd: 1 };
-    const next = accumulateWeekUsage(
-      prev,
-      { inputTokens: -5, outputTokens: -3, costUsd: -0.5 },
-      new Date(),
-    );
-    expect(next.inputTokens).toBe(10);
-    expect(next.outputTokens).toBe(10);
-    expect(next.costUsd).toBe(1);
   });
 });
 
@@ -436,50 +330,41 @@ describe('coerceUsageSnapshot', () => {
   });
 });
 
-// Simulate the escape handler logic from App.tsx to verify priority:
-//   commandPaletteOpen → close palette (view unchanged)
-//   palette closed + view=settings → go to workspace
+// Simulate the escape handler logic from App.tsx: in settings view, ESC goes
+// back to previousView; in workspace, ESC is no longer a view-jump (only
+// closes local overlays, none of which are exercised here).
 function pressEscape(
   view: ReturnType<typeof useCodesignStore.getState>['view'],
-  commandPaletteOpen: boolean,
 ): void {
   const store = useCodesignStore.getState();
-  if (commandPaletteOpen) {
-    store.closeCommandPalette();
-    return;
-  }
   if (view === 'settings') {
-    store.setView('workspace');
+    const prev = store.previousView;
+    store.setView(prev === 'settings' ? 'hub' : prev);
   }
 }
 
-describe('ESC key priority: command palette > settings view', () => {
-  it('ESC closes command palette without leaving settings when both are open', () => {
-    useCodesignStore.setState({ view: 'settings', commandPaletteOpen: true });
-    pressEscape('settings', true);
+describe('ESC key: settings view returns to previousView', () => {
+  it('ESC from settings (entered from workspace) returns to workspace', () => {
+    useCodesignStore.setState({ view: 'workspace', previousView: 'hub' });
+    useCodesignStore.getState().setView('settings');
+    pressEscape('settings');
 
-    const s = useCodesignStore.getState();
-    expect(s.commandPaletteOpen).toBe(false);
-    // view must stay on settings — the palette consumed the keypress
-    expect(s.view).toBe('settings');
+    expect(useCodesignStore.getState().view).toBe('workspace');
   });
 
-  it('ESC navigates back to workspace when palette is closed and view is settings', () => {
-    useCodesignStore.setState({ view: 'settings', commandPaletteOpen: false });
-    pressEscape('settings', false);
+  it('ESC from settings (entered from hub) returns to hub', () => {
+    useCodesignStore.setState({ view: 'hub', previousView: 'hub' });
+    useCodesignStore.getState().setView('settings');
+    pressEscape('settings');
 
-    const s = useCodesignStore.getState();
-    expect(s.view).toBe('workspace');
-    expect(s.commandPaletteOpen).toBe(false);
+    expect(useCodesignStore.getState().view).toBe('hub');
   });
 
-  it('ESC is a no-op when palette is closed and view is workspace', () => {
-    useCodesignStore.setState({ view: 'workspace', commandPaletteOpen: false });
-    pressEscape('workspace', false);
+  it('ESC is a no-op when view is workspace', () => {
+    useCodesignStore.setState({ view: 'workspace', previousView: 'hub' });
+    pressEscape('workspace');
 
-    const s = useCodesignStore.getState();
-    expect(s.view).toBe('workspace');
-    expect(s.commandPaletteOpen).toBe(false);
+    expect(useCodesignStore.getState().view).toBe('workspace');
   });
 });
 
@@ -518,110 +403,6 @@ describe('useCodesignStore active provider routing', () => {
   });
 });
 
-describe('useCodesignStore project storage error surfacing', () => {
-  beforeAll(async () => {
-    await initI18n('en');
-  });
-
-  it('createProject pushes a toast when localStorage.setItem throws and keeps the project in memory', () => {
-    const setItem = vi.fn(() => {
-      throw new Error('QuotaExceededError');
-    });
-    const getItem = vi.fn(() => null);
-
-    vi.stubGlobal('window', {
-      localStorage: { setItem, getItem, removeItem: vi.fn(), clear: vi.fn() },
-      setTimeout,
-    });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const projectsBefore = useCodesignStore.getState().projects;
-    const toastsBefore = useCodesignStore.getState().toasts.length;
-
-    const project = useCodesignStore
-      .getState()
-      .createProject({ name: 'My Project', type: 'slideDeck' });
-
-    const state = useCodesignStore.getState();
-
-    // In-memory state stays consistent — the project was added even though persist failed.
-    expect(state.projects[0]).toEqual(project);
-    expect(state.projects).toHaveLength(projectsBefore.length + 1);
-    expect(state.currentProjectId).toBe(project.id);
-
-    // Toast surfaced with the i18n title and the underlying error message.
-    expect(state.toasts.length).toBe(toastsBefore + 1);
-    expect(state.toasts.at(-1)).toMatchObject({
-      variant: 'error',
-      description: 'QuotaExceededError',
-    });
-    expect(state.toasts.at(-1)?.title).toBeTruthy();
-
-    expect(setItem).toHaveBeenCalledOnce();
-    expect(warnSpy).toHaveBeenCalled();
-
-    warnSpy.mockRestore();
-  });
-
-  it('createProject resets project-scoped workspace state when switching to the new project', () => {
-    vi.stubGlobal('window', {
-      localStorage: {
-        setItem: vi.fn(),
-        getItem: vi.fn(() => null),
-        removeItem: vi.fn(),
-        clear: vi.fn(),
-      },
-      setTimeout,
-    });
-
-    const staleFile: LocalInputFile = {
-      path: '/tmp/old.png',
-      name: 'old.png',
-      size: 1,
-    };
-    const staleSelection: SelectedElement = {
-      selector: '.stale',
-      tag: 'div',
-      outerHTML: '<div class="stale">old</div>',
-      rect: { top: 0, left: 0, width: 10, height: 10 },
-    };
-
-    useCodesignStore.setState({
-      messages: [{ role: 'user', content: 'old prompt' }],
-      previewHtml: '<html>old</html>',
-      inputFiles: [staleFile],
-      referenceUrl: 'https://example.com/old',
-      selectedElement: staleSelection,
-      lastPromptInput: { prompt: 'old prompt', attachments: [staleFile] },
-      isGenerating: true,
-      activeGenerationId: 'gen-old',
-      errorMessage: 'stale error',
-      lastError: 'stale error',
-      generationStage: 'streaming' as GenerationStage,
-    });
-
-    const project = useCodesignStore
-      .getState()
-      .createProject({ name: 'Fresh Project', type: 'prototype' });
-
-    const state = useCodesignStore.getState();
-    expect(state.currentProjectId).toBe(project.id);
-    expect(state.view).toBe('workspace');
-    expect(state.createProjectModalOpen).toBe(false);
-    expect(state.messages).toEqual([]);
-    expect(state.previewHtml).toBeNull();
-    expect(state.inputFiles).toEqual([]);
-    expect(state.referenceUrl).toBe('');
-    expect(state.selectedElement).toBeNull();
-    expect(state.lastPromptInput).toBeNull();
-    expect(state.isGenerating).toBe(false);
-    expect(state.activeGenerationId).toBeNull();
-    expect(state.errorMessage).toBeNull();
-    expect(state.lastError).toBeNull();
-    expect(state.generationStage).toBe('idle');
-  });
-});
-
 describe('useCodesignStore previewViewport', () => {
   it('defaults to desktop', () => {
     expect(useCodesignStore.getState().previewViewport).toBe('desktop');
@@ -645,7 +426,7 @@ describe('useCodesignStore previewViewport', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Project (design) management
+// Design management
 // ---------------------------------------------------------------------------
 
 describe('useCodesignStore design management', () => {
@@ -742,7 +523,7 @@ describe('useCodesignStore design management', () => {
     expect(state.previewHtml).toBeNull();
   });
 
-  it('blocks switchDesign while a generation is running', async () => {
+  it('allows switchDesign while another design is generating (generation stays bound to its origin)', async () => {
     vi.stubGlobal('window', {
       codesign: {
         snapshots: {
@@ -756,14 +537,16 @@ describe('useCodesignStore design management', () => {
     useCodesignStore.setState({
       currentDesignId: 'design-a',
       isGenerating: true,
+      generatingDesignId: 'design-a',
     });
 
     await useCodesignStore.getState().switchDesign('design-b');
 
-    // Should not have switched.
-    expect(useCodesignStore.getState().currentDesignId).toBe('design-a');
-    // Should have surfaced a toast about the block.
-    expect(useCodesignStore.getState().toasts.at(-1)?.variant).toBe('info');
+    const state = useCodesignStore.getState();
+    expect(state.currentDesignId).toBe('design-b');
+    // Generation flag still set, but bound to the originating design.
+    expect(state.isGenerating).toBe(true);
+    expect(state.generatingDesignId).toBe('design-a');
   });
 
   it('blocks softDeleteDesign while a generation is running so applyGenerateSuccess cannot leak into a stale design', async () => {
@@ -1004,3 +787,4 @@ describe('useCodesignStore interaction mode', () => {
     expect(s.selectedElement).toBeNull();
   });
 });
+

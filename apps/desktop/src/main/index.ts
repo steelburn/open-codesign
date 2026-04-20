@@ -1,11 +1,15 @@
+import { join, basename, dirname } from 'node:path';
+import type { AgentStreamEvent } from '../preload/index';
 import { stat } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   type AgentEvent,
   type CoreLogger,
+  DESIGN_SKILLS,
+  FRAME_TEMPLATES,
   applyComment,
   generate,
+  generateTitle,
   generateViaAgent,
 } from '@open-codesign/core';
 import { detectProviderFromKey } from '@open-codesign/providers';
@@ -23,6 +27,7 @@ import { registerChatMessagesIpc, registerChatMessagesUnavailableIpc } from './c
 import { registerCommentsIpc, registerCommentsUnavailableIpc } from './comments-ipc';
 import { registerConnectionIpc } from './connection-ipc';
 import { scanDesignSystem } from './design-system';
+import { makeRuntimeVerifier } from './done-verify';
 import { BrowserWindow, app, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
 import { armGenerationTimeout, cancelGenerationRequest } from './generation-ipc';
@@ -60,7 +65,12 @@ let mainWindow: ElectronBrowserWindow | null = null;
  */
 const USE_AGENT_RUNTIME = (() => {
   const raw = process.env['USE_AGENT_RUNTIME'];
-  return raw === '1' || raw === 'true';
+  // Default ON: we want the tool-loop path by default now that text streaming
+  // and the text_editor + set_todos tools are wired. Explicitly opt out with
+  // `USE_AGENT_RUNTIME=0` or `=false` to fall back to the single-turn
+  // generate() path.
+  if (raw === '0' || raw === 'false') return false;
+  return true;
 })();
 
 function createWindow(): void {
@@ -72,6 +82,7 @@ function createWindow(): void {
     autoHideMenuBar: process.platform !== 'darwin',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     backgroundColor: BRAND.backgroundColor,
+    icon: join(__dirname, '../../resources/icon.png'),
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
@@ -116,17 +127,200 @@ function registerIpcHandlers(): void {
   /**
    * Phase 1 flag dispatcher. When `USE_AGENT_RUNTIME` is off, passes through
    * to `generate()` unchanged. When on, routes through `generateViaAgent()`
-   * and forwards each `AgentEvent` to the per-request log for now — Workstream C
-   * will tap the same onEvent signature to persist events into `chat_messages`.
+   * and forwards normalized `AgentEvent`s to the renderer via
+   * `agent:event:v1` so the sidebar chat can render incremental output
+   * instead of waiting for the full final message.
    */
   const runGenerate = (
     input: Parameters<typeof generate>[0],
     id: string,
+    designId: string | null,
+    previousHtml: string | null,
   ): ReturnType<typeof generate> => {
     if (!USE_AGENT_RUNTIME) return generate(input);
+    const sendEvent = (event: AgentStreamEvent) => {
+      mainWindow?.webContents.send('agent:event:v1', event);
+    };
+    const baseCtx = { designId: designId ?? '', generationId: id } as const;
+    const toolStartedAt = new Map<string, number>();
+    const runtimeVerify = makeRuntimeVerifier();
+
+    // In-memory virtual FS for the text_editor tool. Scoped to this
+    // generation — fresh Map per run. Seeded with the design's current
+    // HTML under index.html so the agent can view/edit incrementally.
+    const fsMap = new Map<string, string>();
+    if (previousHtml && previousHtml.trim().length > 0) {
+      fsMap.set('index.html', previousHtml);
+    }
+    // Seed the virtual fs with optional device-frame starter templates. The
+    // agent decides whether to view/use them based on the brief — there is
+    // no keyword detection here. See packages/core/src/frames/README.md.
+    for (const [name, content] of FRAME_TEMPLATES) {
+      fsMap.set(`frames/${name}`, content);
+    }
+    // Same shape for design-skill snippets — `view skills/<name>.md` to learn
+    // a reusable pattern, then adapt. Pure progressive disclosure: model
+    // decides, no keyword router. See packages/core/src/design-skills/.
+    for (const [name, content] of DESIGN_SKILLS) {
+      fsMap.set(`skills/${name}`, content);
+    }
+    const fs = {
+      view(path: string) {
+        const content = fsMap.get(path);
+        if (content === undefined) return null;
+        return { content, numLines: content.split('\n').length };
+      },
+      create(path: string, content: string) {
+        fsMap.set(path, content);
+        emitFsUpdated(path, content);
+        return { path };
+      },
+      strReplace(path: string, oldStr: string, newStr: string) {
+        const current = fsMap.get(path);
+        if (current === undefined) throw new Error(`File not found: ${path}`);
+        const idx = current.indexOf(oldStr);
+        if (idx === -1) throw new Error(`old_str not found in ${path}`);
+        if (current.indexOf(oldStr, idx + oldStr.length) !== -1) {
+          throw new Error(`old_str is ambiguous in ${path}; provide more context`);
+        }
+        const next = current.slice(0, idx) + newStr + current.slice(idx + oldStr.length);
+        fsMap.set(path, next);
+        emitFsUpdated(path, next);
+        return { path };
+      },
+      insert(path: string, line: number, text: string) {
+        const current = fsMap.get(path) ?? '';
+        const lines = current.split('\n');
+        const clamped = Math.max(0, Math.min(line, lines.length));
+        lines.splice(clamped, 0, text);
+        const next = lines.join('\n');
+        fsMap.set(path, next);
+        emitFsUpdated(path, next);
+        return { path };
+      },
+      listDir(dir: string) {
+        const prefix = dir.length === 0 || dir === '.' ? '' : `${dir.replace(/\/+$/, '')}/`;
+        const entries = new Set<string>();
+        for (const p of fsMap.keys()) {
+          if (!p.startsWith(prefix)) continue;
+          const rest = p.slice(prefix.length);
+          const firstSegment = rest.split('/')[0];
+          if (firstSegment) entries.add(firstSegment);
+        }
+        return [...entries].sort();
+      },
+    };
+
+    // Fan virtual-fs writes to the renderer so the iframe can re-render the
+    // artifact in near real time. Routed through the existing agent:event:v1
+    // channel as a `fs_updated` variant — single-channel keeps ordering with
+    // tool_call_start/end. Skip emission when the run isn't tied to a design
+    // (no preview pane to update).
+    function emitFsUpdated(path: string, content: string): void {
+      if (designId === null) return;
+      sendEvent({ ...baseCtx, type: 'fs_updated', path, content });
+    }
+
+    // Per-turn counters so we can emit a single summary line at turn_end
+    // instead of a log per token delta.
+    let deltaCount = 0;
+    let toolCount = 0;
+
     return generateViaAgent(input, {
+      fs,
+      runtimeVerify,
       onEvent: (event: AgentEvent) => {
-        logIpc.info('generate.agent.event', { id, type: event.type });
+        // High-signal only. Skip per-token deltas and inner message_*
+        // markers. Emit a concise summary at turn_end.
+        if (event.type === 'turn_start') {
+          deltaCount = 0;
+          toolCount = 0;
+          logIpc.info('agent.turn_start', { id });
+        } else if (event.type === 'message_update') {
+          const ame = event.assistantMessageEvent;
+          if (ame.type === 'text_delta') deltaCount += 1;
+        } else if (event.type === 'tool_execution_start') {
+          toolCount += 1;
+          logIpc.info('agent.tool_start', { id, tool: event.toolName });
+        } else if (event.type === 'tool_execution_end') {
+          logIpc.info('agent.tool_end', {
+            id,
+            tool: event.toolName,
+            isError: event.isError,
+          });
+        } else if (event.type === 'turn_end') {
+          logIpc.info('agent.turn_end', { id, deltas: deltaCount, tools: toolCount });
+        } else if (event.type === 'agent_end') {
+          logIpc.info('agent.end', { id });
+        }
+        if (designId === null) return; // no routing target
+        if (event.type === 'turn_start') {
+          sendEvent({ ...baseCtx, type: 'turn_start' });
+          return;
+        }
+        if (event.type === 'message_update') {
+          const ame = event.assistantMessageEvent;
+          if (ame.type === 'text_delta' && typeof ame.delta === 'string') {
+            sendEvent({ ...baseCtx, type: 'text_delta', delta: ame.delta });
+          }
+          return;
+        }
+        if (event.type === 'tool_execution_start') {
+          toolStartedAt.set(event.toolCallId, Date.now());
+          const argsObj =
+            typeof event.args === 'object' && event.args !== null
+              ? (event.args as Record<string, unknown>)
+              : {};
+          const command =
+            typeof argsObj['command'] === 'string'
+              ? (argsObj['command'] as string)
+              : undefined;
+          sendEvent({
+            ...baseCtx,
+            type: 'tool_call_start',
+            toolName: event.toolName,
+            toolCallId: event.toolCallId,
+            args: argsObj,
+            ...(command ? { command } : {}),
+          });
+          return;
+        }
+        if (event.type === 'tool_execution_end') {
+          const startedAt = toolStartedAt.get(event.toolCallId) ?? Date.now();
+          toolStartedAt.delete(event.toolCallId);
+          sendEvent({
+            ...baseCtx,
+            type: 'tool_call_result',
+            toolName: event.toolName,
+            toolCallId: event.toolCallId,
+            result: event.result,
+            durationMs: Date.now() - startedAt,
+          });
+          return;
+        }
+        if (event.type === 'turn_end') {
+          const msg = event.message as { content?: Array<{ type: string; text?: string }> };
+          const rawText = (msg.content ?? [])
+            .filter(
+              (c): c is { type: 'text'; text: string } =>
+                c.type === 'text' && typeof c.text === 'string',
+            )
+            .map((c) => c.text)
+            .join('');
+          // Strip <artifact ...>...</artifact> blocks — artifact content is
+          // delivered via fs_updated / artifact_delivered, not the chat text.
+          const finalText = rawText.replace(/<artifact[\s\S]*?<\/artifact>/g, '').trim();
+          sendEvent({ ...baseCtx, type: 'turn_end', finalText });
+          return;
+        }
+        if (event.type === 'agent_end') {
+          // Final boundary of an agent run — renderer uses this to persist a
+          // SQLite snapshot from the in-memory previewHtml so the design
+          // survives an app restart. Without this the next switchDesign() at
+          // boot finds no snapshot and falls back to the empty welcome state.
+          sendEvent({ ...baseCtx, type: 'agent_end' });
+          return;
+        }
       },
     });
   };
@@ -147,6 +341,21 @@ function registerIpcHandlers(): void {
       throw new CodesignError('detect-provider expects a string key', 'IPC_BAD_INPUT');
     }
     return detectProviderFromKey(key);
+  });
+
+  // Standalone runtime-verify IPC. Renderer / debug callers can invoke this
+  // directly to dry-run an artifact without going through the agent loop.
+  // The agent itself uses the same verifier as an injected callback (see
+  // runGenerate above), so this handler is NOT in the hot path. Hidden
+  // BrowserWindow + Babel makes vitest unworkable here — manual verification
+  // path documented in done-verify.ts.
+  const sharedRuntimeVerifier = makeRuntimeVerifier();
+  ipcMain.handle('done:verify:v1', async (_e, raw: unknown) => {
+    if (typeof raw !== 'object' || raw === null || typeof (raw as { artifact?: unknown }).artifact !== 'string') {
+      throw new CodesignError('done:verify:v1 expects { artifact: string }', 'IPC_BAD_INPUT');
+    }
+    const errors = await sharedRuntimeVerifier((raw as { artifact: string }).artifact);
+    return { errors };
   });
 
   ipcMain.handle('codesign:pick-input-files', async () => {
@@ -311,6 +520,8 @@ function registerIpcHandlers(): void {
           logger: coreLogger,
         },
         id,
+        payload.designId ?? null,
+        payload.previousHtml ?? null,
       );
       logIpc.info('generate.ok', {
         id,
@@ -407,6 +618,8 @@ function registerIpcHandlers(): void {
           signal: controller.signal,
         },
         id,
+        null,
+        null,
       );
       logIpc.info('generate.ok', {
         id,
@@ -509,6 +722,32 @@ function registerIpcHandlers(): void {
       });
       throw err;
     }
+  });
+
+  ipcMain.handle('codesign:v1:generate-title', async (_e, raw: unknown): Promise<string> => {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new CodesignError('generate-title expects an object payload', 'IPC_BAD_INPUT');
+    }
+    const prompt = (raw as { prompt?: unknown }).prompt;
+    if (typeof prompt !== 'string' || prompt.trim().length === 0) {
+      throw new CodesignError('generate-title requires a non-empty prompt', 'IPC_BAD_INPUT');
+    }
+    const cfg = getCachedConfig();
+    if (cfg === null) throw new CodesignError('No configuration', 'CONFIG_MISSING');
+    const active = resolveActiveModel(cfg, {
+      provider: cfg.activeProvider,
+      modelId: cfg.activeModel,
+    });
+    const apiKey = getApiKeyForProvider(active.model.provider);
+    const baseUrl = active.baseUrl ?? undefined;
+    return generateTitle({
+      prompt,
+      model: active.model,
+      apiKey,
+      ...(baseUrl !== undefined ? { baseUrl } : {}),
+      wire: active.wire,
+      ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+    });
   });
 
   ipcMain.handle('codesign:open-log-folder', async () => {

@@ -49,8 +49,11 @@ export function variantFor(comment: CommentRow): PinVariant {
 
 export function pinStyle(comment: CommentRow, zoom: number): { top: string; left: string } {
   const scale = zoom / 100;
-  const top = comment.rect.top * scale - 12;
-  const left = comment.rect.left * scale + comment.rect.width * scale - 12;
+  // Position pin at the outer top-right corner: half-overlapping the corner
+  // so it reads as a "badge" attached to the element rather than floating
+  // randomly. Pin is 20px, so offset by -10 = half outside.
+  const top = comment.rect.top * scale - 10;
+  const left = comment.rect.left * scale + comment.rect.width * scale - 10;
   return { top: `${top}px`, left: `${left}px` };
 }
 
@@ -74,7 +77,7 @@ export function PinOverlay({ comments, zoom, onPinClick }: PinOverlayProps) {
             aria-label={label}
             onClick={() => onPinClick(comment)}
             style={pos}
-            className={`pointer-events-auto absolute flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-semibold shadow-[var(--shadow-soft)] transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-1 ${v.bg} ${v.border} ${v.text} ${v.ring}`}
+            className={`pointer-events-auto absolute flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] text-[10px] font-semibold leading-none tabular-nums shadow-[0_2px_6px_rgba(0,0,0,0.25)] transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-1 ${v.bg} ${v.border} ${v.text} ${v.ring}`}
           >
             {index + 1}
           </button>

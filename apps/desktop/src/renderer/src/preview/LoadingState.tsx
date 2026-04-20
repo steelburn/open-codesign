@@ -58,17 +58,13 @@ function StageIcon({ stage }: { stage: GenerationStage }): ReactNode {
 export interface LoadingStateProps {
   /** Override stage for testing */
   stage?: GenerationStage;
-  /** Override token count for testing */
-  tokenCount?: number;
 }
 
-export function LoadingState({ stage: stageProp, tokenCount: tokenProp }: LoadingStateProps = {}) {
+export function LoadingState({ stage: stageProp }: LoadingStateProps = {}) {
   const t = useT();
   const storeStage = useCodesignStore((s) => s.generationStage);
-  const storeTokens = useCodesignStore((s) => s.streamingTokenCount);
 
   const stage = stageProp ?? storeStage;
-  const tokenCount = tokenProp ?? storeTokens;
 
   const activeStage: GenerationStage = stage === 'idle' || stage === 'error' ? 'thinking' : stage;
   const progress = STAGE_PROGRESS[stage];
@@ -92,11 +88,6 @@ export function LoadingState({ stage: stageProp, tokenCount: tokenProp }: Loadin
           <div className="loading-stages flex items-center gap-[var(--space-2)] text-[var(--color-text-secondary)] text-[var(--text-sm)]">
             <StageIcon stage={activeStage} />
             <span className="stage-label">{t(`loading.stage.${activeStage}`)}</span>
-            {activeStage === 'streaming' && tokenCount > 0 && (
-              <span className="font-mono text-[var(--text-xs)] text-[var(--color-text-tertiary)]">
-                {t('loading.tokens', { count: tokenCount })}
-              </span>
-            )}
           </div>
           {/* Progress indicator — shows completed steps out of 5 visible stages */}
           <progress
