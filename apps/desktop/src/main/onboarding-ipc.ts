@@ -796,9 +796,17 @@ export function registerOnboardingIpc(): void {
         readCodexConfig().catch(() => null),
         readClaudeCodeSettings().catch(() => null),
       ]);
+      const providerIds = Object.keys(cachedConfig?.providers ?? {});
+      const alreadyHasCodex = providerIds.some((id) => id.startsWith('codex-'));
+      const alreadyHasClaudeCode = providerIds.includes('claude-code-imported');
       const out: ExternalConfigsDetection = {};
-      if (codex !== null && codex.providers.length > 0) out.codex = codex;
-      if (claudeCode !== null && claudeCode.provider !== null) out.claudeCode = claudeCode;
+      if (codex !== null && codex.providers.length > 0 && !alreadyHasCodex) out.codex = codex;
+      if (
+        claudeCode !== null &&
+        claudeCode.provider !== null &&
+        !alreadyHasClaudeCode
+      )
+        out.claudeCode = claudeCode;
       return out;
     },
   );

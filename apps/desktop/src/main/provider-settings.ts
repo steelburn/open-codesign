@@ -17,6 +17,7 @@ export interface ProviderRow {
   label: string;
   builtin: boolean;
   wire: WireApi;
+  defaultModel: string;
   error?: 'decryption_failed' | string;
 }
 
@@ -94,6 +95,11 @@ export function toProviderRows(
       label,
       builtin: entry?.builtin ?? isSupportedOnboardingProvider(provider),
       wire: entry?.wire ?? 'openai-chat',
+      defaultModel:
+        entry?.defaultModel ??
+        (isSupportedOnboardingProvider(provider)
+          ? PROVIDER_SHORTLIST[provider].defaultPrimary
+          : ''),
       ...(rowError !== undefined ? { error: rowError } : {}),
     });
   }

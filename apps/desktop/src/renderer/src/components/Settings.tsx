@@ -837,6 +837,22 @@ function ActiveModelSelector({
   );
 }
 
+const DISMISSED_BANNER_PREFIX = 'open-codesign:settings:dismissed-import-banner:';
+function readDismissed(kind: 'codex' | 'claudeCode'): boolean {
+  try {
+    return window.localStorage.getItem(DISMISSED_BANNER_PREFIX + kind) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeDismissed(kind: 'codex' | 'claudeCode'): void {
+  try {
+    window.localStorage.setItem(DISMISSED_BANNER_PREFIX + kind, '1');
+  } catch {
+    // localStorage may be unavailable in tests; non-fatal
+  }
+}
+
 function ImportBanner({
   label,
   onImport,
@@ -899,11 +915,13 @@ function ModelsTab() {
     void window.codesign.config
       .detectExternalConfigs()
       .then((detected) => {
+        const dismissedCodex = readDismissed('codex');
+        const dismissedClaudeCode = readDismissed('claudeCode');
         setExternalConfigs({
-          ...(detected.codex !== undefined
+          ...(detected.codex !== undefined && !dismissedCodex
             ? { codex: { count: detected.codex.providers.length } }
             : {}),
-          ...(detected.claudeCode?.provider
+          ...(detected.claudeCode?.provider && !dismissedClaudeCode
             ? { claudeCode: { baseUrl: detected.claudeCode.provider.baseUrl } }
             : {}),
         });
@@ -977,12 +995,19 @@ function ModelsTab() {
     const sl = isSupportedOnboardingProvider(provider) ? SHORTLIST[provider] : null;
     const currentRow = rows.find((r) => r.provider === provider);
     const defaultModel =
-      sl?.defaultPrimary ??
-      // For custom providers, ProviderRow doesn't carry defaultModel; fall
-      // back to the active config's model so we always send something.
-      config?.modelPrimary ??
+      currentRow?.defaultModel ||
+      sl?.defaultPrimary ||
+      config?.modelPrimary ||
       '';
     const label = sl?.label ?? currentRow?.label ?? provider;
+    if (defaultModel.length === 0) {
+      pushToast({
+        variant: 'error',
+        title: t('settings.providers.toast.activateFailed'),
+        description: t('settings.providers.toast.missingModel') ?? 'Provider has no default model — edit it first.',
+      });
+      return;
+    }
     try {
       const next = await window.codesign.settings.setActiveProvider({
         provider,
@@ -1059,11 +1084,12 @@ function ModelsTab() {
                     count: externalConfigs.codex.count,
                   })}
                   onImport={handleImportCodex}
-                  onDismiss={() =>
+                  onDismiss={() => {
+                    writeDismissed('codex');
                     setExternalConfigs((prev) =>
                       prev === null ? null : { ...prev, codex: undefined },
-                    )
-                  }
+                    );
+                  }}
                 />
               )}
               {externalConfigs.claudeCode !== undefined && (
@@ -1072,11 +1098,12 @@ function ModelsTab() {
                     baseUrl: externalConfigs.claudeCode.baseUrl,
                   })}
                   onImport={handleImportClaudeCode}
-                  onDismiss={() =>
+                  onDismiss={() => {
+                    writeDismissed('claudeCode');
                     setExternalConfigs((prev) =>
                       prev === null ? null : { ...prev, claudeCode: undefined },
-                    )
-                  }
+                    );
+                  }}
                 />
               )}
             </div>

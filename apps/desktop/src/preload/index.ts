@@ -54,6 +54,7 @@ export interface ProviderRow {
   label: string;
   builtin: boolean;
   wire: WireApi;
+  defaultModel: string;
   error?: 'decryption_failed' | string;
 }
 
