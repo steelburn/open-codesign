@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   CodesignError,
   type SupportedOnboardingProvider,
+  type WireApi,
   isSupportedOnboardingProvider,
 } from '@open-codesign/shared';
 import { ipcMain } from './electron-runtime';
@@ -121,20 +122,48 @@ export function normalizeBaseUrl(
   return cleaned;
 }
 
+/**
+ * Wire-level test endpoint — used by the custom-provider Add form AND by
+ * the existing builtin `connection:v1:test`. Unlike `buildModelsEndpoint`,
+ * this signature takes the wire directly and adds any static headers a
+ * gateway requires.
+ */
+function buildEndpointForWire(
+  wire: WireApi,
+  baseUrl: string,
+): { url: string; normalizedBaseUrl: string } {
+  if (wire === 'anthropic') {
+    const cleaned = baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+    return { url: `${cleaned}/v1/models`, normalizedBaseUrl: cleaned };
+  }
+  // openai-chat and openai-responses both expose /models at the v1 root.
+  const cleaned = baseUrl.replace(/\/+$/, '');
+  const withV1 = cleaned.endsWith('/v1') ? cleaned : `${cleaned}/v1`;
+  return { url: `${withV1}/models`, normalizedBaseUrl: withV1 };
+}
+
+export function buildAuthHeadersForWire(
+  wire: WireApi,
+  apiKey: string,
+  extraHeaders?: Record<string, string>,
+): Record<string, string> {
+  const base =
+    wire === 'anthropic'
+      ? {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        }
+      : { authorization: `Bearer ${apiKey}` };
+  return { ...base, ...(extraHeaders ?? {}) };
+}
+
 function buildModelsEndpoint(
   provider: SupportedOnboardingProvider,
   baseUrl: string,
 ): ProviderEndpoint {
-  const root = normalizeBaseUrl(baseUrl, provider);
-  switch (provider) {
-    case 'anthropic':
-      // Anthropic root has no /v1; we append the full versioned path.
-      return { url: `${root}/v1/models`, headers: {} };
-    case 'openai':
-    case 'openrouter':
-      // OpenAI-compatible: root already ends with /v1 after normalization.
-      return { url: `${root}/models`, headers: {} };
-  }
+  const wire: WireApi = provider === 'anthropic' ? 'anthropic' : 'openai-chat';
+  const { url } = buildEndpointForWire(wire, baseUrl);
+  return { url, headers: {} };
 }
 
 function buildAuthHeaders(
@@ -480,4 +509,104 @@ export function registerConnectionIpc(): void {
     }
     return { ok: true };
   });
+
+  // ── Wire-agnostic test endpoint (v3 custom providers) ────────────────────
+  ipcMain.handle(
+    'config:v1:test-endpoint',
+    async (_e, raw: unknown): Promise<TestEndpointResponse> => {
+      let payload: TestEndpointPayload;
+      try {
+        payload = parseTestEndpointPayload(raw);
+      } catch (err) {
+        return {
+          ok: false,
+          error: 'bad-input',
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+
+      const { url } = buildEndpointForWire(payload.wire, payload.baseUrl);
+      const headers = buildAuthHeadersForWire(payload.wire, payload.apiKey, payload.httpHeaders);
+
+      let res: Response;
+      try {
+        res = await fetchWithTimeout(url, { method: 'GET', headers });
+      } catch (err) {
+        return {
+          ok: false,
+          error: 'network',
+          message: err instanceof Error ? err.message : 'Network request failed',
+        };
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        return { ok: false, error: 'auth', message: `HTTP ${res.status}` };
+      }
+      if (res.status === 404) {
+        return { ok: false, error: 'not-a-model-endpoint', message: 'HTTP 404' };
+      }
+      if (!res.ok) {
+        return { ok: false, error: `http-${res.status}`, message: `HTTP ${res.status}` };
+      }
+      let body: unknown;
+      try {
+        body = await res.json();
+      } catch {
+        return { ok: false, error: 'parse', message: 'Provider returned non-JSON' };
+      }
+      const ids = extractModelIds(body);
+      return { ok: true, modelCount: ids?.length ?? 0, models: ids ?? [] };
+    },
+  );
+}
+
+interface TestEndpointPayload {
+  wire: WireApi;
+  baseUrl: string;
+  apiKey: string;
+  httpHeaders?: Record<string, string>;
+}
+
+export type TestEndpointResponse =
+  | { ok: true; modelCount: number; models: string[] }
+  | { ok: false; error: string; message: string };
+
+function parseTestEndpointPayload(raw: unknown): TestEndpointPayload {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError('config:v1:test-endpoint expects an object', 'IPC_BAD_INPUT');
+  }
+  const r = raw as Record<string, unknown>;
+  const wire = r['wire'];
+  const baseUrl = r['baseUrl'];
+  const apiKey = r['apiKey'];
+  if (
+    wire !== 'openai-chat' &&
+    wire !== 'openai-responses' &&
+    wire !== 'anthropic'
+  ) {
+    throw new CodesignError(`Unsupported wire: ${String(wire)}`, 'IPC_BAD_INPUT');
+  }
+  if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
+    throw new CodesignError('baseUrl must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+    throw new CodesignError('apiKey must be a non-empty string', 'IPC_BAD_INPUT');
+  }
+  const out: TestEndpointPayload = {
+    wire,
+    baseUrl: baseUrl.trim(),
+    apiKey: apiKey.trim(),
+  };
+  const headers = r['httpHeaders'];
+  if (headers !== undefined && headers !== null) {
+    if (typeof headers !== 'object') {
+      throw new CodesignError('httpHeaders must be an object', 'IPC_BAD_INPUT');
+    }
+    const map: Record<string, string> = {};
+    for (const [k, v] of Object.entries(headers as Record<string, unknown>)) {
+      if (typeof v === 'string') map[k] = v;
+    }
+    out.httpHeaders = map;
+  }
+  return out;
 }

@@ -52,6 +52,11 @@ export interface GenerateInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
+  /** v3 wire — when set, pi-ai synthesizes a model for the wire protocol so
+   * custom endpoints route correctly even if the provider id is unknown. */
+  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  /** v3 extra HTTP headers merged into the outbound request (gateway auth). */
+  httpHeaders?: Record<string, string> | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
@@ -74,6 +79,8 @@ export interface ApplyCommentInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
+  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  httpHeaders?: Record<string, string> | undefined;
   designSystem?: StoredDesignSystem | null | undefined;
   attachments?: AttachmentContext[] | undefined;
   referenceUrl?: ReferenceUrlContext | null | undefined;
@@ -105,6 +112,8 @@ interface ModelRunInput {
   model: ModelRef;
   apiKey: string;
   baseUrl?: string | undefined;
+  wire?: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined;
+  httpHeaders?: Record<string, string> | undefined;
   signal?: AbortSignal | undefined;
   onRetry?: ((info: RetryReason) => void) | undefined;
   messages: ChatMessage[];
@@ -299,6 +308,8 @@ async function runModel(input: ModelRunInput): Promise<GenerateOutput> {
         {
           apiKey: input.apiKey,
           ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
+          ...(input.wire !== undefined ? { wire: input.wire } : {}),
+          ...(input.httpHeaders !== undefined ? { httpHeaders: input.httpHeaders } : {}),
           ...(input.signal !== undefined ? { signal: input.signal } : {}),
           maxTokens: MAX_OUTPUT_TOKENS,
           ...(reasoning !== undefined ? { reasoning } : {}),
@@ -599,6 +610,8 @@ export async function generate(input: GenerateInput): Promise<GenerateOutput> {
     model: input.model,
     apiKey: input.apiKey,
     baseUrl: input.baseUrl,
+    wire: input.wire,
+    httpHeaders: input.httpHeaders,
     signal: input.signal,
     onRetry: input.onRetry,
     messages,
@@ -648,6 +661,8 @@ export async function applyComment(input: ApplyCommentInput): Promise<GenerateOu
     model: input.model,
     apiKey: input.apiKey,
     baseUrl: input.baseUrl,
+    wire: input.wire,
+    httpHeaders: input.httpHeaders,
     signal: input.signal,
     onRetry: input.onRetry,
     messages,

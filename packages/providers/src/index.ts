@@ -28,6 +28,14 @@ export interface GenerateOptions {
    *  Claude 4.x models this enables extended thinking; on OpenAI/Gemini it
    *  maps to their reasoning effort. Older/non-reasoning models ignore it. */
   reasoning?: ReasoningLevel;
+  /** v3 wire override — when set, a synthetic PiModel is constructed so
+   *  custom endpoints (DeepSeek, Ollama, LiteLLM, Azure, …) route through
+   *  the correct pi-ai adapter even if the provider id isn't in pi-ai's
+   *  registry. */
+  wire?: 'openai-chat' | 'openai-responses' | 'anthropic';
+  /** Extra HTTP headers (merged last). Supports Codex-style static headers
+   *  for gateways that require custom auth keys. */
+  httpHeaders?: Record<string, string>;
 }
 
 export interface GenerateResult {
@@ -137,6 +145,38 @@ const EMPTY_USAGE: PiUsage = {
 };
 
 /**
+ * Synthesize a PiModel for a wire + custom baseUrl so custom provider ids
+ * (DeepSeek, Ollama, LiteLLM, Azure, …) route to the correct pi-ai adapter
+ * without being in pi-ai's model registry.
+ */
+function synthesizeWireModel(
+  provider: string,
+  modelId: string,
+  wire: GenerateOptions['wire'],
+  baseUrl: string | undefined,
+): PiModel {
+  const api =
+    wire === 'anthropic'
+      ? 'anthropic-messages'
+      : wire === 'openai-responses'
+        ? 'openai-responses'
+        : 'openai-completions';
+  const base: PiModel = {
+    id: modelId,
+    name: modelId,
+    api,
+    provider,
+    reasoning: true,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 131072,
+    maxTokens: 131072,
+  };
+  if (baseUrl !== undefined) base.baseUrl = baseUrl;
+  return base;
+}
+
+/**
  * Single non-streaming completion. Tier 1: thin shim, no caching, no retry.
  * Tier 2 will swap to pi-ai's streaming API and emit ArtifactEvents directly.
  *
@@ -162,13 +202,16 @@ export async function complete(
         signal?: AbortSignal;
         maxTokens?: number;
         reasoning?: ReasoningLevel;
+        httpHeaders?: Record<string, string>;
       },
     ) => Promise<PiAssistantMessage>;
   };
 
   let piModel = pi.getModel(model.provider, model.modelId);
   if (!piModel) {
-    if (model.provider === 'openrouter') {
+    if (opts.wire !== undefined) {
+      piModel = synthesizeWireModel(model.provider, model.modelId, opts.wire, opts.baseUrl);
+    } else if (model.provider === 'openrouter') {
       piModel = synthesizeOpenRouterModel(model.modelId);
     } else {
       throw new CodesignError(
@@ -184,6 +227,7 @@ export async function complete(
     signal?: AbortSignal;
     maxTokens?: number;
     reasoning?: ReasoningLevel;
+    httpHeaders?: Record<string, string>;
   } = {
     apiKey: opts.apiKey,
   };
@@ -191,6 +235,7 @@ export async function complete(
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.reasoning !== undefined) piOpts.reasoning = opts.reasoning;
+  if (opts.httpHeaders !== undefined) piOpts.httpHeaders = opts.httpHeaders;
 
   const result = await pi.completeSimple(piModel, toPiContext(messages, piModel), piOpts);
 
