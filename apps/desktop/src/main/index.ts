@@ -13,6 +13,7 @@ import {
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { registerChatMessagesIpc, registerChatMessagesUnavailableIpc } from './chat-messages-ipc';
+import { registerCommentsIpc, registerCommentsUnavailableIpc } from './comments-ipc';
 import { registerConnectionIpc } from './connection-ipc';
 import { scanDesignSystem } from './design-system';
 import { BrowserWindow, app, dialog, ipcMain, shell } from './electron-runtime';
@@ -462,6 +463,7 @@ void app.whenReady().then(async () => {
   if (dbResult.ok) {
     registerSnapshotsIpc(dbResult.db);
     registerChatMessagesIpc(dbResult.db);
+    registerCommentsIpc(dbResult.db);
   } else {
     const bootLog = getLogger('main:boot');
     bootLog.error('snapshotsDb.init.fail', {
@@ -473,6 +475,7 @@ void app.whenReady().then(async () => {
     // "No handler registered" rejection — see snapshots-ipc.ts.
     registerSnapshotsUnavailableIpc(dbResult.error.message);
     registerChatMessagesUnavailableIpc(dbResult.error.message);
+    registerCommentsUnavailableIpc(dbResult.error.message);
     dialog.showErrorBox(
       'Design history unavailable',
       `Could not open the local snapshots database. Version history will be disabled for this session.\n\n${dbResult.error.message}`,
