@@ -12,10 +12,12 @@
 
 export interface CoreLogger {
   info: (event: string, data?: Record<string, unknown>) => void;
+  warn: (event: string, data?: Record<string, unknown>) => void;
   error: (event: string, data?: Record<string, unknown>) => void;
 }
 
 export const NOOP_LOGGER: CoreLogger = {
   info: () => {},
+  warn: () => {},
   error: () => {},
 };

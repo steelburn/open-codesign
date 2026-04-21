@@ -132,6 +132,7 @@ function registerIpcHandlers(): void {
    * log file without forcing `core` to depend on electron-log. */
   const coreLoggerFor = (id: string): CoreLogger => ({
     info: (event, data) => logIpc.info(event, { generationId: id, ...(data ?? {}) }),
+    warn: (event, data) => logIpc.warn(event, { generationId: id, ...(data ?? {}) }),
     error: (event, data) => logIpc.error(event, { generationId: id, ...(data ?? {}) }),
   });
 
@@ -767,6 +768,7 @@ function registerIpcHandlers(): void {
     const baseUrl = active.baseUrl ?? undefined;
     const titleLogger: CoreLogger = {
       info: (event, data) => logIpc.info(event, data),
+      warn: (event, data) => logIpc.warn(event, data),
       error: (event, data) => logIpc.error(event, data),
     };
     try {

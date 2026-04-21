@@ -664,6 +664,7 @@ ${SAMPLE_HTML}
     const events: string[] = [];
     const logger = {
       info: (event: string) => events.push(event),
+      warn: (event: string) => events.push(`WARN:${event}`),
       error: (event: string) => events.push(`ERR:${event}`),
     };
 
@@ -700,6 +701,7 @@ ${SAMPLE_HTML}
     const events: string[] = [];
     const logger = {
       info: (event: string) => events.push(event),
+      warn: (event: string) => events.push(`WARN:${event}`),
       error: (event: string) => events.push(`ERR:${event}`),
     };
 
@@ -922,6 +924,7 @@ describe('generate() skills injection', () => {
     const errorLogs: Array<{ msg: string; meta?: unknown }> = [];
     const logger = {
       info: () => {},
+      warn: () => {},
       error: (msg: string, meta?: unknown) => {
         errorLogs.push({ msg, meta });
       },
@@ -1133,6 +1136,7 @@ describe('applyComment()', () => {
     const events: string[] = [];
     const logger = {
       info: (event: string) => events.push(event),
+      warn: (event: string) => events.push(`WARN:${event}`),
       error: (event: string) => events.push(`ERR:${event}`),
     };
 
