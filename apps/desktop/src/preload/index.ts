@@ -127,7 +127,10 @@ export interface AgentStreamEvent {
     | 'agent_end'
     | 'error';
   designId: string;
-  generationId?: string;
+  /** Trace ID linking this event to the main-process generation log entry.
+   *  Matches the generationId from the codesign:v1:generate payload — always
+   *  present because the main process supplies it from baseCtx. */
+  generationId: string;
   // turn_start
   turnId?: string;
   // text_delta

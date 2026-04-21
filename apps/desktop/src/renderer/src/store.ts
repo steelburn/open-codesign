@@ -787,6 +787,8 @@ function applyGenerateError(
 ): void {
   const msg = err instanceof Error ? err.message : tr('errors.unknown');
   if (get().activeGenerationId !== generationId) return;
+  // TODO: replace with rendererLogger once renderer-logger lands
+  console.error('[store] applyGenerateError', { generationId, designId: designIdAtStart, message: msg });
 
   finishIfCurrent(set, generationId, () => ({
     isGenerating: false,
@@ -1176,6 +1178,9 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
     if (!input.silent) {
       triggerAutoRenameIfFirst(get, isFirstPrompt, request.prompt);
     }
+
+    // TODO: replace with rendererLogger once renderer-logger lands
+    console.debug('[store] sendPrompt', { generationId, designId: designIdAtStart, promptLen: enrichedPrompt.length });
 
     try {
       await runGenerate(

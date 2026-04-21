@@ -131,8 +131,8 @@ function registerIpcHandlers(): void {
    * sink the IPC handler uses. Keeps a single timeline per generation in the
    * log file without forcing `core` to depend on electron-log. */
   const coreLoggerFor = (id: string): CoreLogger => ({
-    info: (event, data) => logIpc.info(event, { id, ...(data ?? {}) }),
-    error: (event, data) => logIpc.error(event, { id, ...(data ?? {}) }),
+    info: (event, data) => logIpc.info(event, { generationId: id, ...(data ?? {}) }),
+    error: (event, data) => logIpc.error(event, { generationId: id, ...(data ?? {}) }),
   });
 
   /**
@@ -246,23 +246,23 @@ function registerIpcHandlers(): void {
         if (event.type === 'turn_start') {
           deltaCount = 0;
           toolCount = 0;
-          logIpc.info('agent.turn_start', { id });
+          logIpc.info('agent.turn_start', { generationId: id });
         } else if (event.type === 'message_update') {
           const ame = event.assistantMessageEvent;
           if (ame.type === 'text_delta') deltaCount += 1;
         } else if (event.type === 'tool_execution_start') {
           toolCount += 1;
-          logIpc.info('agent.tool_start', { id, tool: event.toolName });
+          logIpc.info('agent.tool_start', { generationId: id, tool: event.toolName });
         } else if (event.type === 'tool_execution_end') {
           logIpc.info('agent.tool_end', {
-            id,
+            generationId: id,
             tool: event.toolName,
             isError: event.isError,
           });
         } else if (event.type === 'turn_end') {
-          logIpc.info('agent.turn_end', { id, deltas: deltaCount, tools: toolCount });
+          logIpc.info('agent.turn_end', { generationId: id, deltas: deltaCount, tools: toolCount });
         } else if (event.type === 'agent_end') {
-          logIpc.info('agent.end', { id });
+          logIpc.info('agent.end', { generationId: id });
         }
         if (designId === null) return; // no routing target
         if (event.type === 'turn_start') {
@@ -475,7 +475,7 @@ function registerIpcHandlers(): void {
     }
 
     const stepCtx = {
-      id,
+      generationId: id,
       provider: active.model.provider,
       modelId: active.model.modelId,
     };
@@ -500,7 +500,7 @@ function registerIpcHandlers(): void {
     });
 
     logIpc.info('generate', {
-      id,
+      generationId: id,
       provider: active.model.provider,
       modelId: active.model.modelId,
       ...(active.overridden
@@ -539,7 +539,7 @@ function registerIpcHandlers(): void {
         payload.previousHtml ?? null,
       );
       logIpc.info('generate.ok', {
-        id,
+        generationId: id,
         ms: Date.now() - t0,
         artifacts: result.artifacts.length,
         cost: result.costUsd,
@@ -547,7 +547,7 @@ function registerIpcHandlers(): void {
       return result;
     } catch (err) {
       logIpc.error('generate.fail', {
-        id,
+        generationId: id,
         ms: Date.now() - t0,
         provider: active.model.provider,
         modelId: active.model.modelId,
@@ -601,7 +601,7 @@ function registerIpcHandlers(): void {
     });
 
     logIpc.info('generate', {
-      id,
+      generationId: id,
       provider: active.model.provider,
       modelId: active.model.modelId,
       ...(active.overridden
@@ -639,7 +639,7 @@ function registerIpcHandlers(): void {
         null,
       );
       logIpc.info('generate.ok', {
-        id,
+        generationId: id,
         ms: Date.now() - t0,
         artifacts: result.artifacts.length,
         cost: result.costUsd,
@@ -647,7 +647,7 @@ function registerIpcHandlers(): void {
       return result;
     } catch (err) {
       logIpc.error('generate.fail', {
-        id,
+        generationId: id,
         ms: Date.now() - t0,
         provider: active.model.provider,
         modelId: active.model.modelId,

@@ -26,7 +26,9 @@ interface PendingPersist {
 
 interface InFlightTurn {
   designId: string;
-  generationId: string | undefined;
+  /** Matches the generationId from agent:event:v1 — guaranteed non-empty since
+   *  AgentStreamEvent.generationId is required as of schema v1. */
+  generationId: string;
   textBuffer: string;
   /** Final assistant text persisted on the previous turn_end of this run.
    *  pi-agent-core can re-emit the same trailing assistant prose across
@@ -84,6 +86,8 @@ export function useAgentStream(): void {
     };
 
     const handleTurnStart = (event: AgentStreamEvent) => {
+      // TODO: replace with rendererLogger once renderer-logger lands
+      console.debug('[agent] turn_start', { generationId: event.generationId, designId: event.designId });
       const previous = inFlight.current;
       const sameRun =
         previous &&
@@ -123,6 +127,12 @@ export function useAgentStream(): void {
 
     const handleTurnEnd = (event: AgentStreamEvent) => {
       const current = inFlight.current;
+      // TODO: replace with rendererLogger once renderer-logger lands
+      console.debug('[agent] turn_end', {
+        generationId: event.generationId,
+        designId: event.designId,
+        textLen: (event.finalText ?? current?.textBuffer ?? '').length,
+      });
       const finalText = event.finalText ?? current?.textBuffer ?? '';
       const trimmed = finalText.trim();
       if (current && trimmed.length > 0 && trimmed !== current.lastPersistedText?.trim()) {
@@ -142,7 +152,13 @@ export function useAgentStream(): void {
       const current = inFlight.current;
       const designId = event.designId;
       const toolName = event.toolName ?? 'unknown';
-      // Persist immediately as 'running' so the WorkingCard renders from the
+      // TODO: replace with rendererLogger once renderer-logger lands
+      console.debug('[agent] tool_call_start', {
+        generationId: event.generationId,
+        designId,
+        toolName,
+        toolCallId: event.toolCallId,
+      });
       // DB row rather than an in-memory shadow. Capture seq via promise so
       // the result handler can patch the same row even if it lands before
       // the append round-trip completes.
@@ -209,7 +225,13 @@ export function useAgentStream(): void {
 
     const handleError = (event: AgentStreamEvent) => {
       const current = inFlight.current;
-      if (current) drainPendingTools(current, 'error');
+      // TODO: replace with rendererLogger once renderer-logger lands
+      console.error('[agent] error', {
+        generationId: event.generationId,
+        designId: event.designId,
+        message: event.message,
+        code: event.code,
+      });
       setStreamingAssistantText(null);
       inFlight.current = null;
       void appendChatMessage({
