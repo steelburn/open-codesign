@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AppPaths, Preferences, ProviderRow, StorageKind } from '../../../preload/index';
 import { useCodesignStore } from '../store';
 import { AddCustomProviderModal } from './AddCustomProviderModal';
+import { ChatgptLoginCard } from './ChatgptLoginCard';
 
 type Tab = 'models' | 'appearance' | 'storage' | 'advanced';
 
@@ -829,6 +830,7 @@ function ModelsTab() {
       )}
 
       <div className="space-y-[var(--space-3)]">
+        <ChatgptLoginCard onStatusChange={reloadRows} />
         {externalConfigs !== null &&
           (externalConfigs.codex !== undefined || externalConfigs.claudeCode !== undefined) && (
             <div className="space-y-2">
