@@ -103,6 +103,11 @@ vi.mock('./imports/claude-code-config', () => ({
   readClaudeCodeSettings: vi.fn(async () => null),
 }));
 
+vi.mock('./ssh-remote', () => ({
+  testSshConnection: vi.fn(async () => undefined),
+  testSavedSshProfile: vi.fn(async () => undefined),
+}));
+
 vi.mock('@open-codesign/providers', () => ({
   pingProvider: vi.fn(async () => ({ ok: true, modelCount: 1 })),
 }));
@@ -244,6 +249,7 @@ describe('getApiKeyForProvider — API key retrieval', () => {
           defaultModel: 'claude-sonnet-4-6',
         },
       },
+      sshProfiles: {},
       provider: 'anthropic',
       modelPrimary: 'claude-sonnet-4-6',
       baseUrls: {},
@@ -384,6 +390,7 @@ describe('config:v1:import-claude-code-config — user-type branching', () => {
           defaultModel: 'claude-sonnet-4-6',
         },
       },
+      sshProfiles: {},
       provider: 'anthropic',
       modelPrimary: 'claude-sonnet-4-6',
       baseUrls: {},
@@ -478,6 +485,7 @@ describe('getApiKeyForProvider — envKey runtime fallback', () => {
           envKey: ENV_NAME,
         },
       },
+      sshProfiles: {},
       provider: 'fallback-test',
       modelPrimary: 'x',
       baseUrls: {},
@@ -509,6 +517,7 @@ describe('getApiKeyForProvider — envKey runtime fallback', () => {
           envKey: ENV_NAME,
         },
       },
+      sshProfiles: {},
       provider: 'no-key',
       modelPrimary: 'x',
       baseUrls: {},

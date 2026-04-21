@@ -108,6 +108,7 @@ async function persistProviderMutation(
     activeModel: cfg?.activeModel ?? '',
     secrets: cfg?.secrets ?? {},
     providers: nextProviders,
+    sshProfiles: cfg?.sshProfiles ?? {},
     ...(cfg?.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
   });
   await writeConfig(next);
@@ -130,6 +131,7 @@ async function claimActiveProviderIfUnset(): Promise<void> {
     activeModel: CHATGPT_CODEX_PROVIDER.defaultModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
+    sshProfiles: cfg.sshProfiles ?? {},
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
   });
   await writeConfig(next);

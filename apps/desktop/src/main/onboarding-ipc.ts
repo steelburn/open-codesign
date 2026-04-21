@@ -8,6 +8,8 @@ import {
   type ProviderEntry,
   type ReasoningLevel,
   ReasoningLevelSchema,
+  type SshAuthMethod,
+  type SshProfile,
   StoredDesignSystem,
   type StoredDesignSystem as StoredDesignSystemValue,
   type SupportedOnboardingProvider,
@@ -16,6 +18,7 @@ import {
   hydrateConfig,
   isSupportedOnboardingProvider,
   modelsEndpointUrl,
+  summarizeSshProfile,
 } from '@open-codesign/shared';
 import { defaultConfigDir, readConfig, writeConfig } from './config';
 import { dialog, ipcMain, shell } from './electron-runtime';
@@ -31,6 +34,7 @@ import {
   isKeylessProviderAllowed,
   toProviderRows,
 } from './provider-settings';
+import { testSavedSshProfile, testSshConnection } from './ssh-remote';
 import {
   type AppPaths,
   type StorageKind,
@@ -156,6 +160,7 @@ function toState(cfg: Config | null): OnboardingState {
       modelPrimary: null,
       baseUrl: null,
       designSystem: null,
+      sshProfiles: [],
     };
   }
   const active = cfg.activeProvider;
@@ -167,6 +172,7 @@ function toState(cfg: Config | null): OnboardingState {
       modelPrimary: null,
       baseUrl: null,
       designSystem: cfg.designSystem ?? null,
+      sshProfiles: Object.values(cfg.sshProfiles ?? {}).map(summarizeSshProfile),
     };
   }
   return {
@@ -175,6 +181,16 @@ function toState(cfg: Config | null): OnboardingState {
     modelPrimary: cfg.activeModel,
     baseUrl: cfg.providers[active]?.baseUrl ?? null,
     designSystem: cfg.designSystem ?? null,
+    sshProfiles: Object.values(cfg.sshProfiles ?? {}).map(summarizeSshProfile),
+  };
+}
+
+function carryConfigExtras(cfg: Config | null): Pick<Config, 'sshProfiles'> & {
+  designSystem?: StoredDesignSystemValue;
+} {
+  return {
+    sshProfiles: cfg?.sshProfiles ?? {},
+    ...(cfg?.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
   };
 }
 
@@ -198,6 +214,7 @@ export async function setDesignSystem(
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
     providers: cfg.providers,
+    sshProfiles: cfg.sshProfiles ?? {},
     ...(designSystem !== null ? { designSystem: StoredDesignSystem.parse(designSystem) } : {}),
   });
   await writeConfig(next);
@@ -345,9 +362,7 @@ async function runSetProviderAndModels(input: SetProviderAndModelsInput): Promis
     activeModel: nextActiveModel,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...carryConfigExtras(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -397,7 +412,7 @@ async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
       activeModel: '',
       secrets: {},
       providers: nextProviders,
-      ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+      ...carryConfigExtras(cfg),
     });
     await writeConfig(emptyNext);
     cachedConfig = emptyNext;
@@ -410,7 +425,7 @@ async function runDeleteProvider(raw: unknown): Promise<ProviderRow[]> {
     activeModel: modelPrimary,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...carryConfigExtras(cfg),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -441,7 +456,7 @@ async function runSetActiveProvider(raw: unknown): Promise<OnboardingState> {
     activeModel: modelPrimary,
     secrets: cfg.secrets,
     providers: cfg.providers,
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...carryConfigExtras(cfg),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -509,10 +524,164 @@ async function runResetOnboarding(): Promise<void> {
     activeModel: cfg.activeModel,
     secrets: {},
     providers: cfg.providers,
+    ...carryConfigExtras(cfg),
+  });
+  await writeConfig(next);
+  cachedConfig = next;
+}
+
+interface SaveSshProfileInput {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  authMethod: SshAuthMethod;
+  password?: string;
+  keyPath?: string;
+  passphrase?: string;
+  basePath?: string;
+}
+
+function parseSaveSshProfile(raw: unknown): SaveSshProfileInput {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new CodesignError('remote:v1:save-profile expects an object', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  const r = raw as Record<string, unknown>;
+  const id = r['id'];
+  const name = r['name'];
+  const host = r['host'];
+  const port = r['port'];
+  const username = r['username'];
+  const authMethod = r['authMethod'];
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new CodesignError('SSH profile id must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw new CodesignError(
+      'SSH profile name must be a non-empty string',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  if (typeof host !== 'string' || host.trim().length === 0) {
+    throw new CodesignError('SSH host must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  const parsedPort =
+    typeof port === 'number'
+      ? port
+      : typeof port === 'string' && port.trim().length > 0
+        ? Number(port)
+        : 22;
+  if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+    throw new CodesignError(
+      'SSH port must be an integer between 1 and 65535',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  if (typeof username !== 'string' || username.trim().length === 0) {
+    throw new CodesignError('SSH username must be a non-empty string', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  if (authMethod !== 'password' && authMethod !== 'privateKey') {
+    throw new CodesignError(
+      'SSH auth method must be password or privateKey',
+      ERROR_CODES.IPC_BAD_INPUT,
+    );
+  }
+  const out: SaveSshProfileInput = {
+    id: id.trim(),
+    name: name.trim(),
+    host: host.trim(),
+    port: parsedPort,
+    username: username.trim(),
+    authMethod,
+  };
+  if (typeof r['password'] === 'string' && r['password'].trim().length > 0) {
+    out.password = r['password'].trim();
+  }
+  if (typeof r['keyPath'] === 'string' && r['keyPath'].trim().length > 0) {
+    out.keyPath = r['keyPath'].trim();
+  }
+  if (typeof r['passphrase'] === 'string' && r['passphrase'].trim().length > 0) {
+    out.passphrase = r['passphrase'];
+  }
+  if (typeof r['basePath'] === 'string' && r['basePath'].trim().length > 0) {
+    out.basePath = r['basePath'].trim();
+  }
+  return out;
+}
+
+async function runSaveSshProfile(input: SaveSshProfileInput): Promise<OnboardingState> {
+  const cfg = getCachedConfig();
+  if (cfg === null) {
+    throw new CodesignError('No configuration found', ERROR_CODES.CONFIG_MISSING);
+  }
+  const existing = cfg.sshProfiles?.[input.id];
+  const profile: SshProfile = {
+    id: input.id,
+    name: input.name,
+    host: input.host,
+    port: input.port,
+    username: input.username,
+    authMethod: input.authMethod,
+    ...(input.keyPath !== undefined ? { keyPath: input.keyPath } : {}),
+    ...(input.basePath !== undefined ? { basePath: input.basePath } : {}),
+  };
+  if (input.authMethod === 'password') {
+    if (input.password !== undefined) {
+      profile.password = buildSecretRef(input.password);
+    } else if (existing?.password !== undefined) {
+      profile.password = existing.password;
+    } else {
+      throw new CodesignError('Password auth requires a password', ERROR_CODES.IPC_BAD_INPUT);
+    }
+  } else {
+    if (!profile.keyPath) {
+      throw new CodesignError('Private key auth requires a key path', ERROR_CODES.IPC_BAD_INPUT);
+    }
+    if (input.passphrase !== undefined) {
+      profile.passphrase = buildSecretRef(input.passphrase);
+    } else if (existing?.passphrase !== undefined) {
+      profile.passphrase = existing.passphrase;
+    }
+  }
+
+  const next = hydrateConfig({
+    version: 3,
+    activeProvider: cfg.activeProvider,
+    activeModel: cfg.activeModel,
+    secrets: cfg.secrets,
+    providers: cfg.providers,
+    sshProfiles: { ...(cfg.sshProfiles ?? {}), [profile.id]: profile },
     ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
   });
   await writeConfig(next);
   cachedConfig = next;
+  return toState(cachedConfig);
+}
+
+async function runDeleteSshProfile(raw: unknown): Promise<OnboardingState> {
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    throw new CodesignError('remote:v1:delete-profile expects an id', ERROR_CODES.IPC_BAD_INPUT);
+  }
+  const cfg = getCachedConfig();
+  if (cfg === null) {
+    throw new CodesignError('No configuration found', ERROR_CODES.CONFIG_MISSING);
+  }
+  const nextProfiles = { ...(cfg.sshProfiles ?? {}) };
+  delete nextProfiles[raw];
+  const designSystem = cfg.designSystem?.sshProfileId === raw ? undefined : cfg.designSystem;
+  const next = hydrateConfig({
+    version: 3,
+    activeProvider: cfg.activeProvider,
+    activeModel: cfg.activeModel,
+    secrets: cfg.secrets,
+    providers: cfg.providers,
+    sshProfiles: nextProfiles,
+    ...(designSystem !== undefined ? { designSystem } : {}),
+  });
+  await writeConfig(next);
+  cachedConfig = next;
+  return toState(cachedConfig);
 }
 
 // ── v3 custom provider helpers ────────────────────────────────────────────
@@ -621,9 +790,7 @@ async function runAddCustomProvider(input: AddCustomProviderInput): Promise<Onbo
       : (cachedConfig?.activeModel ?? input.defaultModel),
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...carryConfigExtras(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -727,7 +894,7 @@ async function runUpdateProvider(input: UpdateProviderInput): Promise<Onboarding
     activeModel: cfg.activeModel,
     secrets: cfg.secrets,
     providers: { ...cfg.providers, [input.id]: updated },
-    ...(cfg.designSystem !== undefined ? { designSystem: cfg.designSystem } : {}),
+    ...carryConfigExtras(cfg),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -801,9 +968,7 @@ async function runImportCodex(imported: CodexImport): Promise<OnboardingState> {
     activeModel,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...carryConfigExtras(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -859,9 +1024,7 @@ async function runImportClaudeCode(imported: ClaudeCodeImport): Promise<Onboardi
     activeModel: nextActiveModel,
     secrets: nextSecrets,
     providers: nextProviders,
-    ...(cachedConfig?.designSystem !== undefined
-      ? { designSystem: cachedConfig.designSystem }
-      : {}),
+    ...carryConfigExtras(cachedConfig),
   });
   await writeConfig(next);
   cachedConfig = next;
@@ -1046,6 +1209,33 @@ export function registerOnboardingIpc(): void {
 
   ipcMain.handle('config:v1:list-endpoint-models', async (_e, raw: unknown) => {
     return runListEndpointModels(raw);
+  });
+
+  ipcMain.handle('remote:v1:test-profile', async (_e, raw: unknown): Promise<{ ok: true }> => {
+    await testSshConnection(parseSaveSshProfile(raw));
+    return { ok: true };
+  });
+
+  ipcMain.handle(
+    'remote:v1:test-saved-profile',
+    async (_e, raw: unknown): Promise<{ ok: true }> => {
+      if (typeof raw !== 'string' || raw.trim().length === 0) {
+        throw new CodesignError(
+          'remote:v1:test-saved-profile expects an id',
+          ERROR_CODES.IPC_BAD_INPUT,
+        );
+      }
+      await testSavedSshProfile(raw.trim());
+      return { ok: true };
+    },
+  );
+
+  ipcMain.handle('remote:v1:save-profile', async (_e, raw: unknown): Promise<OnboardingState> => {
+    return runSaveSshProfile(parseSaveSshProfile(raw));
+  });
+
+  ipcMain.handle('remote:v1:delete-profile', async (_e, raw: unknown): Promise<OnboardingState> => {
+    return runDeleteSshProfile(raw);
   });
 
   // ── Settings v1 channels ────────────────────────────────────────────────────

@@ -399,9 +399,9 @@ function ChatUI() {
   const [input, setInput] = React.useState('');
   const [messages, setMessages] = React.useState(DEMO_MESSAGES);
   const bottomRef = React.useRef(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: demo file — effect intentionally re-runs on new messages to scroll into view
   React.useEffect(() => {
     if (bottomRef.current) bottomRef.current.parentNode.scrollTop = bottomRef.current.offsetTop;
-    // biome-ignore lint/correctness/useExhaustiveDependencies: demo file — effect intentionally re-runs on new messages to scroll into view
   }, [messages]);
 
   const send = () => {

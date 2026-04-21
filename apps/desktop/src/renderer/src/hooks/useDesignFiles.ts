@@ -33,6 +33,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
   // Look up the latest snapshot timestamp for the current design so the Files
   // panel can show "N minutes ago" next to the sole `index.html` row. We
   // debounce on designId + previewHtml so a fresh generation refreshes it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: previewHtml is an intentional trigger — new generation output should refresh the snapshot list
   useEffect(() => {
     let cancelled = false;
     if (!designId || !window.codesign) {
