@@ -1,6 +1,6 @@
 import { Button } from '@open-codesign/ui';
 import { Loader2, LogOut, Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CodexOAuthStatus } from '../../../preload/index';
 import { useCodesignStore } from '../store';
 
@@ -82,29 +82,37 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
   const pushToast = useCodesignStore((s) => s.pushToast);
   const [status, setStatus] = useState<CodexOAuthStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!window.codesign) return;
-    let cancelled = false;
     void window.codesign.codexOAuth
       .status()
       .then((s) => {
-        if (!cancelled) setStatus(s);
+        if (mountedRef.current) setStatus(s);
       })
       .catch(() => {
-        if (!cancelled) setStatus(null);
+        if (mountedRef.current) setStatus(null);
       });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const handleLogin = useCallback(async () => {
     if (!window.codesign) return;
     await performLogin({
       api: window.codesign.codexOAuth,
-      setStatus,
-      setLoading,
+      setStatus: (s) => {
+        if (mountedRef.current) setStatus(s);
+      },
+      setLoading: (v) => {
+        if (mountedRef.current) setLoading(v);
+      },
       pushToast,
       ...(onStatusChange !== undefined ? { onStatusChange } : {}),
     });
@@ -114,7 +122,9 @@ export function ChatgptLoginCard({ onStatusChange }: ChatgptLoginCardProps) {
     if (!window.codesign) return;
     await performLogout({
       api: window.codesign.codexOAuth,
-      setStatus,
+      setStatus: (s) => {
+        if (mountedRef.current) setStatus(s);
+      },
       pushToast,
       confirm: (message) => window.confirm(message),
       ...(onStatusChange !== undefined ? { onStatusChange } : {}),
