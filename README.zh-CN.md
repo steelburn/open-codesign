@@ -17,6 +17,7 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue" /></a>
   <a href="https://github.com/OpenCoworkAI/open-codesign/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/OpenCoworkAI/open-codesign/ci.yml?label=CI" /></a>
   <a href="https://github.com/OpenCoworkAI/open-codesign/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/OpenCoworkAI/open-codesign?style=social" /></a>
+  <a href="#%E7%A4%BE%E7%BE%A4"><img alt="微信用户群" src="https://img.shields.io/badge/%E5%BE%AE%E4%BF%A1-%E7%94%A8%E6%88%B7%E7%BE%A4-07C160?logo=wechat&logoColor=white" /></a>
 </p>
 
 <p align="center">
