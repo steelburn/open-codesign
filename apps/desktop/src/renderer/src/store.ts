@@ -528,25 +528,47 @@ function artifactFromResult(
   return { type: source.type, content: source.content, prompt, message };
 }
 
+// Per-designId serialization queue. A single generate run reaches this
+// function twice — once from applyGenerateResult → persistDesignState and once
+// from the agent_end handler → persistAgentRunSnapshot. Without serialization
+// both callers race on `snapshots.list`, see zero rows, and both write a fresh
+// parent-less 'initial' snapshot. Chaining per design collapses the race and
+// lets the content-based dedupe below drop the second write cleanly.
+const snapshotPersistLocks = new Map<string, Promise<unknown>>();
+
 async function persistArtifactSnapshot(
   designId: string,
   artifact: PersistArtifact,
 ): Promise<string | null> {
   if (!window.codesign) return null;
-  // Look up the latest snapshot to chain parentId; the first generation in a
-  // design has no parent and uses type='initial', subsequent ones use 'edit'.
-  const existing = await window.codesign.snapshots.list(designId);
-  const parent = existing[0] ?? null;
-  const created = await window.codesign.snapshots.create({
-    designId,
-    parentId: parent?.id ?? null,
-    type: parent ? 'edit' : 'initial',
-    prompt: artifact.prompt,
-    artifactType: toSnapshotArtifactType(artifact.type),
-    artifactSource: artifact.content,
-    ...(artifact.message ? { message: artifact.message } : {}),
+  const prior = snapshotPersistLocks.get(designId) ?? Promise.resolve();
+  const run = prior.then(async () => {
+    if (!window.codesign) return null;
+    const existing = await window.codesign.snapshots.list(designId);
+    const parent = existing[0] ?? null;
+    // Dedupe by content: the agent_end path and the generate-result path both
+    // fire at the tail of a run and often hold identical html. Returning the
+    // existing id avoids duplicate rows without making either caller aware of
+    // the other.
+    if (parent !== null && parent.artifactSource === artifact.content) {
+      return parent.id;
+    }
+    const created = await window.codesign.snapshots.create({
+      designId,
+      parentId: parent?.id ?? null,
+      type: parent ? 'edit' : 'initial',
+      prompt: artifact.prompt,
+      artifactType: toSnapshotArtifactType(artifact.type),
+      artifactSource: artifact.content,
+      ...(artifact.message ? { message: artifact.message } : {}),
+    });
+    return created?.id ?? null;
   });
-  return created?.id ?? null;
+  snapshotPersistLocks.set(
+    designId,
+    run.catch(() => {}),
+  );
+  return run;
 }
 
 /**
