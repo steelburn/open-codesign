@@ -571,4 +571,31 @@ describe('redactSensitiveTomlFields', () => {
     const input = 'API_KEY = "upper"';
     expect(redactSensitiveTomlFields(input)).toBe('API_KEY = "***REDACTED***"');
   });
+
+  it('masks the ciphertext field used by this codebase to persist secrets', () => {
+    // Reproduces the real bundle leak a user reported on 2026-04-22: the
+    // `[secrets.*] ciphertext = "..."` field was slipping through because
+    // it wasn't on the field allowlist. "plain:<value>" is the dev-mode
+    // pass-through encoding (see keychain.ts), so the raw token is right
+    // there in the exported zip.
+    const input = [
+      '[secrets.claude-code-imported]',
+      'ciphertext = "plain:another-your-anthropic-auth-token"',
+      'mask = "anot***oken"',
+    ].join('\n');
+    const out = redactSensitiveTomlFields(input);
+    expect(out).toContain('ciphertext = "***REDACTED***"');
+    expect(out).not.toContain('another-your-anthropic-auth-token');
+    // mask is already the user-visible obscured form — stays intact.
+    expect(out).toContain('mask = "anot***oken"');
+  });
+
+  it('masks auth_token and credential field aliases', () => {
+    expect(redactSensitiveTomlFields('auth_token = "x"')).toBe(
+      'auth_token = "***REDACTED***"',
+    );
+    expect(redactSensitiveTomlFields('credential = "y"')).toBe(
+      'credential = "***REDACTED***"',
+    );
+  });
 });

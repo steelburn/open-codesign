@@ -290,10 +290,14 @@ const API_KEY_RE = /(sk-[a-zA-Z0-9]{20,}|[a-f0-9]{32,})/g;
 
 /** Mask the VALUE of any TOML line whose key looks sensitive, regardless of
  *  the value's format. Google (AIzaSy...), Azure base64, DeepSeek, and future
- *  bearer tokens all slip past format-based regexes. */
+ *  bearer tokens all slip past format-based regexes. The `ciphertext` field
+ *  is this codebase's specific storage slot for persisted secrets (safeStorage
+ *  ciphertext, or in migrated/dev paths a literal plaintext token prefixed
+ *  `plain:`) — redact unconditionally. `mask` is the user-visible display
+ *  form and already pre-obscured, so it's intentionally NOT on this list. */
 export function redactSensitiveTomlFields(s: string): string {
   return s.replace(
-    /^(\s*(?:api_?key|token|bearer|secret|access_?token|refresh_?token|password)\s*=\s*)"[^"]*"/gim,
+    /^(\s*(?:api_?key|token|bearer|secret|access_?token|refresh_?token|password|ciphertext|auth_?token|credential)\s*=\s*)"[^"]*"/gim,
     '$1"***REDACTED***"',
   );
 }
