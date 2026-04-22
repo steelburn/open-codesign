@@ -31,7 +31,7 @@ export interface CodexChatResult {
 interface ResponsesBody {
   model: string;
   input: unknown;
-  stream: false;
+  stream: true;
   store: false;
   instructions?: string;
   reasoning?: CodexChatRequest['reasoning'];
@@ -40,29 +40,6 @@ interface ResponsesBody {
 
 function defaultUserAgent(): string {
   return `open-codesign/0.1.0 (${process.platform}; ${process.arch})`;
-}
-
-function extractText(body: unknown): string {
-  if (body === null || typeof body !== 'object') return '';
-  const output = (body as { output?: unknown }).output;
-  if (!Array.isArray(output)) return '';
-  let text = '';
-  for (const item of output) {
-    if (!item || typeof item !== 'object') continue;
-    const type = (item as { type?: unknown }).type;
-    if (type !== 'message') continue;
-    const content = (item as { content?: unknown }).content;
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      if (!part || typeof part !== 'object') continue;
-      const partType = (part as { type?: unknown }).type;
-      const partText = (part as { text?: unknown }).text;
-      if (partType === 'output_text' && typeof partText === 'string') {
-        text += partText;
-      }
-    }
-  }
-  return text;
 }
 
 export class CodexClient {
@@ -90,7 +67,7 @@ export class CodexClient {
     const body: ResponsesBody = {
       model: req.model,
       input: req.input,
-      stream: false,
+      stream: true,
       store: false,
     };
     if (req.instructions !== undefined && req.instructions.length > 0)
@@ -114,8 +91,8 @@ export class CodexClient {
       throw new Error(`Codex chat failed: ${res.status} ${res.statusText} ${text.slice(0, 500)}`);
     }
 
-    const parsed = (await res.json()) as unknown;
-    return { text: extractText(parsed), raw: parsed };
+    const { text, raw } = await consumeSseStream(res, req.signal);
+    return { text, raw };
   }
 
   private send(
@@ -131,7 +108,7 @@ export class CodexClient {
       session_id: this.sessionId,
       'User-Agent': this.userAgent,
       'Content-Type': 'application/json',
-      Accept: 'application/json',
+      Accept: 'text/event-stream',
     };
     const init: RequestInit = { method: 'POST', headers, body };
     if (signal !== undefined) init.signal = signal;
@@ -145,4 +122,75 @@ async function safeReadText(res: Response): Promise<string> {
   } catch {
     return '';
   }
+}
+
+/**
+ * Consume an SSE stream from the Codex Responses endpoint. Accumulates
+ * `response.output_text.delta` events into a single text string and returns
+ * the last terminal event (`response.completed` or equivalent) as `raw`.
+ *
+ * Phase-1 greedy mode: we await the full stream before returning, so callers
+ * see the same `{text, raw}` contract as the old non-streaming path. Proper
+ * streaming UX (live typewriter) is layered in Phase 2.
+ */
+async function consumeSseStream(
+  res: Response,
+  signal: AbortSignal | undefined,
+): Promise<{ text: string; raw: unknown }> {
+  if (res.body === null) {
+    throw new Error('Codex chat response has no body');
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let text = '';
+  let lastEvent: unknown = null;
+
+  const flushEvent = (dataLine: string) => {
+    if (dataLine.length === 0 || dataLine === '[DONE]') return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(dataLine);
+    } catch {
+      return;
+    }
+    lastEvent = payload;
+    if (payload === null || typeof payload !== 'object') return;
+    const type = (payload as { type?: unknown }).type;
+    if (type === 'response.output_text.delta') {
+      const delta = (payload as { delta?: unknown }).delta;
+      if (typeof delta === 'string') text += delta;
+      return;
+    }
+    if (type === 'response.completed' || type === 'response.output_text.done') {
+      const response = (payload as { response?: unknown }).response;
+      if (response !== undefined) lastEvent = response;
+    }
+    if (type === 'response.error' || type === 'error') {
+      const message = (payload as { message?: unknown }).message;
+      throw new Error(
+        typeof message === 'string' ? `Codex stream error: ${message}` : 'Codex stream error',
+      );
+    }
+  };
+
+  try {
+    for (;;) {
+      if (signal?.aborted) throw new Error('Codex chat aborted');
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const chunk = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('data:')) flushEvent(line.slice(5).trim());
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return { text, raw: lastEvent };
 }

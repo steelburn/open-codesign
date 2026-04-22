@@ -18,26 +18,35 @@ function makeStore(overrides: Partial<MockStore> = {}): {
   return { store: mock as unknown as CodexTokenStore, mock };
 }
 
-function jsonResponse(body: unknown, status = 200, statusText = 'OK'): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    statusText,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
 function textResponse(body: string, status: number, statusText: string): Response {
   return new Response(body, { status, statusText });
 }
 
-const SAMPLE_RESPONSE = {
-  output: [
-    {
-      type: 'message',
-      content: [{ type: 'output_text', text: 'hello world' }],
+/** Build an SSE stream response that emits a single text delta + a completed event. */
+function sseStreamResponse(chunks: string[], status = 200, statusText = 'OK'): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
     },
-  ],
-};
+  });
+  return new Response(stream, {
+    status,
+    statusText,
+    headers: { 'Content-Type': 'text/event-stream' },
+  });
+}
+
+function sseFromText(text: string): Response {
+  return sseStreamResponse([
+    `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: text })}\n\n`,
+    `data: ${JSON.stringify({ type: 'response.completed', response: { id: 'resp-1' } })}\n\n`,
+    'data: [DONE]\n\n',
+  ]);
+}
+
+const SAMPLE_TEXT = 'hello world';
 
 describe('CodexClient', () => {
   afterEach(() => {
@@ -45,7 +54,7 @@ describe('CodexClient', () => {
   });
 
   it('happy path: POSTs to /responses with required headers and parses text', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
+    const fetchFn = vi.fn().mockResolvedValue(sseFromText(SAMPLE_TEXT));
     const { store } = makeStore();
     const client = new CodexClient({
       store,
@@ -54,7 +63,7 @@ describe('CodexClient', () => {
     });
 
     const result = await client.chat({
-      model: 'gpt-5.3-codex',
+      model: 'gpt-5-codex',
       input: [{ role: 'user', content: 'hi' }],
     });
 
@@ -71,20 +80,19 @@ describe('CodexClient', () => {
     expect(headers['session_id']).toBeTruthy();
     expect(headers['User-Agent']).toBeTruthy();
     expect(headers['Content-Type']).toBe('application/json');
-    expect(headers['Accept']).toBe('application/json');
+    expect(headers['Accept']).toBe('text/event-stream');
 
     const body = JSON.parse(init.body as string);
-    expect(body.model).toBe('gpt-5.3-codex');
+    expect(body.model).toBe('gpt-5-codex');
     expect(body.input).toEqual([{ role: 'user', content: 'hi' }]);
-    expect(body.stream).toBe(false);
+    expect(body.stream).toBe(true);
     expect(body.store).toBe(false);
 
-    expect(result.text).toBe('hello world');
-    expect(result.raw).toEqual(SAMPLE_RESPONSE);
+    expect(result.text).toBe(SAMPLE_TEXT);
   });
 
   it('respects custom originator', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
+    const fetchFn = vi.fn().mockResolvedValue(sseFromText(SAMPLE_TEXT));
     const { store } = makeStore();
     const client = new CodexClient({
       store,
@@ -105,7 +113,7 @@ describe('CodexClient', () => {
   it('reuses session_id across calls', async () => {
     const fetchFn = vi
       .fn()
-      .mockImplementation(() => Promise.resolve(jsonResponse(SAMPLE_RESPONSE)));
+      .mockImplementation(() => Promise.resolve(sseFromText(SAMPLE_TEXT)));
     const { store } = makeStore();
     const client = new CodexClient({
       store,
@@ -132,7 +140,7 @@ describe('CodexClient', () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValueOnce(textResponse('nope', 401, 'Unauthorized'))
-      .mockResolvedValueOnce(jsonResponse(SAMPLE_RESPONSE));
+      .mockResolvedValueOnce(sseFromText(SAMPLE_TEXT));
     const getValidAccessToken = vi.fn().mockResolvedValue('access-old');
     const forceRefresh = vi.fn().mockResolvedValue('access-new');
     const { store } = makeStore({ getValidAccessToken, forceRefresh });
@@ -214,7 +222,7 @@ describe('CodexClient', () => {
   });
 
   it('passes reasoning and tools through in the body', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(SAMPLE_RESPONSE));
+    const fetchFn = vi.fn().mockResolvedValue(sseFromText(SAMPLE_TEXT));
     const { store } = makeStore();
     const client = new CodexClient({
       store,
@@ -232,7 +240,13 @@ describe('CodexClient', () => {
   });
 
   it('returns empty text on unexpected response shapes without throwing', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ output: [] }));
+    const fetchFn = vi.fn().mockResolvedValue(
+      sseStreamResponse([
+        `data: ${JSON.stringify({ type: 'response.other' })}\n\n`,
+        `data: ${JSON.stringify({ type: 'response.completed' })}\n\n`,
+        'data: [DONE]\n\n',
+      ]),
+    );
     const { store } = makeStore();
     const client = new CodexClient({
       store,
@@ -242,6 +256,5 @@ describe('CodexClient', () => {
 
     const result = await client.chat({ model: 'm', input: [] });
     expect(result.text).toBe('');
-    expect(result.raw).toEqual({ output: [] });
   });
 });
