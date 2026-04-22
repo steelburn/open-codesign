@@ -760,7 +760,11 @@ export function registerDiagnosticsIpc(db: Database | null): void {
         code,
         scope: entry.scope,
         runId,
-        fingerprint: computeFingerprint({ errorCode: code, stack: entry.stack }),
+        fingerprint: computeFingerprint({
+          errorCode: code,
+          stack: entry.stack,
+          message: entry.message,
+        }),
         message: entry.message,
         stack: entry.stack,
         transient: false,
@@ -775,7 +779,11 @@ export function registerDiagnosticsIpc(db: Database | null): void {
       if (db === null) {
         return { schemaVersion: 1, eventId: null };
       }
-      const fingerprint = computeFingerprint({ errorCode: input.code, stack: input.stack });
+      const fingerprint = computeFingerprint({
+        errorCode: input.code,
+        stack: input.stack,
+        message: input.message,
+      });
       const recordInput: DiagnosticEventInput = {
         level: 'error',
         code: input.code,

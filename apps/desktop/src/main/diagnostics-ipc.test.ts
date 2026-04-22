@@ -114,12 +114,15 @@ describe('diagnostics:v1:recordRendererError', () => {
     const db = initInMemoryDb();
     registerDiagnosticsIpc(db);
 
+    // Stack must contain `at ` frames so extractTopFrames drives the
+    // fingerprint basis (message is only consulted when there are no frames).
+    const stack = 'Error\n    at foo (a.ts:1:1)\n    at bar (b.ts:2:2)';
     const first = invoke('diagnostics:v1:recordRendererError', {
       schemaVersion: 1,
       code: 'SAME_CODE',
       scope: 'toast',
       message: 'first',
-      stack: 'same-stack',
+      stack,
     }) as { eventId: number | null };
 
     const second = invoke('diagnostics:v1:recordRendererError', {
@@ -127,7 +130,7 @@ describe('diagnostics:v1:recordRendererError', () => {
       code: 'SAME_CODE',
       scope: 'toast',
       message: 'second',
-      stack: 'same-stack',
+      stack,
     }) as { eventId: number | null };
 
     expect(first.eventId).not.toBeNull();

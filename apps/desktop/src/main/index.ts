@@ -170,14 +170,15 @@ function registerIpcHandlers(db: Database | null): void {
     if (db === null) return;
     const code = err instanceof CodesignError ? (err.code as string) : 'PROVIDER_UPSTREAM_ERROR';
     const stack = err instanceof Error ? err.stack : undefined;
+    const message = err instanceof Error ? err.message : String(err);
     const context = providerContext.consume(runId);
     recordDiagnosticEvent(db, {
       level: 'error',
       code,
       scope,
       runId,
-      fingerprint: computeFingerprint({ errorCode: code, stack }),
-      message: err instanceof Error ? err.message : String(err),
+      fingerprint: computeFingerprint({ errorCode: code, stack, message }),
+      message,
       stack,
       transient: false,
       ...(context !== undefined ? { context } : {}),
@@ -229,7 +230,11 @@ function registerIpcHandlers(db: Database | null): void {
           code,
           scope: 'provider',
           runId: id,
-          fingerprint: computeFingerprint({ errorCode: code, stack: syntheticFrame }),
+          fingerprint: computeFingerprint({
+            errorCode: code,
+            stack: syntheticFrame,
+            message: upstream,
+          }),
           message: upstream,
           stack: undefined,
           transient: true,
