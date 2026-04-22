@@ -1788,7 +1788,16 @@ function AdvancedTab() {
 
 export function Settings() {
   const t = useT();
-  const [tab, setTab] = useState<Tab>('models');
+  const initialTab = useCodesignStore((s) => s.settingsTab);
+  const clearSettingsTab = useCodesignStore((s) => s.clearSettingsTab);
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'models');
+
+  // Consume the store hint exactly once on mount so future Settings opens
+  // start on whatever the user last selected manually.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only effect
+  useEffect(() => {
+    if (initialTab) clearSettingsTab();
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-background)]">

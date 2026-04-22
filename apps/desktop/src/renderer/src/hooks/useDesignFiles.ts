@@ -33,6 +33,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
   // Look up the latest snapshot timestamp for the current design so the Files
   // panel can show "N minutes ago" next to the sole `index.html` row. We
   // debounce on designId + previewHtml so a fresh generation refreshes it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: previewHtml is intentionally listed as a fresh-generation signal
   useEffect(() => {
     let cancelled = false;
     if (!designId || !window.codesign) {
@@ -57,7 +58,6 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
     return () => {
       cancelled = true;
     };
-    // biome-ignore lint/correctness/useExhaustiveDependencies: previewHtml is intentionally re-run on as a fresh-generation signal
   }, [designId, previewHtml]);
 
   const files: DesignFileEntry[] = [];

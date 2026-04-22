@@ -21,6 +21,11 @@
     "applied": "已应用。",
     "working": "处理中"
   },
+  "toast": {
+    "error": {
+      "report": "上报"
+    }
+  },
   "loading": {
     "stage": {
       "sending": "正在连接模型…",
@@ -476,7 +481,8 @@
     "openMyDesigns": "查看全部设计",
     "hubLabel": "我的设计",
     "settingsLabel": "设置",
-    "closeSettings": "关闭设置"
+    "closeSettings": "关闭设置",
+    "unreadErrors": "{{count}} 个未读错误"
   },
   "theme": {
     "toggleAria": "切换主题",
@@ -635,6 +641,8 @@
     "noStack": "（无堆栈信息）",
     "copyStack": "复制堆栈",
     "reportOnGitHub": "在 GitHub 反馈",
+    "reportViaDiagnostics": "通过诊断面板上报",
+    "reportViaDiagnosticsEmpty": "暂无诊断事件可上报。",
     "reload": "重新加载"
   },
   "errors": {

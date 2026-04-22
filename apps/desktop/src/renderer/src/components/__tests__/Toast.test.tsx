@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AUTO_DISMISS_MS, scheduleAutoDismiss } from '../Toast';
+import { AUTO_DISMISS_MS, resolveReportEventId, scheduleAutoDismiss } from '../Toast';
 
 describe('Toast auto-dismiss', () => {
   beforeEach(() => {
@@ -46,5 +46,21 @@ describe('Toast auto-dismiss', () => {
     expect(AUTO_DISMISS_MS.success).toBe(5000);
     expect(AUTO_DISMISS_MS.info).toBe(5000);
     expect(AUTO_DISMISS_MS.error).toBeNull();
+  });
+});
+
+describe('resolveReportEventId', () => {
+  it('prefers the toast-provided eventId when set', () => {
+    expect(resolveReportEventId(42, 7)).toBe(42);
+  });
+  it('falls back to the most recent diagnostic event id', () => {
+    expect(resolveReportEventId(undefined, 7)).toBe(7);
+  });
+  it('returns null when neither is available', () => {
+    expect(resolveReportEventId(undefined, undefined)).toBeNull();
+  });
+  it('treats 0 as a valid id (not falsy)', () => {
+    expect(resolveReportEventId(0, 5)).toBe(0);
+    expect(resolveReportEventId(undefined, 0)).toBe(0);
   });
 });

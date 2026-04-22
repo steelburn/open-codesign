@@ -1,7 +1,7 @@
 import { useT } from '@open-codesign/i18n';
 import { IconButton, Wordmark } from '@open-codesign/ui';
-import { ArrowLeft, FolderOpen, Settings as SettingsIcon } from 'lucide-react';
-import type { CSSProperties } from 'react';
+import { AlertCircle, ArrowLeft, FolderOpen, Settings as SettingsIcon } from 'lucide-react';
+import { type CSSProperties, useEffect } from 'react';
 import { type HubTab, useCodesignStore } from '../store';
 import { LanguageToggle } from './LanguageToggle';
 import { ModelSwitcher } from './ModelSwitcher';
@@ -22,6 +22,16 @@ export function TopBar() {
   const currentDesign = designs.find((d) => d.id === currentDesignId);
   const hubTab = useCodesignStore((s) => s.hubTab);
   const setHubTab = useCodesignStore((s) => s.setHubTab);
+  const unreadErrorCount = useCodesignStore((s) => s.unreadErrorCount);
+  const refreshDiagnosticEvents = useCodesignStore((s) => s.refreshDiagnosticEvents);
+  const openSettingsTab = useCodesignStore((s) => s.openSettingsTab);
+
+  // Pull-based: refresh the diagnostic counter on mount so a page reload
+  // surfaces errors recorded while the window was closed. No polling.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only effect
+  useEffect(() => {
+    void refreshDiagnosticEvents();
+  }, []);
 
   return (
     <header
@@ -129,6 +139,18 @@ export function TopBar() {
 
       <div className="flex items-center gap-[var(--space-3)]" style={noDragStyle}>
         <ModelSwitcher variant="topbar" />
+        {unreadErrorCount > 0 ? (
+          <button
+            type="button"
+            onClick={() => openSettingsTab('diagnostics')}
+            aria-label={t('topbar.unreadErrors', { count: unreadErrorCount })}
+            title={t('topbar.unreadErrors', { count: unreadErrorCount })}
+            className="inline-flex items-center gap-1 h-7 px-2 rounded-[var(--radius-sm)] border border-[var(--color-error)]/30 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
+          >
+            <AlertCircle className="w-3.5 h-3.5" aria-hidden />
+            <span className="text-[var(--text-xs)] font-semibold">{unreadErrorCount}</span>
+          </button>
+        ) : null}
         <div className="flex items-center gap-[2px]" style={{ marginLeft: 'var(--space-1)' }}>
           <LanguageToggle />
           <ThemeToggle />

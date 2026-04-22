@@ -3,7 +3,7 @@ import type { DiagnosticEventRow } from '@open-codesign/shared';
 import { AlertCircle, Download, FolderOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useCodesignStore } from '../../store';
-// import { ReportEventDialog } from '../diagnostics/ReportEventDialog'; // wired in T10
+import { ReportEventDialog } from '../diagnostics/ReportEventDialog';
 
 type DiagnosticsApi = NonNullable<NonNullable<Window['codesign']>['diagnostics']>;
 
@@ -59,6 +59,7 @@ export function DiagnosticsPanel() {
   const [events, setEvents] = useState<DiagnosticEventRow[]>([]);
   const [includeTransient, setIncludeTransient] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [reportEventId, setReportEventId] = useState<number | null>(null);
 
   // Mount: refresh store (badge/unread) and mark panel as read.
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only effect
@@ -92,8 +93,7 @@ export function DiagnosticsPanel() {
   }
 
   function onReport(eventId: number) {
-    console.info('[diagnostics] report clicked', eventId);
-    // T10 will open the ReportEventDialog here.
+    setReportEventId(eventId);
   }
 
   return (
@@ -188,6 +188,7 @@ export function DiagnosticsPanel() {
           </tbody>
         </table>
       )}
+      <ReportEventDialog eventId={reportEventId} onClose={() => setReportEventId(null)} />
     </div>
   );
 }

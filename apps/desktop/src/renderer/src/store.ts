@@ -47,6 +47,13 @@ export interface Toast {
   title: string;
   description?: string;
   /**
+   * Optional id of a DiagnosticEventRow — attached by the store when an
+   * error becomes a toast so the "Report" button inside an error toast
+   * can open the exact event in ReportEventDialog. If absent the Report
+   * button falls back to the most recent diagnostic event.
+   */
+  eventId?: number;
+  /**
    * Optional secondary action rendered as a button inside the toast. Used
    * to turn diagnostic toasts into actionable ones — e.g. a "no API key"
    * generate error becomes a toast with "Open Settings" that jumps the
@@ -60,6 +67,7 @@ export interface Toast {
 
 export type Theme = 'light' | 'dark';
 export type AppView = 'hub' | 'workspace' | 'settings';
+export type SettingsTab = 'models' | 'appearance' | 'storage' | 'diagnostics' | 'advanced';
 export type HubTab = 'recent' | 'your' | 'examples' | 'designSystems';
 export type InteractionMode = 'default' | 'comment';
 
@@ -150,6 +158,9 @@ interface CodesignState {
   theme: Theme;
   view: AppView;
   previousView: AppView;
+  /** When non-null, Settings reads this on mount to auto-select the tab
+   *  then calls clearSettingsTab() so future opens are unbiased. */
+  settingsTab: SettingsTab | null;
   hubTab: HubTab;
   previewViewport: PreviewViewport;
   toasts: Toast[];
@@ -252,6 +263,11 @@ interface CodesignState {
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setView: (view: AppView) => void;
+  /** Open Settings and select a specific tab. Used by the topbar unread-error
+   *  badge to jump straight to the Diagnostics panel. Setting to null clears
+   *  the hint (Settings falls back to its own default tab). */
+  openSettingsTab: (tab: SettingsTab) => void;
+  clearSettingsTab: () => void;
   setHubTab: (tab: HubTab) => void;
   setPreviewViewport: (viewport: PreviewViewport) => void;
 
@@ -1043,6 +1059,7 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   theme: readInitialTheme(),
   view: 'hub' as AppView,
   previousView: 'hub' as AppView,
+  settingsTab: null as SettingsTab | null,
   hubTab: 'recent' as HubTab,
   previewViewport: 'desktop' as PreviewViewport,
   toasts: [],
@@ -1536,6 +1553,19 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
   setView(view) {
     const prev = get().view;
     set({ view, previousView: prev === view ? get().previousView : prev });
+  },
+
+  openSettingsTab(tab) {
+    const prev = get().view;
+    set({
+      view: 'settings',
+      previousView: prev === 'settings' ? get().previousView : prev,
+      settingsTab: tab,
+    });
+  },
+
+  clearSettingsTab() {
+    set({ settingsTab: null });
   },
 
   setHubTab(tab) {

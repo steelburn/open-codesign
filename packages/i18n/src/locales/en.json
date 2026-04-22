@@ -21,6 +21,11 @@
     "applied": "Applied.",
     "working": "Working"
   },
+  "toast": {
+    "error": {
+      "report": "Report"
+    }
+  },
   "loading": {
     "stage": {
       "sending": "Connecting…",
@@ -473,7 +478,8 @@
     "openMyDesigns": "All designs",
     "hubLabel": "My designs",
     "settingsLabel": "Settings",
-    "closeSettings": "Close settings"
+    "closeSettings": "Close settings",
+    "unreadErrors": "{{count}} unread error"
   },
   "theme": {
     "toggleAria": "Toggle theme",
@@ -632,6 +638,8 @@
     "noStack": "(no stack)",
     "copyStack": "Copy stack",
     "reportOnGitHub": "Report on GitHub",
+    "reportViaDiagnostics": "Report via Diagnostics",
+    "reportViaDiagnosticsEmpty": "No diagnostic events have been recorded yet.",
     "reload": "Reload"
   },
   "errors": {

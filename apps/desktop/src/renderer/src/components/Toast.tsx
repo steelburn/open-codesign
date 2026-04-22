@@ -1,8 +1,9 @@
 import { useT } from '@open-codesign/i18n';
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useCodesignStore } from '../store';
 import type { Toast as ToastModel, ToastVariant } from '../store';
+import { ReportEventDialog } from './diagnostics/ReportEventDialog';
 
 export function useToast() {
   const push = useCodesignStore((s) => s.pushToast);
@@ -40,12 +41,29 @@ export function scheduleAutoDismiss(
   };
 }
 
+/**
+ * Report-button target for an error toast. Prefer the eventId the caller
+ * attached when emitting the toast; otherwise fall back to the most recent
+ * diagnostic event. Returns null when neither source has an id — in that
+ * case the Report button shouldn't open the dialog.
+ */
+export function resolveReportEventId(
+  toastEventId: number | undefined,
+  recentEventId: number | undefined,
+): number | null {
+  if (typeof toastEventId === 'number') return toastEventId;
+  if (typeof recentEventId === 'number') return recentEventId;
+  return null;
+}
+
 function ToastItem({ toast }: { toast: ToastModel }) {
   const dismiss = useCodesignStore((s) => s.dismissToast);
+  const recentEvents = useCodesignStore((s) => s.recentEvents);
   const t = useT();
   const Icon = iconFor[toast.variant];
   const isError = toast.variant === 'error';
   const autoMs = AUTO_DISMISS_MS[toast.variant];
+  const [reportId, setReportId] = useState<number | null>(null);
 
   useEffect(() => {
     const cleanup = scheduleAutoDismiss(toast.variant, () => {
@@ -53,6 +71,14 @@ function ToastItem({ toast }: { toast: ToastModel }) {
     });
     return cleanup ?? undefined;
   }, [toast.id, toast.variant, dismiss]);
+
+  // Error toast → Report button. Prefer the eventId set when the toast was
+  // emitted; otherwise fall back to the most recent diagnostic event. This
+  // approximation is acceptable while not every error push paths through
+  // the diagnostic event recorder — MVP scope.
+  function openReport(): void {
+    setReportId(resolveReportEventId(toast.eventId, recentEvents[0]?.id));
+  }
 
   return (
     <div
@@ -83,16 +109,27 @@ function ToastItem({ toast }: { toast: ToastModel }) {
           </button>
         ) : null}
       </div>
-      <button
-        type="button"
-        aria-label={t('common.dismissNotification')}
-        onClick={() => {
-          dismiss(toast.id);
-        }}
-        className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
-      >
-        <X className="w-4 h-4" />
-      </button>
+      <div className="flex items-center gap-1 shrink-0">
+        {isError ? (
+          <button
+            type="button"
+            onClick={openReport}
+            className="h-6 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] font-medium text-[var(--color-text-secondary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] transition-colors"
+          >
+            {t('toast.error.report')}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          aria-label={t('common.dismissNotification')}
+          onClick={() => {
+            dismiss(toast.id);
+          }}
+          className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
       {autoMs !== null ? (
         <div
           aria-hidden="true"
@@ -100,6 +137,7 @@ function ToastItem({ toast }: { toast: ToastModel }) {
           style={{ animationDuration: `${autoMs}ms` }}
         />
       ) : null}
+      {isError ? <ReportEventDialog eventId={reportId} onClose={() => setReportId(null)} /> : null}
     </div>
   );
 }

@@ -14,7 +14,9 @@
 
 import { useT } from '@open-codesign/i18n';
 import { Button } from '@open-codesign/ui';
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode, useState } from 'react';
+import { useCodesignStore } from '../store';
+import { ReportEventDialog } from './diagnostics/ReportEventDialog';
 
 // Source: apps/desktop/package.json → repository.url
 // Kept as a constant here so the ErrorBoundary has no runtime dependency on
@@ -147,6 +149,9 @@ function ErrorBoundaryFallback({
   onReportOnGitHub,
 }: ErrorBoundaryFallbackProps): ReactNode {
   const t = useT();
+  const recentEvents = useCodesignStore((s) => s.recentEvents);
+  const [reportId, setReportId] = useState<number | null>(null);
+  const latestEventId = recentEvents[0]?.id ?? null;
   const scopeLabel = scope ?? t('errorBoundary.scopeFallback');
   return (
     <div className="h-full w-full flex items-center justify-center p-6 bg-[var(--color-background)]">
@@ -161,9 +166,21 @@ function ErrorBoundaryFallback({
         <pre className="text-[11px] leading-snug font-mono text-[var(--color-text-muted)] bg-[var(--color-surface-active)] border border-[var(--color-border-muted)] rounded-[var(--radius-md)] p-3 max-h-40 overflow-auto whitespace-pre-wrap">
           {error.stack ?? t('errorBoundary.noStack')}
         </pre>
-        <div className="mt-4 flex gap-2 justify-end">
+        <div className="mt-4 flex flex-wrap gap-2 justify-end">
           <Button type="button" variant="secondary" size="md" onClick={onCopyStack}>
             {t('errorBoundary.copyStack')}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            disabled={latestEventId === null}
+            title={
+              latestEventId === null ? t('errorBoundary.reportViaDiagnosticsEmpty') : undefined
+            }
+            onClick={() => setReportId(latestEventId)}
+          >
+            {t('errorBoundary.reportViaDiagnostics')}
           </Button>
           <Button type="button" variant="secondary" size="md" onClick={onReportOnGitHub}>
             {t('errorBoundary.reportOnGitHub')}
@@ -173,6 +190,7 @@ function ErrorBoundaryFallback({
           </Button>
         </div>
       </div>
+      <ReportEventDialog eventId={reportId} onClose={() => setReportId(null)} />
     </div>
   );
 }
