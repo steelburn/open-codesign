@@ -20,6 +20,7 @@ import type {
   WireApi,
 } from '@open-codesign/shared';
 import { contextBridge, ipcRenderer } from 'electron';
+import type { CodexOAuthStatus } from '../main/codex-oauth-ipc';
 import type {
   ConnectionTestError,
   ConnectionTestResult,
@@ -28,6 +29,7 @@ import type {
 } from '../main/connection-ipc';
 
 export type { ConnectionTestError, ConnectionTestResult, ModelsListResponse, TestEndpointResponse };
+export type { CodexOAuthStatus };
 
 export interface ValidateKeyResult {
   ok: true;
@@ -65,6 +67,7 @@ export type ClaudeCodeUserType =
   | 'oauth-only'
   | 'local-proxy'
   | 'remote-gateway'
+  | 'parse-error'
   | 'no-config';
 
 export interface ExternalConfigsDetection {
@@ -77,8 +80,13 @@ export interface ExternalConfigsDetection {
   claudeCode?: {
     userType: ClaudeCodeUserType;
     baseUrl: string;
+    defaultModel: string;
     hasApiKey: boolean;
     apiKeySource: 'settings-json' | 'shell-env' | 'none';
+    settingsPath: string;
+    /** Parser-emitted notes for the user (malformed apiKeyHelper, partial
+     * data, etc.). Rendered as muted one-liners under the banner. */
+    warnings: string[];
   };
 }
 
@@ -114,6 +122,8 @@ export interface GenerateResponse {
 export interface Preferences {
   updateChannel: UpdateChannel;
   generationTimeoutSec: number;
+  checkForUpdatesOnStartup: boolean;
+  dismissedUpdateVersion: string;
 }
 
 /**
@@ -220,6 +230,16 @@ const api = {
     const listener = (_e: unknown, info: unknown) => cb(info);
     ipcRenderer.on('codesign:update-available', listener);
     return () => ipcRenderer.removeListener('codesign:update-available', listener);
+  },
+  onUpdateNotAvailable: (cb: (info: unknown) => void) => {
+    const listener = (_e: unknown, info: unknown) => cb(info);
+    ipcRenderer.on('codesign:update-not-available', listener);
+    return () => ipcRenderer.removeListener('codesign:update-not-available', listener);
+  },
+  onUpdateError: (cb: (message: string) => void) => {
+    const listener = (_e: unknown, message: string) => cb(message);
+    ipcRenderer.on('codesign:update-error', listener);
+    return () => ipcRenderer.removeListener('codesign:update-error', listener);
   },
   onboarding: {
     getState: () => ipcRenderer.invoke('onboarding:get-state') as Promise<OnboardingState>,
@@ -331,6 +351,11 @@ const api = {
     get: () => ipcRenderer.invoke('preferences:v1:get') as Promise<Preferences>,
     update: (patch: Partial<Preferences>) =>
       ipcRenderer.invoke('preferences:v1:update', patch) as Promise<Preferences>,
+  },
+  codexOAuth: {
+    status: () => ipcRenderer.invoke('codex-oauth:v1:status') as Promise<CodexOAuthStatus>,
+    login: () => ipcRenderer.invoke('codex-oauth:v1:login') as Promise<CodexOAuthStatus>,
+    logout: () => ipcRenderer.invoke('codex-oauth:v1:logout') as Promise<CodexOAuthStatus>,
   },
   connection: {
     test: (input: {
@@ -493,6 +518,8 @@ const api = {
     showItemInFolder: (path: string) =>
       ipcRenderer.invoke('diagnostics:v1:showItemInFolder', path) as Promise<void>,
   },
+  openExternal: (url: string) =>
+    ipcRenderer.invoke('codesign:v1:open-external', url) as Promise<void>,
 };
 
 contextBridge.exposeInMainWorld('codesign', api);

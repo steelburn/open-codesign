@@ -26,6 +26,8 @@ export type ClaudeCodeUserType =
   | 'local-proxy'
   /** baseUrl points at a non-anthropic remote endpoint, but no key was found. */
   | 'remote-gateway'
+  /** settings.json exists but is malformed (invalid JSON / wrong shape). */
+  | 'parse-error'
   /** No settings.json, no OAuth evidence — nothing to offer. */
   | 'no-config';
 
@@ -36,6 +38,10 @@ export interface ClaudeCodeImport {
   userType: ClaudeCodeUserType;
   hasOAuthEvidence: boolean;
   activeModel: string | null;
+  /** Absolute path to the scanned settings.json, resolved against the user's
+   *  home directory. Surfaced to the renderer so the parse-error banner can
+   *  show/copy a clickable path rather than a tilde-prefixed display form. */
+  settingsPath: string;
   warnings: string[];
 }
 
@@ -49,6 +55,10 @@ export interface ParseClaudeCodeOptions {
   env?: NodeJS.ProcessEnv;
   /** Defaults to the result of `checkClaudeCodeOAuthEvidence()`. */
   oauthEvidence?: boolean;
+  /** Absolute path to the settings.json that produced `json`. Returned on
+   *  the `ClaudeCodeImport` so the renderer can show a copyable absolute
+   *  path on the parse-error banner. Defaults to the canonical location. */
+  settingsPath?: string;
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1']);
@@ -77,27 +87,39 @@ function classifyUserType(args: {
   return 'no-config';
 }
 
+/**
+ * Sentinel value emitted for the non-object parse-error branch, so the
+ * banner can translate it rather than surfacing an English-only blob
+ * inside an otherwise-localized template.
+ */
+export const PARSE_REASON_NOT_JSON_OBJECT = '__parse_reason_not_json_object__';
+
 export function parseClaudeCodeSettings(
   json: string,
   options: ParseClaudeCodeOptions = {},
 ): ClaudeCodeImport {
   const env = options.env ?? process.env;
   const oauthEvidence = options.oauthEvidence ?? false;
+  const settingsPath = options.settingsPath ?? claudeCodeSettingsPath();
   const warnings: string[] = [];
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
   } catch (err) {
+    // Emit the RAW technical reason only — the banner template owns the
+    // localized prefix, so concatenating a pre-built English preamble here
+    // would produce bilingual mojibake in zh locale.
     const msg = err instanceof Error ? err.message : String(err);
     return {
       provider: null,
       apiKey: null,
       apiKeySource: 'none',
-      userType: oauthEvidence ? 'oauth-only' : 'no-config',
+      userType: 'parse-error',
       hasOAuthEvidence: oauthEvidence,
       activeModel: null,
-      warnings: [`Claude Code settings.json is not valid JSON: ${msg}`],
+      settingsPath,
+      warnings: [msg],
     };
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
@@ -105,10 +127,11 @@ export function parseClaudeCodeSettings(
       provider: null,
       apiKey: null,
       apiKeySource: 'none',
-      userType: oauthEvidence ? 'oauth-only' : 'no-config',
+      userType: 'parse-error',
       hasOAuthEvidence: oauthEvidence,
       activeModel: null,
-      warnings: ['Claude Code settings.json has unexpected shape'],
+      settingsPath,
+      warnings: [PARSE_REASON_NOT_JSON_OBJECT],
     };
   }
 
@@ -147,9 +170,11 @@ export function parseClaudeCodeSettings(
 
   const userType = classifyUserType({ apiKeySource, baseUrl, oauthEvidence });
 
-  // For oauth-only users we deliberately return provider=null: there's no
-  // config worth saving, and the caller treats provider===null as "nothing
-  // to import" so Settings never seeds a zombie entry.
+  // For oauth-only and no-config we deliberately return provider=null:
+  // there's no config worth saving, and callers treat provider===null as
+  // "nothing to import" so Settings never seeds a zombie entry. parse-error
+  // also returns provider=null via the early-return branches above, with
+  // the parse reason in `warnings[0]`.
   if (userType === 'oauth-only') {
     return {
       provider: null,
@@ -158,6 +183,7 @@ export function parseClaudeCodeSettings(
       userType,
       hasOAuthEvidence: oauthEvidence,
       activeModel: null,
+      settingsPath,
       warnings,
     };
   }
@@ -169,6 +195,7 @@ export function parseClaudeCodeSettings(
       userType,
       hasOAuthEvidence: oauthEvidence,
       activeModel: null,
+      settingsPath,
       warnings,
     };
   }
@@ -206,6 +233,7 @@ export function parseClaudeCodeSettings(
     userType,
     hasOAuthEvidence: oauthEvidence,
     activeModel: model,
+    settingsPath,
     warnings,
   };
 }
@@ -256,8 +284,9 @@ export async function readClaudeCodeSettings(
       userType: 'oauth-only',
       hasOAuthEvidence: true,
       activeModel: null,
+      settingsPath: path,
       warnings: [],
     };
   }
-  return parseClaudeCodeSettings(raw, { oauthEvidence });
+  return parseClaudeCodeSettings(raw, { oauthEvidence, settingsPath: path });
 }

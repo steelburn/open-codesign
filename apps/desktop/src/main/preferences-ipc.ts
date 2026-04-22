@@ -17,7 +17,7 @@ import { getLogger } from './logger';
 
 const logger = getLogger('preferences-ipc');
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 // v1 → v2: raise the abandoned 120s timeout default (which aborted real
 // agentic runs mid-loop) to 600s. Values that happen to equal the old
 // default are treated as unmigrated defaults, not user intent.
@@ -35,6 +35,8 @@ export type UpdateChannel = 'stable' | 'beta';
 export interface Preferences {
   updateChannel: UpdateChannel;
   generationTimeoutSec: number;
+  checkForUpdatesOnStartup: boolean;
+  dismissedUpdateVersion: string;
 }
 
 interface PreferencesFile extends Preferences {
@@ -48,6 +50,8 @@ const DEFAULTS: Preferences = {
   // 1200s (20 min); users on fast endpoints can lower this
   // in Settings → Advanced.
   generationTimeoutSec: 1200,
+  checkForUpdatesOnStartup: true,
+  dismissedUpdateVersion: '',
 };
 
 export async function readPersisted(): Promise<Preferences> {
@@ -72,6 +76,14 @@ export async function readPersisted(): Promise<Preferences> {
           ? parsed.updateChannel
           : DEFAULTS.updateChannel,
       generationTimeoutSec: migratedTimeout,
+      checkForUpdatesOnStartup:
+        typeof parsed.checkForUpdatesOnStartup === 'boolean'
+          ? parsed.checkForUpdatesOnStartup
+          : DEFAULTS.checkForUpdatesOnStartup,
+      dismissedUpdateVersion:
+        typeof parsed.dismissedUpdateVersion === 'string'
+          ? parsed.dismissedUpdateVersion
+          : DEFAULTS.dismissedUpdateVersion,
     };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ...DEFAULTS };
@@ -112,6 +124,21 @@ function parsePreferences(raw: unknown): Partial<Preferences> {
       );
     }
     out.generationTimeoutSec = r['generationTimeoutSec'];
+  }
+  if (r['checkForUpdatesOnStartup'] !== undefined) {
+    if (typeof r['checkForUpdatesOnStartup'] !== 'boolean') {
+      throw new CodesignError(
+        'checkForUpdatesOnStartup must be a boolean',
+        ERROR_CODES.IPC_BAD_INPUT,
+      );
+    }
+    out.checkForUpdatesOnStartup = r['checkForUpdatesOnStartup'];
+  }
+  if (r['dismissedUpdateVersion'] !== undefined) {
+    if (typeof r['dismissedUpdateVersion'] !== 'string') {
+      throw new CodesignError('dismissedUpdateVersion must be a string', ERROR_CODES.IPC_BAD_INPUT);
+    }
+    out.dismissedUpdateVersion = r['dismissedUpdateVersion'];
   }
   return out;
 }

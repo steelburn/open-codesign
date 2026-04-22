@@ -42,6 +42,16 @@ export interface Toast {
   variant: ToastVariant;
   title: string;
   description?: string;
+  /**
+   * Optional secondary action rendered as a button inside the toast. Used
+   * to turn diagnostic toasts into actionable ones — e.g. a "no API key"
+   * generate error becomes a toast with "Open Settings" that jumps the
+   * user to the fix. `onClick` is called before the toast is dismissed.
+   */
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 export type Theme = 'light' | 'dark';
@@ -1152,10 +1162,21 @@ export const useCodesignStore = create<CodesignState>((set, get) => ({
       // remote-gateway branches that intentionally create an entry without
       // a key. Tell them which provider is missing a key and where to fix it.
       const msg =
-        cfg !== null && cfg.provider !== null && cfg.provider.length > 0
+        cfg?.provider != null && cfg.provider.length > 0
           ? tr('errors.providerMissingKey', { provider: cfg.provider })
           : tr('errors.onboardingIncomplete');
       set({ errorMessage: msg, lastError: msg });
+      // Also push a toast with a one-click path to the fix. Toast-only UI
+      // actions would be lossy (the toast auto-dismisses after 5s), so we
+      // keep the inline errorMessage string in state too.
+      get().pushToast({
+        variant: 'error',
+        title: msg,
+        action: {
+          label: tr('settings.providers.import.claudeCodeOpenSettings'),
+          onClick: () => get().setView('settings'),
+        },
+      });
       return;
     }
 

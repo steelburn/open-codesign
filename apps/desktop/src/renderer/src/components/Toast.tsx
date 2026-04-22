@@ -70,6 +70,18 @@ function ToastItem({ toast }: { toast: ToastModel }) {
             {toast.description}
           </div>
         ) : null}
+        {toast.action ? (
+          <button
+            type="button"
+            onClick={() => {
+              toast.action?.onClick();
+              dismiss(toast.id);
+            }}
+            className="mt-2 inline-flex items-center h-6 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] font-medium text-[var(--color-on-accent)] bg-[var(--color-accent)] hover:opacity-90 transition-opacity"
+          >
+            {toast.action.label}
+          </button>
+        ) : null}
       </div>
       <button
         type="button"

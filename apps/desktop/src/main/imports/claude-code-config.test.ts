@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseClaudeCodeSettings } from './claude-code-config';
+import {
+  PARSE_REASON_NOT_JSON_OBJECT,
+  claudeCodeSettingsPath,
+  parseClaudeCodeSettings,
+} from './claude-code-config';
 
 describe('parseClaudeCodeSettings', () => {
   it('creates a single anthropic ProviderEntry from ANTHROPIC_BASE_URL + MODEL', () => {
@@ -89,14 +93,50 @@ describe('parseClaudeCodeSettings', () => {
     expect(out.apiKeySource).toBe('shell-env');
   });
 
-  it('returns a warning on non-JSON input', () => {
+  it('returns a raw parser error message on non-JSON input', () => {
     const out = parseClaudeCodeSettings('{ bad json', { env: {} });
     expect(out.provider).toBeNull();
-    expect(out.warnings[0]).toMatch(/not valid JSON/);
+    expect(out.userType).toBe('parse-error');
+    // warnings[0] is the raw technical reason only; the localized prefix
+    // is owned by the banner template so it can't double-up across locales.
+    expect(out.warnings[0]).not.toMatch(/Claude Code settings\.json/);
+    expect(out.warnings[0]).toMatch(/json|token|expected/i);
   });
 
-  it('promotes malformed JSON with OAuth evidence to oauth-only so the banner still fires', () => {
+  it('marks malformed JSON as parse-error regardless of OAuth evidence', () => {
     const out = parseClaudeCodeSettings('{ bad json', { env: {}, oauthEvidence: true });
-    expect(out.userType).toBe('oauth-only');
+    expect(out.userType).toBe('parse-error');
+  });
+
+  it('marks non-object settings (e.g. an array) as parse-error with a localizable sentinel', () => {
+    const out = parseClaudeCodeSettings('[]', { env: {} });
+    expect(out.userType).toBe('parse-error');
+    // Use a sentinel rather than a free-form English string so the banner
+    // can localize it instead of leaking "not a JSON object" into zh copy.
+    expect(out.warnings[0]).toBe(PARSE_REASON_NOT_JSON_OBJECT);
+  });
+
+  it('threads settingsPath through option into every return branch', () => {
+    const customPath = '/custom/home/.claude/settings.json';
+    const valid = parseClaudeCodeSettings(JSON.stringify({ env: { ANTHROPIC_AUTH_TOKEN: 'k' } }), {
+      env: {},
+      settingsPath: customPath,
+    });
+    expect(valid.settingsPath).toBe(customPath);
+    const parseErr = parseClaudeCodeSettings('{bad', { env: {}, settingsPath: customPath });
+    expect(parseErr.settingsPath).toBe(customPath);
+    const oauth = parseClaudeCodeSettings(JSON.stringify({ env: {} }), {
+      env: {},
+      oauthEvidence: true,
+      settingsPath: customPath,
+    });
+    expect(oauth.settingsPath).toBe(customPath);
+  });
+
+  it('defaults settingsPath to the canonical home-relative location', () => {
+    const out = parseClaudeCodeSettings(JSON.stringify({ env: {} }), { env: {} });
+    // Compare against the resolver rather than a literal regex so the test
+    // passes on Windows (backslash-separated paths) too.
+    expect(out.settingsPath).toBe(claudeCodeSettingsPath());
   });
 });

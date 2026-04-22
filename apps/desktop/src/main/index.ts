@@ -24,7 +24,10 @@ import {
 import type { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import type { AgentStreamEvent } from '../preload/index';
+import { registerAppMenu } from './app-menu';
 import { registerChatMessagesIpc, registerChatMessagesUnavailableIpc } from './chat-messages-ipc';
+import { runCodexGenerate } from './codex-generate';
+import { registerCodexOAuthIpc } from './codex-oauth-ipc';
 import { registerCommentsIpc, registerCommentsUnavailableIpc } from './comments-ipc';
 import { registerConnectionIpc } from './connection-ipc';
 import { scanDesignSystem } from './design-system';
@@ -59,6 +62,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 let mainWindow: ElectronBrowserWindow | null = null;
+// Cached update-available payload so a window opened after the event still
+// shows the banner. Cleared only on app quit (matching the one-shot nature
+// of autoUpdater — a new check will re-emit if still applicable).
+let pendingUpdateAvailable: unknown = null;
 
 const defaultUserDataDir = app.getPath('userData');
 const storageLocations = initStorageSettings(defaultUserDataDir);
@@ -105,10 +112,25 @@ function createWindow(): void {
   });
 
   mainWindow.on('ready-to-show', () => mainWindow?.show());
+  // Null the reference on close so stale IPC sends from async emitters
+  // (autoUpdater, long-running generate runs) become clean no-ops rather
+  // than throwing "Object has been destroyed" on a discarded webContents.
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }: { url: string }) => {
     void shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // Replay any update event that fired before this window was ready
+  // (macOS: user closed window, triggered a manual Check for Updates from
+  // the app menu, then reopened — the event would otherwise be lost).
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (pendingUpdateAvailable !== null) {
+      mainWindow?.webContents.send('codesign:update-available', pendingUpdateAvailable);
+    }
   });
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -489,7 +511,8 @@ function registerIpcHandlers(): void {
         modelId: active.model.modelId,
       };
       coreLogger.info('[generate] step=validate_provider', stepCtx);
-      if (apiKey.length === 0 && !allowKeyless) {
+      const isChatgptCodex = active.model.provider === 'chatgpt-codex';
+      if (apiKey.length === 0 && !allowKeyless && !isChatgptCodex) {
         coreLogger.error('[generate] step=validate_provider.fail', {
           provider: active.model.provider,
           reason: 'missing_api_key',
@@ -527,6 +550,34 @@ function registerIpcHandlers(): void {
       let clearTimeoutGuard: () => void = () => {};
       try {
         clearTimeoutGuard = await armTimeout(id, controller);
+        if (isChatgptCodex) {
+          const codex = await runCodexGenerate({
+            prompt: payload.prompt,
+            history: payload.history,
+            model: active.model,
+            attachments: promptContext.attachments,
+            referenceUrl: promptContext.referenceUrl ?? null,
+            designSystem: promptContext.designSystem ?? null,
+            signal: controller.signal,
+            logger: coreLogger,
+          });
+          const result = {
+            message: codex.rawOutput,
+            artifacts: codex.artifacts,
+            inputTokens: 0,
+            outputTokens: 0,
+            costUsd: 0,
+            ...(codex.issues.length > 0 ? { warnings: codex.issues } : {}),
+          };
+          logIpc.info('generate.ok', {
+            generationId: id,
+            ms: Date.now() - t0,
+            artifacts: result.artifacts.length,
+            cost: result.costUsd,
+            via: 'codex',
+          });
+          return result;
+        }
         const result = await runGenerate(
           {
             prompt: payload.prompt,
@@ -593,6 +644,13 @@ function registerIpcHandlers(): void {
         );
       }
       const active = resolveActiveModel(cfg, payload.model);
+      if (active.model.provider === 'chatgpt-codex') {
+        inFlight.delete(id);
+        throw new CodesignError(
+          'ChatGPT 订阅登录需要 v1 generate 通道。请重启 open-codesign 升级到最新客户端。',
+          'PROVIDER_NOT_SUPPORTED',
+        );
+      }
       let apiKey: string;
       try {
         apiKey = getApiKeyForProvider(active.model.provider);
@@ -814,20 +872,68 @@ function registerIpcHandlers(): void {
   ipcMain.handle('codesign:open-log-folder', async () => {
     await shell.openPath(getLogPath());
   });
+
+  ipcMain.handle('codesign:v1:open-external', async (_e, url: unknown) => {
+    if (typeof url !== 'string') {
+      throw new CodesignError('codesign:v1:open-external requires a string url', 'IPC_BAD_INPUT');
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new CodesignError('URL not allowed', 'IPC_BAD_INPUT');
+    }
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.origin !== 'https://github.com' ||
+      !parsed.pathname.startsWith('/OpenCoworkAI/open-codesign/releases/')
+    ) {
+      throw new CodesignError('URL not allowed', 'IPC_BAD_INPUT');
+    }
+    await shell.openExternal(parsed.toString());
+  });
 }
 
 function setupAutoUpdater(): void {
   if (!app.isPackaged) return;
   autoUpdater.autoDownload = false;
   autoUpdater.on('update-available', (info) => {
+    pendingUpdateAvailable = info;
     mainWindow?.webContents.send('codesign:update-available', info);
   });
+  autoUpdater.on('update-not-available', (info) => {
+    mainWindow?.webContents.send('codesign:update-not-available', info);
+  });
   autoUpdater.on('error', (err) => {
+    getLogger('main:updates').error('autoUpdater.error', {
+      message: err.message,
+      stack: err.stack,
+    });
     mainWindow?.webContents.send('codesign:update-error', err.message);
   });
   ipcMain.handle('codesign:check-for-updates', () => autoUpdater.checkForUpdates());
   ipcMain.handle('codesign:download-update', () => autoUpdater.downloadUpdate());
   ipcMain.handle('codesign:install-update', () => autoUpdater.quitAndInstall());
+}
+
+async function scheduleStartupUpdateCheck(): Promise<void> {
+  if (!app.isPackaged) return;
+  const prefs = await readPreferences();
+  if (prefs.checkForUpdatesOnStartup === false) return;
+  setTimeout(() => {
+    const updateLog = getLogger('main:updates');
+    try {
+      autoUpdater.checkForUpdates().catch((err: unknown) => {
+        updateLog.error('startup.checkForUpdates.fail', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+    } catch (err) {
+      updateLog.error('startup.checkForUpdates.throw', {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, 30_000);
 }
 
 void app.whenReady().then(async () => {
@@ -868,11 +974,14 @@ void app.whenReady().then(async () => {
   registerLocaleIpc();
   registerConnectionIpc();
   registerOnboardingIpc();
+  registerCodexOAuthIpc();
   registerPreferencesIpc();
   registerExporterIpc(() => mainWindow);
   registerDiagnosticsIpc();
   setupAutoUpdater();
+  registerAppMenu();
   createWindow();
+  void scheduleStartupUpdateCheck();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

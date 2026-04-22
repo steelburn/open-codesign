@@ -9,6 +9,17 @@ interface Props {
   onClose: () => void;
   /** When true, render as the primary/active provider after save. */
   initialSetAsActive?: boolean;
+  /**
+   * Pre-fill the form. Used by Settings to jump OAuth-only users straight
+   * into a focused "paste your Anthropic key" flow instead of making them
+   * rediscover the fields. Users can still edit every field before saving.
+   */
+  initialValues?: {
+    name?: string;
+    baseUrl?: string;
+    wire?: WireApi;
+    defaultModel?: string;
+  };
 }
 
 type TestState =
@@ -22,14 +33,21 @@ type TestState =
  * Deliberately barebones (native form + FormData-ish accessors, no schema),
  * per the v3 brief. Advanced headers/queryParams defer to a later pass.
  */
-export function AddCustomProviderModal({ onSave, onClose, initialSetAsActive = true }: Props) {
+export function AddCustomProviderModal({
+  onSave,
+  onClose,
+  initialSetAsActive = true,
+  initialValues,
+}: Props) {
   const t = useT();
-  const [name, setName] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
+  const [name, setName] = useState(initialValues?.name ?? '');
+  const [baseUrl, setBaseUrl] = useState(initialValues?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
-  const [defaultModel, setDefaultModel] = useState('');
-  const [wire, setWire] = useState<WireApi>('openai-chat');
-  const [wireAuto, setWireAuto] = useState(true);
+  const [defaultModel, setDefaultModel] = useState(initialValues?.defaultModel ?? '');
+  const [wire, setWire] = useState<WireApi>(initialValues?.wire ?? 'openai-chat');
+  // If the caller pre-specified a wire, they know what they want — don't
+  // overwrite it when the user edits baseUrl.
+  const [wireAuto, setWireAuto] = useState(initialValues?.wire === undefined);
   const [test, setTest] = useState<TestState>({ kind: 'idle' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

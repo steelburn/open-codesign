@@ -611,6 +611,13 @@ export function registerConnectionIpc(): void {
         };
       }
 
+      // Providers that expose a static hint (e.g. chatgpt-codex, whose /models
+      // endpoint requires OAuth bearer + ChatGPT-Account-Id headers that this
+      // keyless discovery path cannot supply) short-circuit with modelsHint.
+      if (entry.modelsHint !== undefined && entry.modelsHint.length > 0) {
+        return { ok: true, models: entry.modelsHint };
+      }
+
       let apiKey: string;
       try {
         apiKey = getApiKeyForProvider(raw);

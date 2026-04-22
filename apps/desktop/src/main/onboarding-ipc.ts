@@ -88,6 +88,17 @@ export async function loadConfigOnBoot(): Promise<void> {
   }
 }
 
+/**
+ * Overwrite the cached config reference. For use by sibling IPC modules (e.g.
+ * `codex-oauth-ipc`) that mutate `config.providers` via their own write path
+ * and need `getCachedConfig` / `toState` to reflect the change immediately.
+ * Callers are responsible for having already persisted `next` to disk.
+ */
+export function setCachedConfig(next: Config): void {
+  cachedConfig = next;
+  configLoaded = true;
+}
+
 export function getCachedConfig(): Config | null {
   if (!configLoaded) {
     throw new CodesignError(
@@ -726,8 +737,11 @@ async function runUpdateProvider(input: UpdateProviderInput): Promise<Onboarding
 interface ClaudeCodeDetectionMeta {
   userType: ClaudeCodeImport['userType'];
   baseUrl: string;
+  defaultModel: string;
   hasApiKey: boolean;
   apiKeySource: ClaudeCodeImport['apiKeySource'];
+  settingsPath: string;
+  warnings: string[];
 }
 
 interface ExternalConfigsDetection {
@@ -986,8 +1000,12 @@ export function registerOnboardingIpc(): void {
         out.claudeCode = {
           userType: claudeCode.userType,
           baseUrl: claudeCode.provider?.baseUrl ?? 'https://api.anthropic.com',
+          defaultModel:
+            claudeCode.provider?.defaultModel ?? claudeCode.activeModel ?? 'claude-sonnet-4-6',
           hasApiKey: claudeCode.apiKey !== null,
           apiKeySource: claudeCode.apiKeySource,
+          settingsPath: claudeCode.settingsPath,
+          warnings: claudeCode.warnings,
         };
       }
       return out;

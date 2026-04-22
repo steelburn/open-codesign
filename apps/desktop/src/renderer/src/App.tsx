@@ -9,8 +9,11 @@ import { Settings } from './components/Settings';
 import { Sidebar } from './components/Sidebar';
 import { ToastViewport } from './components/Toast';
 import { TopBar } from './components/TopBar';
+import { UpdateBanner } from './components/UpdateBanner';
 import { CommentsPanel } from './components/comment/CommentsPanel';
 import { useKeyboard } from './hooks/useKeyboard';
+import { useUpdateWiring } from './hooks/useUpdateWiring';
+import { createUpdateStore } from './state/update-store';
 import { useCodesignStore } from './store';
 import { HubView } from './views/HubView';
 
@@ -44,6 +47,25 @@ export function App() {
     Math.max(320, Math.round(window.innerWidth * 0.25)),
   );
   const [isResizing, setIsResizing] = useState(false);
+
+  const [updateStore] = useState(() => createUpdateStore({ dismissedVersion: '' }));
+  useUpdateWiring(updateStore);
+
+  useEffect(() => {
+    if (!window.codesign) {
+      updateStore.getState().markDismissedVersionReady('');
+      return;
+    }
+    window.codesign.preferences
+      .get()
+      .then((prefs) => {
+        updateStore.getState().markDismissedVersionReady(prefs.dismissedUpdateVersion ?? '');
+      })
+      .catch((err) => {
+        console.warn('[App] failed to seed dismissedUpdateVersion', err);
+        updateStore.getState().markDismissedVersionReady('');
+      });
+  }, [updateStore]);
   // Once the user has visited Hub we keep HubView mounted (toggled via
   // `hidden`) so going Workspace → Hub doesn't tear down the design-card
   // iframes and pay the srcDoc parse cost again.
@@ -185,6 +207,7 @@ export function App() {
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-background)]">
+      <UpdateBanner store={updateStore} />
       <TopBar />
       <div className="flex-1 min-h-0 relative">
         {view === 'settings' ? <Settings /> : null}

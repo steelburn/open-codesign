@@ -1,5 +1,5 @@
 import { setLocale as applyLocale, useT } from '@open-codesign/i18n';
-import type { OnboardingState, ReasoningLevel } from '@open-codesign/shared';
+import type { OnboardingState, ReasoningLevel, WireApi } from '@open-codesign/shared';
 import {
   PROVIDER_SHORTLIST as SHORTLIST,
   isSupportedOnboardingProvider,
@@ -25,6 +25,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AppPaths, Preferences, ProviderRow, StorageKind } from '../../../preload/index';
 import { useCodesignStore } from '../store';
 import { AddCustomProviderModal } from './AddCustomProviderModal';
+import { ChatgptLoginCard } from './ChatgptLoginCard';
 
 type Tab = 'models' | 'appearance' | 'storage' | 'advanced';
 
@@ -531,7 +532,38 @@ function ReasoningDepthSelector({
   );
 }
 
+/**
+ * Keep in sync with `PARSE_REASON_NOT_JSON_OBJECT` in
+ * apps/desktop/src/main/imports/claude-code-config.ts. The renderer can't
+ * import main-process modules, so the sentinel is duplicated rather than
+ * exposed via a preload bridge for one constant string.
+ */
+const PARSE_REASON_NOT_JSON_OBJECT = '__parse_reason_not_json_object__';
+
 const DISMISSED_BANNER_PREFIX = 'open-codesign:settings:dismissed-import-banner:';
+
+/**
+ * Strip any user:pass@ credentials from a URL before putting it into
+ * visible copy (banner, toast, screenshot). Preserves the full URL for
+ * anything the renderer passes back into the modal preset — we don't want
+ * to silently change what will be saved, only what's shown to the user.
+ * Falls back to the raw string on parse failure.
+ */
+function maskBaseUrlCreds(raw: string): string {
+  try {
+    const u = new URL(raw);
+    if (u.username === '' && u.password === '') return raw;
+    u.username = '';
+    u.password = '';
+    // URL.toString() adds a trailing slash on bare-host URLs; strip it so
+    // "https://proxy.local/" doesn't become "https://proxy.local/" while
+    // the raw was "https://proxy.local".
+    return u.toString().replace(/\/$/, raw.endsWith('/') ? '/' : '');
+  } catch {
+    return raw;
+  }
+}
+
 function readDismissed(kind: 'codex' | 'claudeCode'): boolean {
   try {
     return window.localStorage.getItem(DISMISSED_BANNER_PREFIX + kind) === '1';
@@ -593,51 +625,149 @@ function ImportBanner({
  * Full-width multi-line banner for the OAuth-subscription case — users who
  * logged into Claude Code via Pro/Max OAuth and cannot share that quota
  * with third-party apps. Renders the "why it won't work" explainer plus
- * two CTAs: go grab an API key, or handle a local proxy manually.
+ * two CTAs: go grab an API key, or paste one the user already has.
  */
 function OAuthSubscriptionBanner({
   onDismiss,
-  onManualProxy,
+  onIHaveKey,
 }: {
   onDismiss: () => void;
-  onManualProxy: () => void;
+  onIHaveKey: () => void;
 }) {
   const t = useT();
   return (
     <div className="rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[var(--color-surface-muted)] p-3 space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
-          {t('settings.providers.import.claudeCodeOAuthTitle')}
-        </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] transition-colors whitespace-nowrap"
-        >
-          {t('settings.providers.import.dismiss')}
-        </button>
+      <div className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
+        {t('settings.providers.import.claudeCodeOAuthTitle')}
       </div>
       <p className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-relaxed">
         {t('settings.providers.import.claudeCodeOAuthBody')}
       </p>
-      <div className="flex flex-wrap gap-2 pt-1">
-        <a
-          href="https://console.anthropic.com/settings/keys"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="h-7 px-2.5 inline-flex items-center rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-accent)] hover:opacity-90 transition-opacity whitespace-nowrap"
-        >
-          {t('settings.providers.import.claudeCodeOAuthCtaConsole')}
-        </a>
+      <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-relaxed">
+        {t('settings.providers.import.claudeCodeShellEnvHint')}
+      </p>
+      {/* One action row. The two CTAs live in an inner `flex-1` wrapper so
+          Dismiss is pushed to the right on wide windows (ml-auto effect via
+          flex sizing) but wraps to its own line beneath them on narrow
+          windows — where "dismiss on the right while CTAs are on the left"
+          would read as a layout glitch. DOM order is primary → secondary →
+          dismiss so keyboard Tab still lands on the real actions first. */}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+          <a
+            href="https://console.anthropic.com/settings/keys"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="h-7 px-2.5 inline-flex items-center rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-on-accent)] bg-[var(--color-accent)] hover:opacity-90 transition-opacity whitespace-nowrap"
+          >
+            {t('settings.providers.import.claudeCodeOAuthCtaConsole')}
+          </a>
+          <button
+            type="button"
+            onClick={onIHaveKey}
+            className="h-7 px-2.5 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border-strong)] hover:bg-[var(--color-surface-hover)] transition-colors whitespace-nowrap"
+          >
+            {t('settings.providers.import.claudeCodeIHaveKey')}
+          </button>
+        </div>
         <button
           type="button"
-          onClick={onManualProxy}
-          className="h-7 px-2.5 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border-strong)] hover:bg-[var(--color-surface-hover)] transition-colors whitespace-nowrap"
+          onClick={onDismiss}
+          className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors whitespace-nowrap"
         >
-          {t('settings.providers.import.claudeCodeOAuthCtaProxy')}
+          {t('settings.providers.import.dismiss')}
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Banner shown when ~/.claude/settings.json exists but can't be parsed
+ * (invalid JSON / wrong shape). We surface the file path so the user can
+ * open and fix it — we deliberately don't launch the OS file opener to
+ * avoid the file-association guesswork and the "Which app?" prompt.
+ */
+function ParseErrorBanner({
+  reason,
+  path,
+  onCopyPath,
+  onDismiss,
+}: {
+  reason: string;
+  path: string;
+  onCopyPath: () => void;
+  onDismiss: () => void;
+}) {
+  const t = useT();
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--color-error)] bg-[var(--color-surface-muted)] p-3 space-y-2">
+      <div className="flex items-start gap-2">
+        <AlertTriangle
+          className="w-4 h-4 mt-0.5 shrink-0 text-[var(--color-error)]"
+          aria-hidden="true"
+        />
+        <div className="text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
+          {t('settings.providers.import.claudeCodeParseErrorTitle')}
+        </div>
+      </div>
+      <p className="text-[var(--text-xs)] text-[var(--color-text-secondary)] leading-relaxed break-words">
+        {t('settings.providers.import.claudeCodeParseErrorBody', { reason })}
+      </p>
+      <p className="text-[var(--text-xs)] text-[var(--color-text-muted)] font-mono break-all">
+        {path}
+      </p>
+      <div className="flex justify-between items-center gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onCopyPath}
+          className="h-7 px-2.5 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-secondary)] border border-[var(--color-border-strong)] hover:bg-[var(--color-surface-hover)] transition-colors whitespace-nowrap"
+        >
+          {t('settings.providers.import.claudeCodeParseErrorCopyPath')}
+        </button>
+        {/* Dismiss last in DOM — see OAuthSubscriptionBanner rationale. */}
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="h-7 px-2 rounded-[var(--radius-sm)] text-[var(--text-xs)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors whitespace-nowrap"
+        >
+          {t('settings.providers.import.dismiss')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Muted one-liners rendered under a banner. Each entry is a parser-emitted
+ * warning (e.g. "apiKeyHelper detected, not executed"). Line-clamped so a
+ * single pathological warning can't own three screens; capped to 3 items
+ * with a "+N more" disclosure when more pile up.
+ */
+function WarningsList({ warnings }: { warnings: string[] }) {
+  const t = useT();
+  if (warnings.length === 0) return null;
+  const MAX = 3;
+  const shown = warnings.slice(0, MAX);
+  const overflow = warnings.length - shown.length;
+  return (
+    <ul className="space-y-1 pl-1 pt-1">
+      {shown.map((w, i) => (
+        // Index-qualified key so two byte-identical warnings don't collide.
+        // eslint-disable-next-line react/no-array-index-key
+        <li
+          key={`${i}-${w.slice(0, 32)}`}
+          className="text-[var(--text-xs)] text-[var(--color-text-muted)] leading-relaxed break-words line-clamp-2"
+        >
+          ⚠️ {w}
+        </li>
+      ))}
+      {overflow > 0 ? (
+        <li className="text-[var(--text-xs)] text-[var(--color-text-muted)] italic">
+          {t('settings.providers.import.claudeCodeWarningsMore', { count: overflow })}
+        </li>
+      ) : null}
+    </ul>
   );
 }
 
@@ -654,13 +784,32 @@ function ModelsTab() {
     codex?: { count: number } | undefined;
     claudeCode?:
       | {
-          userType: 'has-api-key' | 'oauth-only' | 'local-proxy' | 'remote-gateway';
+          userType: 'has-api-key' | 'oauth-only' | 'local-proxy' | 'remote-gateway' | 'parse-error';
           baseUrl: string;
+          defaultModel: string;
           apiKeySource: 'settings-json' | 'shell-env' | 'none';
           hasApiKey: boolean;
+          settingsPath: string;
+          warnings: string[];
         }
       | undefined;
   } | null>(null);
+  /**
+   * When set, `AddCustomProviderModal` mounts with these fields pre-filled.
+   * Used by the OAuth "I have an API key" path to jump the user straight
+   * to a pre-configured Anthropic entry instead of the generic form, and
+   * by the local-proxy / remote-gateway paths to pre-fill the detected
+   * endpoint so the user only has to paste a key.
+   */
+  const [customProviderPreset, setCustomProviderPreset] = useState<
+    | {
+        name: string;
+        baseUrl: string;
+        wire: WireApi;
+        defaultModel?: string;
+      }
+    | undefined
+  >(undefined);
 
   useEffect(() => {
     if (!window.codesign) return;
@@ -695,10 +844,14 @@ function ModelsTab() {
                     | 'has-api-key'
                     | 'oauth-only'
                     | 'local-proxy'
-                    | 'remote-gateway',
+                    | 'remote-gateway'
+                    | 'parse-error',
                   baseUrl: detected.claudeCode.baseUrl,
+                  defaultModel: detected.claudeCode.defaultModel,
                   apiKeySource: detected.claudeCode.apiKeySource,
                   hasApiKey: detected.claudeCode.hasApiKey,
+                  settingsPath: detected.claudeCode.settingsPath,
+                  warnings: detected.claudeCode.warnings ?? [],
                 },
               }
             : {}),
@@ -737,20 +890,34 @@ function ModelsTab() {
 
   async function handleImportClaudeCode() {
     if (!window.codesign) return;
+    // Only `has-api-key` reaches here; other userTypes open the paste
+    // modal via a preset instead of hitting the silent-import IPC.
     try {
       await window.codesign.config.importClaudeCodeConfig();
       setExternalConfigs((prev) => (prev === null ? null : { ...prev, claudeCode: undefined }));
       await reloadRows();
-      pushToast({ variant: 'success', title: t('settings.providers.import.claudeCodeDone') });
+      pushToast({
+        variant: 'success',
+        title: t('settings.providers.import.claudeCodeImportedActivated'),
+      });
     } catch (err) {
-      // OAuth-only users get their own copy — the generic "import failed"
-      // toast is misleading because the failure is expected (subscription
-      // auth can't be shared) and the remediation lives in the banner.
+      // Safety net for a stale detection → OAuth-only race (settings.json
+      // lost its key between mount and click).
       const code = (err as { code?: string } | null)?.code;
       if (code === 'CLAUDE_CODE_OAUTH_ONLY') {
         pushToast({
           variant: 'info',
           title: t('settings.providers.import.oauthErrorToast'),
+          // Make the toast self-sufficient: referencing "the banner above"
+          // is a dead end if the user has dismissed it. Action opens the
+          // Anthropic console in the default browser so the user can grab
+          // a key without going back to the banner at all.
+          action: {
+            label: t('settings.providers.import.oauthErrorToastCta'),
+            onClick: () => {
+              window.open('https://console.anthropic.com/settings/keys', '_blank');
+            },
+          },
         });
         return;
       }
@@ -758,6 +925,22 @@ function ModelsTab() {
         variant: 'error',
         title: t('settings.providers.import.failed'),
         description: err instanceof Error ? err.message : t('settings.common.unknownError'),
+      });
+    }
+  }
+
+  async function handleCopyPath(path: string) {
+    try {
+      await navigator.clipboard.writeText(path);
+      pushToast({
+        variant: 'success',
+        title: t('settings.providers.import.claudeCodeParseErrorPathCopied'),
+      });
+    } catch {
+      pushToast({
+        variant: 'error',
+        title: t('settings.common.unknownError'),
+        description: path,
       });
     }
   }
@@ -770,6 +953,41 @@ function ModelsTab() {
       const newState = await window.codesign.onboarding.getState();
       setConfig(newState);
       pushToast({ variant: 'success', title: t('settings.providers.toast.removed') });
+      // If the user deleted the claude-code-imported row, re-run detection
+      // so the banner can reappear (otherwise alreadyHasClaudeCode from the
+      // initial mount would keep it suppressed for the rest of the session).
+      if (provider === 'claude-code-imported') {
+        try {
+          const detected = await window.codesign.config.detectExternalConfigs();
+          const detectedCc = detected.claudeCode;
+          const dismissedClaudeCode = readDismissed('claudeCode');
+          if (
+            detectedCc !== undefined &&
+            detectedCc.userType !== 'no-config' &&
+            !dismissedClaudeCode
+          ) {
+            setExternalConfigs((prev) => ({
+              ...(prev ?? {}),
+              claudeCode: {
+                userType: detectedCc.userType as
+                  | 'has-api-key'
+                  | 'oauth-only'
+                  | 'local-proxy'
+                  | 'remote-gateway'
+                  | 'parse-error',
+                baseUrl: detectedCc.baseUrl,
+                defaultModel: detectedCc.defaultModel,
+                apiKeySource: detectedCc.apiKeySource,
+                hasApiKey: detectedCc.hasApiKey,
+                settingsPath: detectedCc.settingsPath,
+                warnings: detectedCc.warnings ?? [],
+              },
+            }));
+          }
+        } catch {
+          /* non-fatal: banner just won't reappear this session */
+        }
+      }
     } catch (err) {
       pushToast({
         variant: 'error',
@@ -820,15 +1038,30 @@ function ModelsTab() {
       {showAddCustom && (
         <AddCustomProviderModal
           onSave={async () => {
+            // If this save came from a Claude Code banner flow (preset set),
+            // clear the banner — the provider it was nagging about is now
+            // successfully imported. Otherwise leave externalConfigs alone.
+            const cameFromClaudeCodeBanner = customProviderPreset !== undefined;
             setShowAddCustom(false);
+            setCustomProviderPreset(undefined);
+            if (cameFromClaudeCodeBanner) {
+              setExternalConfigs((prev) =>
+                prev === null ? null : { ...prev, claudeCode: undefined },
+              );
+            }
             await reloadRows();
             pushToast({ variant: 'success', title: t('settings.providers.toast.saved') });
           }}
-          onClose={() => setShowAddCustom(false)}
+          onClose={() => {
+            setShowAddCustom(false);
+            setCustomProviderPreset(undefined);
+          }}
+          {...(customProviderPreset !== undefined ? { initialValues: customProviderPreset } : {})}
         />
       )}
 
       <div className="space-y-[var(--space-3)]">
+        <ChatgptLoginCard onStatusChange={reloadRows} />
         {externalConfigs !== null &&
           (externalConfigs.codex !== undefined || externalConfigs.claudeCode !== undefined) && (
             <div className="space-y-2">
@@ -849,21 +1082,74 @@ function ModelsTab() {
               {externalConfigs.claudeCode !== undefined &&
                 (() => {
                   const cc = externalConfigs.claudeCode;
+                  // Mask any user:pass@ credentials before putting the URL
+                  // into visible copy. Keeps the preset's raw form intact so
+                  // the user's proxy still works at runtime.
+                  const displayBaseUrl = maskBaseUrlCreds(cc.baseUrl);
                   const dismiss = () => {
                     writeDismissed('claudeCode');
                     setExternalConfigs((prev) =>
                       prev === null ? null : { ...prev, claudeCode: undefined },
                     );
                   };
+                  const openAnthropicPaste = () => {
+                    setCustomProviderPreset({
+                      name: t('settings.providers.import.claudeCodeAnthropicPresetName'),
+                      baseUrl: 'https://api.anthropic.com',
+                      wire: 'anthropic',
+                      defaultModel: 'claude-sonnet-4-6',
+                    });
+                    setShowAddCustom(true);
+                    // Banner stays visible: if the user cancels the modal
+                    // they still need the reminder.
+                  };
+                  // Proxy / remote gateway: same paste flow but pre-fill the
+                  // detected baseUrl + model. Wire stays anthropic since these
+                  // endpoints speak Anthropic's Messages API. Users can still
+                  // edit every field before saving.
+                  const openGatewayPaste = (presetName: string) => {
+                    setCustomProviderPreset({
+                      name: presetName,
+                      baseUrl: cc.baseUrl,
+                      wire: 'anthropic',
+                      defaultModel: cc.defaultModel,
+                    });
+                    setShowAddCustom(true);
+                    // Same rationale as openAnthropicPaste: banner stays
+                    // in case user cancels out of the modal.
+                  };
+
+                  if (cc.userType === 'parse-error') {
+                    // Translate the sentinel before feeding the banner
+                    // template. V8's JSON.parse errors are English-only so
+                    // they pass through as-is; only our app-authored
+                    // "not an object" signal gets localized.
+                    const rawReason = cc.warnings[0] ?? '';
+                    const reason =
+                      rawReason === PARSE_REASON_NOT_JSON_OBJECT
+                        ? t('settings.providers.import.claudeCodeParseErrorReasonNotObject')
+                        : rawReason || t('settings.common.unknownError');
+                    return (
+                      <>
+                        <ParseErrorBanner
+                          reason={reason}
+                          path={cc.settingsPath}
+                          onCopyPath={() => handleCopyPath(cc.settingsPath)}
+                          onDismiss={dismiss}
+                        />
+                        <WarningsList warnings={cc.warnings.slice(1)} />
+                      </>
+                    );
+                  }
                   if (cc.userType === 'oauth-only') {
                     return (
-                      <OAuthSubscriptionBanner
-                        onDismiss={dismiss}
-                        onManualProxy={() => {
-                          dismiss();
-                          setShowAddCustom(true);
-                        }}
-                      />
+                      <>
+                        <OAuthSubscriptionBanner
+                          onDismiss={dismiss}
+                          onIHaveKey={openAnthropicPaste}
+                        />
+                        <WarningsList warnings={cc.warnings} />
+                      </>
                     );
                   }
                   if (cc.userType === 'has-api-key') {
@@ -872,40 +1158,57 @@ function ModelsTab() {
                         ? t('settings.providers.import.claudeCodeHasKeySourceEnv')
                         : t('settings.providers.import.claudeCodeHasKeySourceSettings');
                     return (
-                      <ImportBanner
-                        label={t('settings.providers.import.claudeCodeHasKeyBody', {
-                          source,
-                          baseUrl: cc.baseUrl,
-                        })}
-                        onImport={handleImportClaudeCode}
-                        onDismiss={dismiss}
-                      />
+                      <>
+                        <ImportBanner
+                          label={t('settings.providers.import.claudeCodeHasKeyBody', {
+                            source,
+                            baseUrl: displayBaseUrl,
+                          })}
+                          onImport={handleImportClaudeCode}
+                          onDismiss={dismiss}
+                        />
+                        <WarningsList warnings={cc.warnings} />
+                      </>
                     );
                   }
                   if (cc.userType === 'local-proxy') {
                     return (
-                      <ImportBanner
-                        tone="info"
-                        label={t('settings.providers.import.claudeCodeLocalProxyBody', {
-                          baseUrl: cc.baseUrl,
-                        })}
-                        actionLabel={t('settings.providers.import.claudeCodeLocalProxyAction')}
-                        onImport={handleImportClaudeCode}
-                        onDismiss={dismiss}
-                      />
+                      <>
+                        <ImportBanner
+                          tone="info"
+                          label={t('settings.providers.import.claudeCodeLocalProxyBody', {
+                            baseUrl: displayBaseUrl,
+                          })}
+                          actionLabel={t('settings.providers.import.claudeCodeLocalProxyAction')}
+                          onImport={() =>
+                            openGatewayPaste(
+                              t('settings.providers.import.claudeCodeLocalProxyPresetName'),
+                            )
+                          }
+                          onDismiss={dismiss}
+                        />
+                        <WarningsList warnings={cc.warnings} />
+                      </>
                     );
                   }
                   // remote-gateway
                   return (
-                    <ImportBanner
-                      tone="info"
-                      label={t('settings.providers.import.claudeCodeRemoteGatewayBody', {
-                        baseUrl: cc.baseUrl,
-                      })}
-                      actionLabel={t('settings.providers.import.claudeCodeRemoteGatewayAction')}
-                      onImport={handleImportClaudeCode}
-                      onDismiss={dismiss}
-                    />
+                    <>
+                      <ImportBanner
+                        tone="info"
+                        label={t('settings.providers.import.claudeCodeRemoteGatewayBody', {
+                          baseUrl: displayBaseUrl,
+                        })}
+                        actionLabel={t('settings.providers.import.claudeCodeRemoteGatewayAction')}
+                        onImport={() =>
+                          openGatewayPaste(
+                            t('settings.providers.import.claudeCodeRemoteGatewayPresetName'),
+                          )
+                        }
+                        onDismiss={dismiss}
+                      />
+                      <WarningsList warnings={cc.warnings} />
+                    </>
                   );
                 })()}
             </div>
@@ -1371,7 +1674,9 @@ function AdvancedTab() {
   const pushToast = useCodesignStore((s) => s.pushToast);
   const [prefs, setPrefs] = useState<Preferences>({
     updateChannel: 'stable',
-    generationTimeoutSec: 120,
+    generationTimeoutSec: 1200,
+    checkForUpdatesOnStartup: true,
+    dismissedUpdateVersion: '',
   });
 
   useEffect(() => {
@@ -1428,6 +1733,18 @@ function AdvancedTab() {
           ]}
           value={prefs.updateChannel}
           onChange={(v) => void updatePref({ updateChannel: v })}
+        />
+      </Row>
+
+      <Row
+        label={t('settings.advanced.checkForUpdatesOnStartup')}
+        hint={t('settings.advanced.checkForUpdatesOnStartupHint')}
+      >
+        <input
+          type="checkbox"
+          checked={prefs.checkForUpdatesOnStartup}
+          onChange={(e) => void updatePref({ checkForUpdatesOnStartup: e.target.checked })}
+          className="h-4 w-4 accent-[var(--color-accent)]"
         />
       </Row>
 

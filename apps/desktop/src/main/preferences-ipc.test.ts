@@ -1,5 +1,5 @@
 import { CodesignError } from '@open-codesign/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock electron and logger before importing the module under test.
 vi.mock('electron', () => ({
@@ -31,7 +31,8 @@ vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(async () => {}),
 }));
 
-import { readPersisted } from './preferences-ipc';
+import { writeFile } from 'node:fs/promises';
+import { readPersisted, registerPreferencesIpc } from './preferences-ipc';
 
 describe('readPersisted()', () => {
   it('returns defaults when the file does not exist (ENOENT)', async () => {
@@ -39,7 +40,12 @@ describe('readPersisted()', () => {
     readFileMock.mockRejectedValueOnce(notFound);
 
     const result = await readPersisted();
-    expect(result).toEqual({ updateChannel: 'stable', generationTimeoutSec: 1200 });
+    expect(result).toEqual({
+      updateChannel: 'stable',
+      generationTimeoutSec: 1200,
+      checkForUpdatesOnStartup: true,
+      dismissedUpdateVersion: '',
+    });
   });
 
   it('honors XDG_CONFIG_HOME when computing the persisted file path', async () => {
@@ -100,5 +106,53 @@ describe('readPersisted()', () => {
     );
     const result = await readPersisted();
     expect(result.generationTimeoutSec).toBe(600);
+  });
+});
+
+describe('preferences v4 schema fields', () => {
+  // Capture ipcMain.handle calls so we can invoke registered handlers directly.
+  // biome-ignore lint/suspicious/noExplicitAny: test helper
+  const handlers: Record<string, (...args: any[]) => unknown> = {};
+
+  beforeEach(async () => {
+    const { ipcMain } = await import('electron');
+    vi.mocked(ipcMain.handle).mockImplementation((channel, handler) => {
+      handlers[channel] = handler;
+    });
+    // Re-register so the new mockImplementation captures the handlers.
+    registerPreferencesIpc();
+  });
+
+  it('reads checkForUpdatesOnStartup and dismissedUpdateVersion with v4 defaults when absent', async () => {
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({ schemaVersion: 3, updateChannel: 'stable', generationTimeoutSec: 1200 }),
+    );
+    const prefs = await readPersisted();
+    expect(prefs.checkForUpdatesOnStartup).toBe(true);
+    expect(prefs.dismissedUpdateVersion).toBe('');
+  });
+
+  it('round-trips dismissedUpdateVersion through preferences:v1:update', async () => {
+    // First read (in the update handler) returns the current stored preferences.
+    readFileMock.mockResolvedValueOnce(
+      JSON.stringify({
+        schemaVersion: 4,
+        updateChannel: 'stable',
+        generationTimeoutSec: 1200,
+        checkForUpdatesOnStartup: true,
+        dismissedUpdateVersion: '',
+      }),
+    );
+    const updated = await (
+      handlers['preferences:v1:update'] as (_e: null, raw: unknown) => Promise<unknown>
+    )(null, { dismissedUpdateVersion: '0.2.1' });
+    expect((updated as { dismissedUpdateVersion: string }).dismissedUpdateVersion).toBe('0.2.1');
+
+    // Verify writeFile was called with the updated value.
+    const writeFileMock = vi.mocked(writeFile);
+    const lastCall = writeFileMock.mock.calls.at(-1);
+    if (!lastCall) throw new Error('writeFile was not called');
+    const written = JSON.parse(lastCall[1] as string) as { dismissedUpdateVersion: string };
+    expect(written.dismissedUpdateVersion).toBe('0.2.1');
   });
 });

@@ -353,6 +353,7 @@ describe('config:v1:import-claude-code-config — user-type branching', () => {
       userType: 'oauth-only',
       hasOAuthEvidence: true,
       activeModel: null,
+      settingsPath: '/tmp/.claude/settings.json',
       warnings: [],
     });
 
@@ -406,6 +407,7 @@ describe('config:v1:import-claude-code-config — user-type branching', () => {
       userType: 'local-proxy',
       hasOAuthEvidence: false,
       activeModel: 'claude-sonnet-4-6',
+      settingsPath: '/tmp/.claude/settings.json',
       warnings: [],
     });
 
@@ -440,6 +442,7 @@ describe('config:v1:import-claude-code-config — user-type branching', () => {
       userType: 'has-api-key',
       hasOAuthEvidence: false,
       activeModel: 'claude-sonnet-4-6',
+      settingsPath: '/tmp/.claude/settings.json',
       warnings: [],
     });
 
@@ -514,5 +517,56 @@ describe('getApiKeyForProvider — envKey runtime fallback', () => {
     await loadConfigOnBoot();
 
     expect(() => getApiKeyForProvider('no-key')).toThrow(/PROVIDER_KEY_MISSING|No API key stored/);
+  });
+});
+
+describe('config:v1:detect-external-configs — payload shape', () => {
+  // Regression guard: this PR lost `settingsPath` + `defaultModel` from the
+  // IPC output three separate times during rebasing. Lock the shape so it
+  // can't silently regress again — the renderer depends on both fields.
+  it('emits settingsPath and defaultModel alongside the existing fields', async () => {
+    const { readClaudeCodeSettings } = await import('./imports/claude-code-config');
+    vi.mocked(readClaudeCodeSettings).mockResolvedValueOnce({
+      provider: {
+        id: 'claude-code-imported',
+        name: 'Claude Code (imported)',
+        builtin: false,
+        wire: 'anthropic',
+        baseUrl: 'http://localhost:9999',
+        defaultModel: 'claude-opus-4-1',
+        envKey: 'ANTHROPIC_AUTH_TOKEN',
+        reasoningLevel: 'medium',
+      },
+      apiKey: null,
+      apiKeySource: 'none',
+      userType: 'local-proxy',
+      hasOAuthEvidence: false,
+      activeModel: 'claude-opus-4-1',
+      settingsPath: '/home/alice/.claude/settings.json',
+      warnings: ['apiKeyHelper detected'],
+    });
+
+    const handler = handlers.get('config:v1:detect-external-configs');
+    expect(handler).toBeDefined();
+    const result = (await handler?.()) as {
+      claudeCode?: {
+        userType: string;
+        baseUrl: string;
+        defaultModel: string;
+        hasApiKey: boolean;
+        apiKeySource: string;
+        settingsPath: string;
+        warnings: string[];
+      };
+    };
+    expect(result.claudeCode).toMatchObject({
+      userType: 'local-proxy',
+      baseUrl: 'http://localhost:9999',
+      defaultModel: 'claude-opus-4-1',
+      hasApiKey: false,
+      apiKeySource: 'none',
+      settingsPath: '/home/alice/.claude/settings.json',
+      warnings: ['apiKeyHelper detected'],
+    });
   });
 });
