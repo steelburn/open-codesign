@@ -748,7 +748,30 @@
     "testAgain": "Test again",
     "showLog": "Show full log",
     "showLogFailed": "Failed to open logs folder",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "report": {
+      "title": "Report a bug",
+      "notes": "Steps to reproduce (optional)",
+      "include": {
+        "prompt": "Include prompt text",
+        "paths": "Include file paths",
+        "urls": "Include URLs",
+        "timeline": "Include 60 s action timeline"
+      },
+      "disclaimer": "Nothing is uploaded automatically. The diagnostic bundle is saved to your Downloads folder; attach it to the GitHub issue manually.",
+      "openIssue": "Open issue",
+      "copySummary": "Copy summary",
+      "cancel": "Cancel",
+      "copied": "Copied to clipboard",
+      "eventNotFound": "Event not found — it may have been pruned.",
+      "loading": "Loading event…",
+      "close": "Close",
+      "error": "Error",
+      "scope": "Scope",
+      "runId": "Run id",
+      "fingerprint": "Fingerprint",
+      "message": "Message"
+    }
   },
   "demos": {
     "meditationApp": {

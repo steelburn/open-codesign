@@ -747,7 +747,30 @@
     "testAgain": "再次测试",
     "showLog": "查看完整日志",
     "showLogFailed": "无法打开日志文件夹",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "report": {
+      "title": "上报问题",
+      "notes": "复现步骤（可选）",
+      "include": {
+        "prompt": "包含 prompt 正文",
+        "paths": "包含文件路径",
+        "urls": "包含 URL",
+        "timeline": "包含最近 60 秒操作记录"
+      },
+      "disclaimer": "不会自动上传。诊断包已保存到下载文件夹，请手动附加到 GitHub issue。",
+      "openIssue": "打开 issue",
+      "copySummary": "复制摘要",
+      "cancel": "取消",
+      "copied": "已复制",
+      "eventNotFound": "找不到该事件 — 可能已被清理。",
+      "loading": "加载事件中…",
+      "close": "关闭",
+      "error": "错误",
+      "scope": "范围",
+      "runId": "Run ID",
+      "fingerprint": "指纹",
+      "message": "消息"
+    }
   },
   "demos": {
     "meditationApp": {
