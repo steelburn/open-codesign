@@ -83,7 +83,7 @@ jobs:
 
       - name: Build changelog
         id: build
-        uses: mikepenz/release-changelog-builder-action@c9dc8369bccbc41e0ac887f8fd674f5925d315f7 # v5
+        uses: mikepenz/release-changelog-builder-action@bcae7115752d4ed746ff92feb666574428a79415 # v6.2.1
         with:
           configurationJson: |
             {
