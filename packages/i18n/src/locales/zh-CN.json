@@ -222,11 +222,6 @@
         "save": "保存并继续",
         "saveEdit": "保存修改"
       },
-      "cliProxyApi": {
-        "discoveringModels": "正在探测模型…",
-        "discoveredModels": "找到 {{count}} 个模型",
-        "discoveryFailed": "无法连接"
-      },
       "import": {
         "action": "导入",
         "dismiss": "忽略",

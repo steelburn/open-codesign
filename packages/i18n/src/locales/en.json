@@ -222,11 +222,6 @@
         "save": "Save & continue",
         "saveEdit": "Save changes"
       },
-      "cliProxyApi": {
-        "discoveringModels": "Discovering models…",
-        "discoveredModels": "Found {{count}} models",
-        "discoveryFailed": "Could not connect"
-      },
       "import": {
         "action": "Import",
         "dismiss": "Dismiss",
