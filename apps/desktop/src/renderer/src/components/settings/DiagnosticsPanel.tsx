@@ -1,4 +1,4 @@
-import { useT } from '@open-codesign/i18n';
+import { getCurrentLocale, useT } from '@open-codesign/i18n';
 import type { DiagnosticEventRow } from '@open-codesign/shared';
 import { AlertCircle, Download, FolderOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -43,20 +43,26 @@ export function formatRunIdPreview(runId: string | undefined): string {
   return runId.slice(0, 8);
 }
 
-export function formatRelativeTime(ts: number, now: number = Date.now()): string {
-  const delta = Math.max(0, now - ts);
-  const s = Math.floor(delta / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  return `${d}d`;
+/**
+ * Localized relative-time formatter. Previously emitted raw "5s / 3m / 4h"
+ * Latin shorthand regardless of locale, which looked broken to zh-CN users.
+ * Uses Intl.RelativeTimeFormat so the output matches the active UI locale
+ * ("5 seconds ago" / "5 秒前"). Callers should pass the current locale;
+ * tests pin it explicitly so expected strings stay deterministic.
+ */
+export function formatRelativeTime(ts: number, now: number = Date.now(), locale = 'en'): string {
+  const delta = ts - now; // negative for past timestamps
+  const absSec = Math.abs(delta) / 1000;
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  if (absSec < 60) return rtf.format(Math.round(delta / 1000), 'second');
+  if (absSec < 3600) return rtf.format(Math.round(delta / 60_000), 'minute');
+  if (absSec < 86400) return rtf.format(Math.round(delta / 3_600_000), 'hour');
+  return rtf.format(Math.round(delta / 86_400_000), 'day');
 }
 
 export function DiagnosticsPanel() {
   const t = useT();
+  const locale = getCurrentLocale();
   const refreshDiagnosticEvents = useCodesignStore((s) => s.refreshDiagnosticEvents);
   const markDiagnosticsRead = useCodesignStore((s) => s.markDiagnosticsRead);
   const [events, setEvents] = useState<DiagnosticEventRow[]>([]);
@@ -170,7 +176,7 @@ export function DiagnosticsPanel() {
                   className="py-2 pr-3 whitespace-nowrap"
                   title={new Date(event.ts).toISOString()}
                 >
-                  {formatRelativeTime(event.ts)}
+                  {formatRelativeTime(event.ts, Date.now(), locale)}
                 </td>
                 <td className="py-2 pr-3 font-mono text-[var(--text-xs)]">{event.code}</td>
                 <td className="py-2 pr-3">{event.scope}</td>

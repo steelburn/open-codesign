@@ -70,8 +70,23 @@ describe('pickRecentReport', () => {
     const result = pickRecentReport(
       { reported: true, ts: now - 5 * 60_000, issueUrl: 'https://x/1' },
       now,
+      'en',
     );
-    expect(result).toEqual({ relative: '5m', issueUrl: 'https://x/1' });
+    expect(result).toEqual({ relative: '5 minutes ago', issueUrl: 'https://x/1' });
+  });
+
+  it('localizes the relative time into zh-CN', () => {
+    const now = 1_000_000;
+    const result = pickRecentReport(
+      { reported: true, ts: now - 5 * 60_000, issueUrl: 'https://x/1' },
+      now,
+      'zh-CN',
+    );
+    expect(result?.relative).toContain('5');
+    // zh-CN output is either "5分钟前" or "5 分钟前" depending on ICU — assert
+    // it isn't Latin shorthand and isn't English.
+    expect(result?.relative).not.toBe('5m');
+    expect(result?.relative).not.toBe('5 minutes ago');
   });
 });
 

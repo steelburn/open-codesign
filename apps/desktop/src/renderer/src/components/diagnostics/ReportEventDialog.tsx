@@ -1,4 +1,4 @@
-import { useT } from '@open-codesign/i18n';
+import { getCurrentLocale, useT } from '@open-codesign/i18n';
 import type { DiagnosticEventRow, ReportEventInput } from '@open-codesign/shared';
 import { useEffect, useRef, useState } from 'react';
 import { type RedactOpts, applyRedaction } from '../../lib/redact';
@@ -31,10 +31,11 @@ export interface RecentReportWarning {
 export function pickRecentReport(
   result: { reported: boolean; ts?: number; issueUrl?: string } | null | undefined,
   now: number = Date.now(),
+  locale = 'en',
 ): RecentReportWarning | null {
   if (!result || !result.reported) return null;
   if (typeof result.ts !== 'number' || typeof result.issueUrl !== 'string') return null;
-  return { relative: formatRelativeTime(result.ts, now), issueUrl: result.issueUrl };
+  return { relative: formatRelativeTime(result.ts, now, locale), issueUrl: result.issueUrl };
 }
 
 const MAX_NOTES = 2000;
@@ -191,7 +192,7 @@ export function ReportEventDialog({ eventId, onClose }: ReportEventDialogProps) 
     void check(event.fingerprint)
       .then((result) => {
         if (cancelled) return;
-        setRecentWarning(pickRecentReport(result));
+        setRecentWarning(pickRecentReport(result, Date.now(), getCurrentLocale()));
       })
       .catch(() => {
         // Silent fall-through per spec — dedup is non-critical.

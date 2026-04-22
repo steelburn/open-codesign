@@ -119,11 +119,21 @@ describe('formatting helpers', () => {
     expect(formatRunIdPreview(undefined)).toBe('—');
   });
 
-  it('formats relative time in s/m/h/d', () => {
+  it('formats relative time via Intl.RelativeTimeFormat (en)', () => {
     const now = 1_000_000_000_000;
-    expect(formatRelativeTime(now - 5_000, now)).toBe('5s');
-    expect(formatRelativeTime(now - 120_000, now)).toBe('2m');
-    expect(formatRelativeTime(now - 3 * 3_600_000, now)).toBe('3h');
-    expect(formatRelativeTime(now - 2 * 86_400_000, now)).toBe('2d');
+    expect(formatRelativeTime(now - 5_000, now, 'en')).toBe('5 seconds ago');
+    expect(formatRelativeTime(now - 120_000, now, 'en')).toBe('2 minutes ago');
+    expect(formatRelativeTime(now - 3 * 3_600_000, now, 'en')).toBe('3 hours ago');
+    expect(formatRelativeTime(now - 2 * 86_400_000, now, 'en')).toBe('2 days ago');
+  });
+
+  it('localizes relative time into zh-CN', () => {
+    const now = 1_000_000_000_000;
+    const out = formatRelativeTime(now - 3 * 60_000, now, 'zh-CN');
+    // ICU may emit "3 分钟前" or "3分钟前" depending on CLDR version — both
+    // are valid localizations; just assert we're no longer in Latin shorthand.
+    expect(out).toContain('3');
+    expect(out).toContain('分');
+    expect(out).not.toBe('3m');
   });
 });
