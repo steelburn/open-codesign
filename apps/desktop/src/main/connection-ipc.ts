@@ -10,9 +10,15 @@ import {
   isSupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
 } from '@open-codesign/shared';
+import { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
 import { ipcMain } from './electron-runtime';
 import { getApiKeyForProvider, getCachedConfig } from './onboarding-ipc';
 import { isKeylessProviderAllowed } from './provider-settings';
+
+// Re-export so existing importers (tests, other main-process modules) keep
+// working after the helpers moved to `./auth-headers` to break a circular
+// import between connection-ipc and onboarding-ipc.
+export { buildAuthHeaders, buildAuthHeadersForWire } from './auth-headers';
 
 // ---------------------------------------------------------------------------
 // Payload schemas (plain validation, no zod in main to keep bundle lean)
@@ -156,26 +162,6 @@ function buildEndpointForWire(
   return { url, normalizedBaseUrl };
 }
 
-export function buildAuthHeadersForWire(
-  wire: WireApi,
-  apiKey: string,
-  extraHeaders?: Record<string, string>,
-): Record<string, string> {
-  if (apiKey.length === 0) {
-    // Keyless provider (e.g. IP-whitelisted proxy) — skip auth, keep extras.
-    const base = wire === 'anthropic' ? { 'anthropic-version': '2023-06-01' } : {};
-    return { ...base, ...(extraHeaders ?? {}) };
-  }
-  const base =
-    wire === 'anthropic'
-      ? {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        }
-      : { authorization: `Bearer ${apiKey}` };
-  return { ...base, ...(extraHeaders ?? {}) };
-}
-
 function buildModelsEndpoint(
   provider: SupportedOnboardingProvider,
   baseUrl: string,
@@ -183,19 +169,6 @@ function buildModelsEndpoint(
   const wire: WireApi = provider === 'anthropic' ? 'anthropic' : 'openai-chat';
   const { url } = buildEndpointForWire(wire, baseUrl);
   return { url, headers: {} };
-}
-
-function buildAuthHeaders(
-  provider: SupportedOnboardingProvider,
-  apiKey: string,
-): Record<string, string> {
-  if (provider === 'anthropic') {
-    return {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    };
-  }
-  return { authorization: `Bearer ${apiKey}` };
 }
 
 export function classifyHttpError(status: number): {
@@ -409,7 +382,12 @@ function resolveActiveCredentials(): ActiveProviderCredentials | ConnectionTestE
 
 async function runProviderTest(creds: ActiveProviderCredentials): Promise<ConnectionTestResponse> {
   const { url } = buildEndpointForWire(creds.wire, creds.baseUrl);
-  const headers = buildAuthHeadersForWire(creds.wire, creds.apiKey, creds.httpHeaders);
+  const headers = buildAuthHeadersForWire(
+    creds.wire,
+    creds.apiKey,
+    creds.httpHeaders,
+    creds.baseUrl,
+  );
 
   let res: Response;
   try {
@@ -448,7 +426,7 @@ export function registerConnectionIpc(): void {
 
       const { provider, apiKey, baseUrl } = payload;
       const ep = buildModelsEndpoint(provider, baseUrl);
-      const authHeaders = buildAuthHeaders(provider, apiKey);
+      const authHeaders = buildAuthHeaders(provider, apiKey, baseUrl);
 
       let res: Response;
       try {
@@ -499,7 +477,7 @@ export function registerConnectionIpc(): void {
     if (cached !== null) return { ok: true, models: cached };
 
     const ep = buildModelsEndpoint(provider, baseUrl);
-    const authHeaders = buildAuthHeaders(provider, apiKey);
+    const authHeaders = buildAuthHeaders(provider, apiKey, baseUrl);
 
     let res: Response;
     try {
@@ -637,7 +615,7 @@ export function registerConnectionIpc(): void {
       if (cached !== null) return { ok: true, models: cached };
 
       const { url } = buildEndpointForWire(entry.wire, entry.baseUrl);
-      const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders);
+      const headers = buildAuthHeadersForWire(entry.wire, apiKey, entry.httpHeaders, entry.baseUrl);
 
       let res: Response;
       try {
@@ -702,7 +680,12 @@ export function registerConnectionIpc(): void {
       }
 
       const { url } = buildEndpointForWire(payload.wire, payload.baseUrl);
-      const headers = buildAuthHeadersForWire(payload.wire, payload.apiKey, payload.httpHeaders);
+      const headers = buildAuthHeadersForWire(
+        payload.wire,
+        payload.apiKey,
+        payload.httpHeaders,
+        payload.baseUrl,
+      );
 
       let res: Response;
       try {

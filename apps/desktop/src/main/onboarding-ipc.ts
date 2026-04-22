@@ -17,6 +17,7 @@ import {
   isSupportedOnboardingProvider,
   modelsEndpointUrl,
 } from '@open-codesign/shared';
+import { buildAuthHeadersForWire } from './auth-headers';
 import { defaultConfigDir, readConfig, writeConfig } from './config';
 import { dialog, ipcMain, shell } from './electron-runtime';
 import { type ClaudeCodeImport, readClaudeCodeSettings } from './imports/claude-code-config';
@@ -892,10 +893,7 @@ async function runListEndpointModels(raw: unknown): Promise<ListEndpointModelsRe
     return { ok: false, error: 'apiKey required' };
   }
   const url = modelsEndpointUrl(baseUrl, parsedWire.data);
-  const headers: Record<string, string> =
-    parsedWire.data === 'anthropic'
-      ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
-      : { authorization: `Bearer ${apiKey}` };
+  const headers = buildAuthHeadersForWire(parsedWire.data, apiKey, undefined, baseUrl);
   try {
     const res = await fetch(url, {
       method: 'GET',

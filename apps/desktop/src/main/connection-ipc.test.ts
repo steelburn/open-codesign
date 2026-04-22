@@ -9,6 +9,8 @@ import { createHash } from 'node:crypto';
 import {
   CONNECTION_FETCH_TIMEOUT_MS,
   _clearModelsCache,
+  buildAuthHeaders,
+  buildAuthHeadersForWire,
   classifyHttpError,
   extractIds,
   extractModelIds,
@@ -675,5 +677,107 @@ describe('fetchWithTimeout', () => {
     } finally {
       (globalThis as { fetch: typeof fetch }).fetch = originalFetch;
     }
+  });
+});
+
+describe('Claude Code identity header injection', () => {
+  // Regression: sub2api / claude2api gateways 403 anthropic-wire requests
+  // without claude-cli identity headers. Must be injected for custom
+  // anthropic baseUrls and must NOT leak to the official endpoint or to
+  // non-anthropic wires.
+  it('buildAuthHeaders injects CC identity for a custom anthropic baseUrl', () => {
+    const h = buildAuthHeaders('anthropic', 'opaque-sub2api-token', 'https://sub2api.example.com');
+    expect(h['user-agent']).toMatch(/^claude-cli\//);
+    expect(h['x-app']).toBe('cli');
+    expect(h['anthropic-beta']).toContain('claude-code-20250219');
+    expect(h['x-api-key']).toBe('opaque-sub2api-token');
+  });
+
+  it('buildAuthHeaders does NOT inject CC identity for api.anthropic.com', () => {
+    const h = buildAuthHeaders('anthropic', 'sk-ant-api03-abc', 'https://api.anthropic.com');
+    expect(h['user-agent']).toBeUndefined();
+    expect(h['x-app']).toBeUndefined();
+    expect(h['x-api-key']).toBe('sk-ant-api03-abc');
+  });
+
+  it('buildAuthHeaders leaves openai / openrouter wires alone', () => {
+    const h = buildAuthHeaders('openai', 'sk-test', 'https://proxy.example.com');
+    expect(h['user-agent']).toBeUndefined();
+    expect(h['x-app']).toBeUndefined();
+  });
+
+  it('buildAuthHeadersForWire injects for custom anthropic and honors user overrides', () => {
+    const h = buildAuthHeadersForWire(
+      'anthropic',
+      'opaque',
+      { 'user-agent': 'my-custom/1.0' },
+      'https://sub2api.example.com',
+    );
+    expect(h['user-agent']).toBe('my-custom/1.0'); // user override wins
+    expect(h['x-app']).toBe('cli'); // still injected
+  });
+
+  it('buildAuthHeadersForWire skips injection on official anthropic', () => {
+    const h = buildAuthHeadersForWire(
+      'anthropic',
+      'sk-ant-api03-abc',
+      undefined,
+      'https://api.anthropic.com',
+    );
+    expect(h['user-agent']).toBeUndefined();
+    expect(h['x-api-key']).toBe('sk-ant-api03-abc');
+  });
+
+  it('buildAuthHeadersForWire keyless anthropic proxy still gets CC headers on custom host', () => {
+    const h = buildAuthHeadersForWire('anthropic', '', undefined, 'https://keyless-proxy.example');
+    expect(h['user-agent']).toMatch(/^claude-cli\//);
+    expect(h['anthropic-version']).toBe('2023-06-01');
+    expect(h['x-api-key']).toBeUndefined();
+  });
+
+  it('buildAuthHeaders sends OAuth tokens as Bearer, not x-api-key', () => {
+    // Regression: sk-ant-oat* tokens must auth as Bearer. Anthropic endpoints
+    // (and sub2api gateways that proxy them) reject OAuth tokens presented
+    // via x-api-key.
+    const h = buildAuthHeaders('anthropic', 'sk-ant-oat-abc123', 'https://sub2api.example.com');
+    expect(h['authorization']).toBe('Bearer sk-ant-oat-abc123');
+    expect(h['x-api-key']).toBeUndefined();
+  });
+
+  it('buildAuthHeadersForWire sends OAuth tokens as Bearer on custom anthropic host', () => {
+    const h = buildAuthHeadersForWire(
+      'anthropic',
+      'sk-ant-oat-abc123',
+      undefined,
+      'https://sub2api.example.com',
+    );
+    expect(h['authorization']).toBe('Bearer sk-ant-oat-abc123');
+    expect(h['x-api-key']).toBeUndefined();
+    expect(h['user-agent']).toMatch(/^claude-cli\//);
+  });
+
+  it('buildAuthHeaders OAuth on official anthropic: Bearer, no CC identity headers', () => {
+    // Critical path: user imports Claude Code → sk-ant-oat token + official
+    // endpoint. Must send Bearer (not x-api-key) but must NOT inject CC
+    // identity headers (pi-ai handles those on the OAuth branch; duplicating
+    // here would diverge from pi-ai's claudeCodeVersion as it bumps).
+    const h = buildAuthHeaders('anthropic', 'sk-ant-oat-abc123', 'https://api.anthropic.com');
+    expect(h['authorization']).toBe('Bearer sk-ant-oat-abc123');
+    expect(h['x-api-key']).toBeUndefined();
+    expect(h['user-agent']).toBeUndefined();
+    expect(h['x-app']).toBeUndefined();
+  });
+
+  it('buildAuthHeaders empty apiKey: no auth header, matches buildAuthHeadersForWire', () => {
+    // Symmetry: both helpers must treat an empty apiKey as "keyless proxy"
+    // rather than sending x-api-key: "" or Authorization: Bearer "".
+    const anth = buildAuthHeaders('anthropic', '', 'https://keyless.example.com');
+    expect(anth['x-api-key']).toBeUndefined();
+    expect(anth['authorization']).toBeUndefined();
+    expect(anth['anthropic-version']).toBe('2023-06-01');
+    expect(anth['user-agent']).toMatch(/^claude-cli\//);
+
+    const oa = buildAuthHeaders('openai', '', 'https://keyless.example.com');
+    expect(oa['authorization']).toBeUndefined();
   });
 });

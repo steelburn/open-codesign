@@ -150,4 +150,42 @@ describe('pingProvider', () => {
     });
     await pingProvider('openai', 'sk-test', 'https://api.example.com/v1/responses');
   });
+
+  it('injects Claude Code identity headers for custom anthropic gateways', async () => {
+    // Regression: sub2api / claude2api WAFs 403 any request that does not
+    // identify as claude-cli. Custom anthropic endpoints must carry the
+    // same UA/x-app/beta headers pi-ai emits for OAuth tokens.
+    mockFetch(async (_url, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['user-agent']).toMatch(/^claude-cli\//);
+      expect(headers['x-app']).toBe('cli');
+      expect(headers['anthropic-beta']).toContain('claude-code-20250219');
+      expect(headers['x-api-key']).toBe('opaque-sub2api-token');
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    });
+    await pingProvider('anthropic', 'opaque-sub2api-token', 'https://sub2api.example.com');
+  });
+
+  it('does NOT inject Claude Code headers for the official anthropic endpoint', async () => {
+    mockFetch(async (_url, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['user-agent']).toBeUndefined();
+      expect(headers['x-app']).toBeUndefined();
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    });
+    await pingProvider('anthropic', 'sk-ant-api03-foo', 'https://api.anthropic.com');
+  });
+
+  it('sends sk-ant-oat OAuth tokens as Bearer, never as x-api-key', async () => {
+    // Regression: OAuth tokens presented via x-api-key are rejected by
+    // Anthropic endpoints and sub2api gateways that proxy them.
+    mockFetch(async (_url, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      expect(headers['authorization']).toBe('Bearer sk-ant-oat-xyz');
+      expect(headers['x-api-key']).toBeUndefined();
+      expect(headers['user-agent']).toMatch(/^claude-cli\//);
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    });
+    await pingProvider('anthropic', 'sk-ant-oat-xyz', 'https://sub2api.example.com');
+  });
 });

@@ -32,6 +32,11 @@ import type { Message as PiAiMessage, Model as PiAiModel } from '@mariozechner/p
 import { type ArtifactEvent, createArtifactParser } from '@open-codesign/artifacts';
 import type { RetryReason } from '@open-codesign/providers';
 import {
+  claudeCodeIdentityHeaders,
+  looksLikeClaudeOAuthToken,
+  shouldForceClaudeCodeIdentity,
+} from '@open-codesign/providers';
+import {
   type Artifact,
   type ChatMessage,
   CodesignError,
@@ -243,6 +248,7 @@ function buildPiModel(
   wire: 'openai-chat' | 'openai-responses' | 'anthropic' | undefined,
   baseUrl: string | undefined,
   httpHeaders?: Record<string, string> | undefined,
+  apiKey?: string,
 ): PiModel {
   // Fall through to the canonical public endpoint for the 3 first-party
   // BYOK providers when the caller omitted baseUrl. This is a fact about
@@ -276,6 +282,21 @@ function buildPiModel(
     maxTokens: 32000,
   };
   if (httpHeaders !== undefined) out.headers = httpHeaders;
+
+  // sub2api / claude2api gateways 403 any request without claude-cli
+  // identity headers. pi-ai only emits them for sk-ant-oat OAuth tokens —
+  // so a custom anthropic baseUrl keyed by a plain token hits the edge WAF.
+  // Inject them here too (this path goes through pi-agent-core, which
+  // forwards model.headers to pi-ai). User-supplied headers keep precedence.
+  // Skip when the key already looks OAuth-shaped: pi-ai's OAuth branch
+  // injects the same set, and leaving that the single source keeps us from
+  // silently overriding future pi-ai header updates on the OAuth path.
+  if (
+    shouldForceClaudeCodeIdentity(wire, canonicalBase) &&
+    (apiKey === undefined || !looksLikeClaudeOAuthToken(apiKey))
+  ) {
+    out.headers = { ...claudeCodeIdentityHeaders(), ...(out.headers ?? {}) };
+  }
   return out;
 }
 
@@ -647,7 +668,13 @@ export async function generateViaAgent(
 
   log.info('[generate] step=resolve_model', ctx);
   const resolveStart = Date.now();
-  const piModel = buildPiModel(input.model, input.wire, input.baseUrl, input.httpHeaders);
+  const piModel = buildPiModel(
+    input.model,
+    input.wire,
+    input.baseUrl,
+    input.httpHeaders,
+    input.apiKey,
+  );
   log.info('[generate] step=resolve_model.ok', { ...ctx, ms: Date.now() - resolveStart });
 
   log.info('[generate] step=build_request', ctx);

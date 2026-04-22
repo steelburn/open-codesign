@@ -5,6 +5,7 @@ import {
   isSupportedOnboardingProvider,
   stripInferenceEndpointSuffix,
 } from '@open-codesign/shared';
+import { looksLikeClaudeOAuthToken, withClaudeCodeIdentity } from './claude-code-compat';
 
 export type ValidateResult =
   | { ok: true; modelCount: number }
@@ -33,10 +34,12 @@ function endpoint(provider: SupportedOnboardingProvider, baseUrl?: string): Prov
       const root = baseUrl ? normalizeValidateBaseUrl(baseUrl) : 'https://api.anthropic.com';
       return {
         url: `${root}/v1/models`,
-        headers: (apiKey) => ({
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        }),
+        headers: (apiKey) => {
+          const auth = looksLikeClaudeOAuthToken(apiKey)
+            ? { authorization: `Bearer ${apiKey}`, 'anthropic-version': '2023-06-01' }
+            : { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
+          return withClaudeCodeIdentity('anthropic', baseUrl, auth);
+        },
       };
     }
     case 'openai': {

@@ -7,6 +7,11 @@
  */
 
 import { type ChatMessage, CodesignError, ERROR_CODES, type ModelRef } from '@open-codesign/shared';
+import {
+  claudeCodeIdentityHeaders,
+  looksLikeClaudeOAuthToken,
+  shouldForceClaudeCodeIdentity,
+} from './claude-code-compat';
 
 /** Subset of pi-ai's `ThinkingLevel` we expose. Maps directly to its `reasoning`
  * field, which Anthropic adapters translate to extended-thinking effort/budget
@@ -242,7 +247,19 @@ export async function complete(
   if (opts.signal !== undefined) piOpts.signal = opts.signal;
   if (opts.maxTokens !== undefined) piOpts.maxTokens = opts.maxTokens;
   if (opts.reasoning !== undefined) piOpts.reasoning = opts.reasoning;
-  if (opts.httpHeaders !== undefined) piOpts.headers = opts.httpHeaders;
+  if (opts.httpHeaders !== undefined) piOpts.headers = { ...opts.httpHeaders };
+
+  // sub2api / claude2api gateways 403 requests without claude-cli identity
+  // headers. pi-ai only injects those on OAuth tokens — paste a
+  // sub2api-issued key and you hit the plain API-key branch. Force the
+  // identity headers for custom anthropic endpoints so the WAF admits us.
+  // User-supplied httpHeaders keep precedence.
+  if (
+    shouldForceClaudeCodeIdentity(opts.wire, opts.baseUrl) &&
+    !looksLikeClaudeOAuthToken(apiKey)
+  ) {
+    piOpts.headers = { ...claudeCodeIdentityHeaders(), ...(piOpts.headers ?? {}) };
+  }
 
   const result = await pi.completeSimple(piModel, toPiContext(messages, piModel), piOpts);
 
@@ -322,6 +339,14 @@ export function detectProviderFromKey(key: string): ModelRef['provider'] | null 
 
 export { pingProvider } from './validate';
 export type { ValidateResult } from './validate';
+
+export {
+  claudeCodeIdentityHeaders,
+  isOfficialAnthropicBaseUrl,
+  looksLikeClaudeOAuthToken,
+  shouldForceClaudeCodeIdentity,
+  withClaudeCodeIdentity,
+} from './claude-code-compat';
 
 export { completeWithRetry, classifyError, sleepWithAbort } from './retry';
 export type { CompleteWithRetryOptions, RetryReason } from './retry';
