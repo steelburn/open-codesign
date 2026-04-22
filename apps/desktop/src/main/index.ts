@@ -53,6 +53,7 @@ import {
 } from './onboarding-ipc';
 import { readPersisted as readPreferences, registerPreferencesIpc } from './preferences-ipc';
 import { preparePromptContext } from './prompt-context';
+import { createProviderContextStore } from './provider-context';
 import { resolveActiveModel } from './provider-settings';
 import { withRun } from './runContext';
 import { pruneDiagnosticEvents, recordDiagnosticEvent, safeInitSnapshotsDb } from './snapshots-db';
@@ -153,24 +154,14 @@ function registerIpcHandlers(db: Database | null): void {
   // can attach it to the final (non-transient) row. Without this, the row the
   // user actually reports lacks upstream_request_id / status — those fields
   // lived only on the hidden transient sibling row emitted by retry.ts.
-  // Bounded implicitly: entries are deleted in recordFinalError; stale keys
-  // from successful runs are trimmed by the 50-entry LRU below.
-  const providerContextByRunId = new Map<string, Record<string, unknown>>();
-  const PROVIDER_CTX_MAX = 50;
-  const rememberProviderContext = (runId: string, ctx: Record<string, unknown>): void => {
-    if (providerContextByRunId.size >= PROVIDER_CTX_MAX) {
-      const oldest = providerContextByRunId.keys().next().value;
-      if (oldest !== undefined) providerContextByRunId.delete(oldest);
-    }
-    providerContextByRunId.set(runId, ctx);
-  };
+  // Implementation + LRU eviction lives in ./provider-context.ts.
+  const providerContext = createProviderContextStore(50);
 
   const recordFinalError = (scope: string, runId: string, err: unknown): void => {
     if (db === null) return;
     const code = err instanceof CodesignError ? (err.code as string) : 'PROVIDER_UPSTREAM_ERROR';
     const stack = err instanceof Error ? err.stack : undefined;
-    const context = providerContextByRunId.get(runId);
-    providerContextByRunId.delete(runId);
+    const context = providerContext.consume(runId);
     recordDiagnosticEvent(db, {
       level: 'error',
       code,
@@ -223,7 +214,7 @@ function registerIpcHandlers(db: Database | null): void {
         // the final non-transient row — otherwise the reported row loses
         // upstream_request_id / upstream_status, which lived only on this
         // hidden transient sibling.
-        if (data !== undefined) rememberProviderContext(id, data);
+        if (data !== undefined) providerContext.remember(id, data);
         recordDiagnosticEvent(db, {
           level: 'warn',
           code,
