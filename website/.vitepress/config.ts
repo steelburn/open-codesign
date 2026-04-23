@@ -86,6 +86,21 @@ export default defineConfig({
         softwareVersion: SOFTWARE_VERSION,
         releaseNotes: `${SITE_URL}#whats-working-today`,
         downloadUrl: 'https://github.com/OpenCoworkAI/open-codesign/releases',
+        screenshot: [
+          `${SITE_ORIGIN}/open-codesign/screenshots/product-hero.png`,
+          `${SITE_ORIGIN}/open-codesign/screenshots/comment-mode.png`,
+        ],
+        applicationSubCategory: 'AI Design Tool',
+        featureList: [
+          'Prompt-to-HTML prototype generation',
+          'Bring your own API key (Anthropic, OpenAI, Gemini, DeepSeek, Ollama, OpenRouter)',
+          'Local-first storage (SQLite + TOML)',
+          'Export to PDF, PPTX, ZIP, Markdown',
+          'Multi-model switching without re-login',
+          'One-click import of Claude Code / Codex API keys',
+          'AI image generation for design assets',
+          'Design history with snapshots and rollback',
+        ],
         offers: {
           '@type': 'Offer',
           price: '0',
