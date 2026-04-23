@@ -24,7 +24,19 @@ export default defineConfig({
   },
 
   head: [
-    ['link', { rel: 'icon', href: `${SITE_BASE}favicon.ico` }],
+    ['link', { rel: 'icon', type: 'image/x-icon', href: `${SITE_BASE}favicon.ico` }],
+    [
+      'link',
+      { rel: 'icon', type: 'image/png', sizes: '32x32', href: `${SITE_BASE}favicon-32x32.png` },
+    ],
+    [
+      'link',
+      { rel: 'icon', type: 'image/png', sizes: '16x16', href: `${SITE_BASE}favicon-16x16.png` },
+    ],
+    [
+      'link',
+      { rel: 'apple-touch-icon', sizes: '180x180', href: `${SITE_BASE}apple-touch-icon.png` },
+    ],
     ['meta', { name: 'theme-color', content: '#c96442' }],
     ['meta', { name: 'google-site-verification', content: 'c3cbbeaec5437546' }],
     // Open Graph
