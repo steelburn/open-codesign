@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +46,7 @@ import { registerDiagnosticsIpc } from './diagnostics-ipc';
 import { makeRuntimeVerifier } from './done-verify';
 import { BrowserWindow, app, clipboard, dialog, ipcMain, shell } from './electron-runtime';
 import { registerExporterIpc } from './exporter-ipc';
+import { registerFilesIpc } from './files-ipc';
 import {
   armGenerationTimeout,
   cancelGenerationRequest,
@@ -89,6 +90,12 @@ import {
   registerWorkspaceIpc,
 } from './snapshots-ipc';
 import { initStorageSettings } from './storage-settings';
+import { registerWorkspaceProtocolHandler, registerWorkspaceScheme } from './workspace-protocol';
+import {
+  WORKSPACE_WALK_MAX_FILES,
+  shouldSkipDirEntry,
+  shouldSkipFileEntry,
+} from './workspace-walk';
 
 // ESM shim: package.json "type": "module" means the built bundle is ESM and
 // __dirname/__filename don't exist. Derive them from import.meta.url so the
@@ -99,7 +106,7 @@ const __dirname = dirname(__filename);
 let mainWindow: ElectronBrowserWindow | null = null;
 // Cached update-available payload so a window opened after the event still
 // shows the banner. Cleared only on app quit (matching the one-shot nature
-// of autoUpdater — a new check will re-emit if still applicable).
+// of autoUpdater -- a new check will re-emit if still applicable).
 let pendingUpdateAvailable: unknown = null;
 
 const defaultUserDataDir = app.getPath('userData');
@@ -111,7 +118,7 @@ if (storageLocations.dataDir !== undefined) {
 
 /**
  * Workstream B Phase 1 feature flag. When truthy, `codesign:*:generate` routes
- * through `generateViaAgent()` (pi-agent-core, zero tools). Default off — any
+ * through `generateViaAgent()` (pi-agent-core, zero tools). Default off -- any
  * other value (including unset / empty) keeps the legacy `generate()` path.
  *
  * Read once at module init: changing the env var mid-session requires an app
@@ -169,7 +176,7 @@ function createWindow(): void {
 
   // Replay any update event that fired before this window was ready
   // (macOS: user closed window, triggered a manual Check for Updates from
-  // the app menu, then reopened — the event would otherwise be lost).
+  // the app menu, then reopened -- the event would otherwise be lost).
   mainWindow.webContents.on('did-finish-load', () => {
     if (pendingUpdateAvailable !== null) {
       mainWindow?.webContents.send('codesign:update-available', pendingUpdateAvailable);
@@ -187,7 +194,7 @@ type Database = BetterSqlite3.Database;
 
 /**
  * Pull an HTTP status code out of a caught provider error. Mirrors
- * `packages/providers/src/retry.ts::extractStatus` intentionally — we don't
+ * `packages/providers/src/retry.ts::extractStatus` intentionally -- we don't
  * import from retry.ts to avoid coupling main to a retry-internal helper
  * that might get reshaped. Used by the generate catch block to tag the
  * thrown err with `upstream_status` so the renderer's diagnose pipeline
@@ -271,16 +278,157 @@ function allocateAssetPath(
   return path;
 }
 
+// Workspace seeding: when a design is bound to a folder, load its existing
+// text files into fsMap so the agent's view/list_files tools see what the
+// user already has. Without this, the workspace mirror is write-only and the
+// agent thinks the folder is empty even when it isn't.
+//
+// Cap per file so a stray multi-MB log inside the workspace can't blow up
+// the agent's context window or stall the main thread on a single read.
+const WORKSPACE_SEED_MAX_FILE_BYTES = 1_000_000;
+export const WORKSPACE_SEED_MAX_TOTAL_BYTES = 5_000_000;
+const WORKSPACE_SEED_TEXT_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.html',
+  '.htm',
+  '.css',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.mjs',
+  '.cjs',
+  '.json',
+  '.md',
+  '.txt',
+  '.svg',
+  '.xml',
+  '.yaml',
+  '.yml',
+  '.toml',
+]);
+
+type WorkspaceSeedLogger = Pick<CoreLogger, 'error'> & Partial<Pick<CoreLogger, 'info'>>;
+
+export interface WorkspaceSeedResult {
+  filesLoaded: number;
+  filesSkipped: number;
+  bytesLoaded: number;
+  truncated: boolean;
+}
+
+export async function seedFsMapFromWorkspace(
+  workspacePath: string,
+  fsMap: Map<string, string>,
+  logger: WorkspaceSeedLogger,
+): Promise<WorkspaceSeedResult> {
+  let filesLoaded = 0;
+  let filesSkipped = 0;
+  let bytesLoaded = 0;
+  let truncated = false;
+
+  const walk = async (absDir: string, relDir: string): Promise<void> => {
+    if (truncated) return;
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = await readdir(absDir, { withFileTypes: true });
+    } catch (err) {
+      logger.error('workspace.seed.readdir.fail', {
+        path: absDir,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const entry of entries) {
+      if (filesLoaded >= WORKSPACE_WALK_MAX_FILES) {
+        truncated = true;
+        return;
+      }
+      const absPath = path_module.join(absDir, entry.name);
+      const relPath = relDir === '' ? entry.name : `${relDir}/${entry.name}`;
+
+      if (entry.isDirectory()) {
+        if (shouldSkipDirEntry(entry.name)) {
+          filesSkipped += 1;
+          continue;
+        }
+        await walk(absPath, relPath);
+        continue;
+      }
+
+      if (!entry.isFile() || shouldSkipFileEntry(entry.name)) {
+        filesSkipped += 1;
+        continue;
+      }
+
+      const ext = path_module.extname(entry.name).toLowerCase();
+      if (!WORKSPACE_SEED_TEXT_EXTENSIONS.has(ext)) {
+        filesSkipped += 1;
+        continue;
+      }
+
+      let size: number;
+      try {
+        size = (await stat(absPath)).size;
+      } catch (err) {
+        logger.error('workspace.seed.stat.fail', {
+          path: absPath,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        filesSkipped += 1;
+        continue;
+      }
+
+      if (size > WORKSPACE_SEED_MAX_FILE_BYTES) {
+        filesSkipped += 1;
+        continue;
+      }
+      if (bytesLoaded + size > WORKSPACE_SEED_MAX_TOTAL_BYTES) {
+        filesSkipped += 1;
+        truncated = true;
+        return;
+      }
+
+      let content: string;
+      try {
+        content = await readFile(absPath, 'utf8');
+      } catch (err) {
+        logger.error('workspace.seed.read.fail', {
+          path: absPath,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        filesSkipped += 1;
+        continue;
+      }
+
+      const contentBytes = Buffer.byteLength(content, 'utf8');
+      if (bytesLoaded + contentBytes > WORKSPACE_SEED_MAX_TOTAL_BYTES) {
+        filesSkipped += 1;
+        truncated = true;
+        return;
+      }
+
+      fsMap.set(relPath, content);
+      filesLoaded += 1;
+      bytesLoaded += contentBytes;
+    }
+  };
+
+  await walk(workspacePath, '');
+  return { filesLoaded, filesSkipped, bytesLoaded, truncated };
+}
+
 interface CreateRuntimeTextEditorFsOptions {
   db: BetterSqlite3.Database | null;
   generationId: string;
   designId: string | null;
   previousHtml: string | null;
   sendEvent: (event: AgentStreamEvent) => void;
-  logger: Pick<CoreLogger, 'error'>;
+  logger: WorkspaceSeedLogger;
 }
 
-export function createRuntimeTextEditorFs({
+export async function createRuntimeTextEditorFs({
   db,
   generationId,
   designId,
@@ -298,6 +446,33 @@ export function createRuntimeTextEditorFs({
   }
   for (const [name, content] of DESIGN_SKILLS) {
     fsMap.set(`skills/${name}`, content);
+  }
+
+  // Workspace folder, when bound, is the source of truth for what's "in" the
+  // design. Seed fsMap with its current text files so the agent's first
+  // list_files / view sees the user's actual content, not just the bundled
+  // frames/skills. Failures are logged and non-fatal -- generation still runs
+  // with whatever was successfully loaded.
+  if (designId !== null && db !== null) {
+    try {
+      const design = getDesign(db, designId);
+      if (design?.workspacePath) {
+        const seed = await seedFsMapFromWorkspace(design.workspacePath, fsMap, logger);
+        logger.info?.('workspace.seed.ok', {
+          designId,
+          workspacePath: design.workspacePath,
+          filesLoaded: seed.filesLoaded,
+          filesSkipped: seed.filesSkipped,
+          bytesLoaded: seed.bytesLoaded,
+          truncated: seed.truncated,
+        });
+      }
+    } catch (err) {
+      logger.error('workspace.seed.fail', {
+        designId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   function emitFsUpdated(filePath: string, content: string): void {
@@ -377,15 +552,19 @@ export function createRuntimeTextEditorFs({
       return { path };
     },
     listDir(dir: string) {
+      // Recursive listing: return every file path under `dir`, not just the
+      // first segment. The agent reads the full tree in a single tool call
+      // instead of recursing one directory at a time -- critical when the
+      // workspace contains a real project with nested folders.
       const prefix = dir.length === 0 || dir === '.' ? '' : `${dir.replace(/\/+$/, '')}/`;
-      const entries = new Set<string>();
+      const entries: string[] = [];
       for (const p of fsMap.keys()) {
         if (!p.startsWith(prefix)) continue;
         const rest = p.slice(prefix.length);
-        const firstSegment = rest.split('/')[0];
-        if (firstSegment) entries.add(firstSegment);
+        if (rest.length === 0) continue;
+        entries.push(rest);
       }
-      return [...entries].sort();
+      return entries.sort();
     },
   };
 
@@ -397,7 +576,7 @@ function registerIpcHandlers(db: Database | null): void {
 
   // Cache of the last NormalizedProviderError seen per run, so recordFinalError
   // can attach it to the final (non-transient) row. Without this, the row the
-  // user actually reports lacks upstream_request_id / status — those fields
+  // user actually reports lacks upstream_request_id / status -- those fields
   // lived only on the hidden transient sibling row emitted by retry.ts.
   // Implementation + LRU eviction lives in ./provider-context.ts.
   const providerContext = createProviderContextStore(50);
@@ -434,7 +613,7 @@ function registerIpcHandlers(db: Database | null): void {
    *
    * Only `provider.error` (retry in flight, transient=true) is persisted from
    * this adapter; the `provider.error.final` event is NOT recorded because the
-   * outer handler's catch block calls `recordFinalError` — recording both
+   * outer handler's catch block calls `recordFinalError` -- recording both
    * would double-count the same failure with two distinct fingerprints. */
   const coreLoggerFor = (id: string): CoreLogger => ({
     info: (event, data) => logIpc.info(event, { generationId: id, ...(data ?? {}) }),
@@ -447,7 +626,7 @@ function registerIpcHandlers(db: Database | null): void {
             ? (data['upstream_message'] as string)
             : event;
         // Fingerprint basis: errorCode + synthetic frame containing the two
-        // fields that truly differentiate provider errors — upstream_status
+        // fields that truly differentiate provider errors -- upstream_status
         // and upstream_code. JSON-stringifying `data` and passing it as
         // `stack` would produce an identical 8-hex for every provider error
         // because `extractTopFrames` requires lines starting with "at ".
@@ -457,7 +636,7 @@ function registerIpcHandlers(db: Database | null): void {
           typeof data?.['upstream_code'] === 'string' ? data['upstream_code'] : 'unknown';
         const syntheticFrame = `    at provider (${status}:${upstreamCode})`;
         // Stash the normalized context so recordFinalError can attach it to
-        // the final non-transient row — otherwise the reported row loses
+        // the final non-transient row -- otherwise the reported row loses
         // upstream_request_id / upstream_status, which lived only on this
         // hidden transient sibling.
         if (data !== undefined) providerContext.remember(id, data);
@@ -488,7 +667,7 @@ function registerIpcHandlers(db: Database | null): void {
    * `agent:event:v1` so the sidebar chat can render incremental output
    * instead of waiting for the full final message.
    */
-  const runGenerate = (
+  const runGenerate = async (
     input: Parameters<typeof generate>[0],
     id: string,
     designId: string | null,
@@ -500,8 +679,18 @@ function registerIpcHandlers(db: Database | null): void {
     };
     const baseCtx = { designId: designId ?? '', generationId: id } as const;
     const toolStartedAt = new Map<string, number>();
-    const runtimeVerify = makeRuntimeVerifier();
-    const { fs, fsMap } = createRuntimeTextEditorFs({
+    // The runtime verifier wraps the artifact in buildSrcdoc(), which expects
+    // a JSX module (TWEAK_DEFAULTS + ReactDOM.createRoot). Real workspace
+    // files are plain HTML / framework code that doesn't fit that mold, so
+    // the verifier flags them as broken and the agent self-heals by flatten-
+    // ing the user's actual project into a self-contained doc -- silently
+    // destroying real source files. Skip verification when a workspace is
+    // bound; the user's tooling (their dev server, linters, browser) is the
+    // source of truth in that mode.
+    const designHasWorkspace =
+      designId !== null && db !== null ? (getDesign(db, designId)?.workspacePath ?? null) : null;
+    const runtimeVerify = designHasWorkspace !== null ? undefined : makeRuntimeVerifier();
+    const { fs, fsMap } = await createRuntimeTextEditorFs({
       db,
       designId,
       generationId: id,
@@ -652,14 +841,14 @@ function registerIpcHandlers(db: Database | null): void {
             )
             .map((c) => c.text)
             .join('');
-          // Strip <artifact ...>...</artifact> blocks — artifact content is
+          // Strip <artifact ...>...</artifact> blocks -- artifact content is
           // delivered via fs_updated / artifact_delivered, not the chat text.
           const finalText = rawText.replace(/<artifact[\s\S]*?<\/artifact>/g, '').trim();
           sendEvent({ ...baseCtx, type: 'turn_end', finalText });
           return;
         }
         if (event.type === 'agent_end') {
-          // Final boundary of an agent run — renderer uses this to persist a
+          // Final boundary of an agent run -- renderer uses this to persist a
           // SQLite snapshot from the in-memory previewHtml so the design
           // survives an app restart. Without this the next switchDesign() at
           // boot finds no snapshot and falls back to the empty welcome state.
@@ -676,7 +865,7 @@ function registerIpcHandlers(db: Database | null): void {
     }));
   };
 
-  /** In-flight requests: generationId → AbortController */
+  /** In-flight requests: generationId -> AbortController */
   const inFlight = new Map<string, AbortController>();
 
   const armTimeout = (id: string, controller: AbortController) =>
@@ -698,7 +887,7 @@ function registerIpcHandlers(db: Database | null): void {
   // directly to dry-run an artifact without going through the agent loop.
   // The agent itself uses the same verifier as an injected callback (see
   // runGenerate above), so this handler is NOT in the hot path. Hidden
-  // BrowserWindow + Babel makes vitest unworkable here — manual verification
+  // BrowserWindow + Babel makes vitest unworkable here -- manual verification
   // path documented in done-verify.ts.
   const sharedRuntimeVerifier = makeRuntimeVerifier();
   ipcMain.handle('done:verify:v1', async (_e, raw: unknown) => {
@@ -787,8 +976,8 @@ function registerIpcHandlers(db: Database | null): void {
           'CONFIG_MISSING',
         );
       }
-      // Snap to the canonical active provider in cachedConfig — the SAME source
-      // the Settings UI uses for the Active badge — so the actual call cannot
+      // Snap to the canonical active provider in cachedConfig -- the SAME source
+      // the Settings UI uses for the Active badge -- so the actual call cannot
       // diverge from what the user sees.
       const active = resolveActiveModel(cfg, payload.model);
       const allowKeyless = active.allowKeyless;
@@ -800,7 +989,7 @@ function registerIpcHandlers(db: Database | null): void {
         throw err;
       }
       // Once we've snapped to the canonical active provider, the renderer-supplied
-      // baseUrl can no longer be trusted — it may belong to a different (stale)
+      // baseUrl can no longer be trusted -- it may belong to a different (stale)
       // provider and would route the active provider's API key to the wrong host.
       // Always use the per-provider baseUrl from cached config, and mutate the
       // payload itself so any downstream reader cannot accidentally pick up the
@@ -903,7 +1092,7 @@ function registerIpcHandlers(db: Database | null): void {
         return result;
       } catch (err) {
         // Attach upstream metadata to the thrown err so the renderer's
-        // diagnostic pipeline (store.ts::applyGenerateError →
+        // diagnostic pipeline (store.ts::applyGenerateError ->
         // diagnoseGenerateFailure) can map this failure to a "most likely
         // cause + suggested fix" hypothesis. Without this, renderer only
         // sees err.message + err.code and cannot offer actionable hints
@@ -949,7 +1138,7 @@ function registerIpcHandlers(db: Database | null): void {
     });
   });
 
-  // Legacy shim — kept for one minor release while older renderer builds still
+  // Legacy shim -- kept for one minor release while older renderer builds still
   // send codesign:generate without schemaVersion. Remove after v0.3.
   ipcMain.handle('codesign:generate', async (_e, raw: unknown) => {
     logIpc.warn('legacy codesign:generate channel used, schedule removal next minor');
@@ -978,7 +1167,7 @@ function registerIpcHandlers(db: Database | null): void {
         inFlight.delete(id);
         throw err;
       }
-      // See codesign:v1:generate above — renderer baseUrl is ignored post-snap.
+      // See codesign:v1:generate above -- renderer baseUrl is ignored post-snap.
       const baseUrl = active.baseUrl ?? undefined;
       if (active.overridden) {
         payload.baseUrl = baseUrl;
@@ -1252,6 +1441,11 @@ async function scheduleStartupUpdateCheck(): Promise<void> {
 }
 
 if (!IS_VITEST) {
+  // Privileged scheme registration must happen synchronously before
+  // app.whenReady so Chromium picks it up during process init. Calling it
+  // later raises "Schemes can only be registered while the app is initializing".
+  registerWorkspaceScheme();
+
   void app.whenReady().then(async () => {
     // Extracted so the outer try/catch AND post-init listeners (whose callbacks
     // fire outside this block) can route failures through the same boot-fallback
@@ -1289,8 +1483,8 @@ if (!IS_VITEST) {
       initLogger();
       // Single-instance lock. Two simultaneous Electron instances would race
       // `cleanupStaleTmps` vs `writeAtomic` (B's cleanup unlinks A's in-flight
-      // tmp → ENOENT rename) and collide on the SQLite WAL. macOS usually
-      // enforces this at the OS level, but `open -n` defeats that — so we
+      // tmp -> ENOENT rename) and collide on the SQLite WAL. macOS usually
+      // enforces this at the OS level, but `open -n` defeats that -- so we
       // acquire the lock explicitly before touching any shared files.
       const gotLock = app.requestSingleInstanceLock();
       if (!gotLock) {
@@ -1313,7 +1507,7 @@ if (!IS_VITEST) {
       // crashes. pid changes across restarts so without this the config dir
       // accumulates 0o600 litter forever.
       cleanupStaleTmps(join(configDir(), 'reported-fingerprints.json'));
-      // Snapshot persistence is best-effort at boot — a failure here (corrupt DB,
+      // Snapshot persistence is best-effort at boot -- a failure here (corrupt DB,
       // permission denied, missing native binding) must NOT block the BrowserWindow
       // from opening. Surface it via an error dialog and skip registering the
       // snapshots IPC channels; the rest of the app stays usable.
@@ -1324,6 +1518,14 @@ if (!IS_VITEST) {
         registerWorkspaceIpc(dbResult.db, () => mainWindow);
         registerChatMessagesIpc(dbResult.db);
         registerCommentsIpc(dbResult.db);
+        registerWorkspaceProtocolHandler({
+          db: dbResult.db,
+          logger: getLogger('workspace-protocol'),
+        });
+        registerFilesIpc({
+          db: dbResult.db,
+          logger: getLogger('files-ipc'),
+        });
         try {
           pruneDiagnosticEvents(dbResult.db, 500);
         } catch (err) {
@@ -1339,7 +1541,7 @@ if (!IS_VITEST) {
         });
         // Install stub handlers so renderer-side calls reject with a typed
         // SNAPSHOTS_UNAVAILABLE CodesignError instead of Electron's opaque
-        // "No handler registered" rejection — see snapshots-ipc.ts.
+        // "No handler registered" rejection -- see snapshots-ipc.ts.
         registerSnapshotsUnavailableIpc(dbResult.error.message);
         registerChatMessagesUnavailableIpc(dbResult.error.message);
         registerCommentsUnavailableIpc(dbResult.error.message);
@@ -1374,7 +1576,7 @@ if (!IS_VITEST) {
     } catch (err) {
       // Last-resort boot-phase handler. Reached when something before
       // `initLogger()` finishes (or during the first few setup calls)
-      // throws — our electron-log sink might not exist yet, so write a
+      // throws -- our electron-log sink might not exist yet, so write a
       // best-effort sync log and show a native three-button dialog.
       handleBootFailure(
         err,
