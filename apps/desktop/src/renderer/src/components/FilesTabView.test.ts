@@ -7,6 +7,7 @@ import {
   isRenderableDesignFileKind,
   previewKindForFile,
   resolveReferencedWorkspacePreviewPath,
+  shouldShowTweakPanelForFile,
   workspaceBaseHrefForFile,
   workspacePreviewDependencyKey,
 } from './FilesTabView';
@@ -42,6 +43,44 @@ describe('FilesTabView preview helpers', () => {
     expect(previewKindForFile('brief.pdf', 'pdf')).toBe('pdf');
     expect(previewKindForFile('Makefile', 'asset')).toBe('text');
     expect(previewKindForFile('archive.zip', 'asset')).toBe('unsupported');
+  });
+
+  it('shows tweaks only for the main runtime design source preview', () => {
+    expect(
+      shouldShowTweakPanelForFile({
+        path: 'App.jsx',
+        previewKind: 'runtime',
+        hasPreviewSource: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTweakPanelForFile({
+        path: 'index.html',
+        previewKind: 'runtime',
+        hasPreviewSource: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTweakPanelForFile({
+        path: 'settings.jsx',
+        previewKind: 'runtime',
+        hasPreviewSource: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowTweakPanelForFile({
+        path: 'DESIGN.md',
+        previewKind: 'markdown',
+        hasPreviewSource: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowTweakPanelForFile({
+        path: 'App.jsx',
+        previewKind: 'runtime',
+        hasPreviewSource: false,
+      }),
+    ).toBe(false);
   });
 
   it('builds a workspace protocol base href for workspace-relative asset resolution', () => {

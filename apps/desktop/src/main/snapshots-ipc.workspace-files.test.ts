@@ -49,6 +49,17 @@ describe('workspace files IPC legacy workspace fallback', () => {
     await expect(list(null, { schemaVersion: 1, designId: design.id })).resolves.toEqual([]);
   });
 
+  it('returns an empty file list when the bound workspace folder is missing', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Missing workspace folder');
+    updateDesignWorkspace(db, design.id, '/tmp/open-codesign-missing-workspace-for-list');
+    registerWorkspaceIpc(db, () => null);
+
+    const list = getHandler('codesign:files:v1:list');
+
+    await expect(list(null, { schemaVersion: 1, designId: design.id })).resolves.toEqual([]);
+  });
+
   it('returns an empty typed file result when a legacy design has no workspace path', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db, 'Legacy unbound design');

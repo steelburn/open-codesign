@@ -154,11 +154,10 @@ export function makeChatSlice(set: SetState, get: GetState): ChatSliceActions {
 
     setPreviewSourceFromAgent({ designId, content }) {
       const state = get();
-      // Only adopt the live source when the event's design matches what the user
-      // is looking at OR what is actively generating. This prevents a background
-      // run on design A from blowing away the preview while the user has switched
-      // to design B.
-      if (state.currentDesignId !== designId && state.generatingDesignId !== designId) {
+      // Only adopt the live source when the event's design is visible. This
+      // prevents a background run on design A from blowing away the preview
+      // while the user has switched to design B.
+      if (state.currentDesignId !== designId) {
         // The event's design isn't visible — still update its pool entry so
         // switching back later reflects the streamed-in source.
         const pool = recordPreviewSourceInPool(

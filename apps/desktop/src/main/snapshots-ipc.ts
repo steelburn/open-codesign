@@ -1101,6 +1101,13 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         return [];
       }
       const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
+      if (!checkWorkspaceFolderExists(workspacePath)) {
+        logger.warn('files.list.workspace_unavailable', {
+          designId: design.id,
+          workspacePath,
+        });
+        return [];
+      }
       try {
         return await listWorkspaceFilesAt(workspacePath);
       } catch (cause) {

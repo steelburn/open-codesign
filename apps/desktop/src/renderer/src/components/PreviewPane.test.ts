@@ -4,6 +4,8 @@ import {
   handlePreviewMessage,
   isTrustedPreviewMessageSource,
   postModeToPreviewWindow,
+  previewArtboardFrameClass,
+  previewArtboardStyle,
   scaleRectForZoom,
   stablePreviewSourceKey,
 } from './PreviewPane';
@@ -41,6 +43,27 @@ describe('scaleRectForZoom', () => {
       width: 75,
       height: 75,
     });
+  });
+});
+
+describe('preview artboard frame', () => {
+  it('uses fixed viewport dimensions for desktop and tablet frames', () => {
+    expect(previewArtboardStyle('desktop')).toEqual({
+      width: 'var(--size-preview-desktop-width)',
+      height: 'var(--size-preview-desktop-height)',
+    });
+    expect(previewArtboardStyle('tablet')).toEqual({
+      width: 'var(--size-preview-tablet-width)',
+      height: 'var(--size-preview-tablet-height)',
+    });
+  });
+
+  it('renders a visible boundary around framed preview artboards', () => {
+    const className = previewArtboardFrameClass();
+
+    expect(className).toContain('border');
+    expect(className).toContain('shadow-[var(--shadow-elevated)]');
+    expect(className).toContain('overflow-hidden');
   });
 });
 

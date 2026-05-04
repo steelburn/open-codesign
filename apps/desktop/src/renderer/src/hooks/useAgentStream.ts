@@ -246,8 +246,7 @@ export function useAgentStream(): void {
         return;
       }
       const state = useCodesignStore.getState();
-      const visible =
-        state.currentDesignId === event.designId || state.generatingDesignId === event.designId;
+      const visible = state.currentDesignId === event.designId;
       const currentSource = visible
         ? state.previewSource
         : state.previewSourceByDesign[event.designId];
@@ -284,11 +283,20 @@ export function useAgentStream(): void {
       // "running" if the IPC promise that drives sendPrompt hangs. Only clear
       // when the error belongs to the design the store thinks is generating.
       const s = useCodesignStore.getState();
-      if (s.generatingDesignId === event.designId) {
+      const currentRun = s.generationByDesign[event.designId];
+      if (currentRun?.generationId === event.generationId) {
+        const generationByDesign = { ...s.generationByDesign };
+        delete generationByDesign[event.designId];
+        const activeForCurrent =
+          s.currentDesignId === null ? undefined : generationByDesign[s.currentDesignId];
         useCodesignStore.setState({
-          isGenerating: false,
-          generatingDesignId: null,
-          generationStage: 'error',
+          generationByDesign,
+          isGenerating: activeForCurrent !== undefined,
+          activeGenerationId: activeForCurrent?.generationId ?? null,
+          generatingDesignId: activeForCurrent !== undefined ? s.currentDesignId : null,
+          generationStage:
+            activeForCurrent?.stage ??
+            (s.currentDesignId === event.designId ? 'error' : s.generationStage),
           streamingAssistantText: null,
         });
       }
@@ -319,11 +327,20 @@ export function useAgentStream(): void {
       // hangs for any reason the UI would be stuck in "running" forever.
       // Mirror the happy-path terminal state here as a belt-and-suspenders.
       const s = useCodesignStore.getState();
-      if (s.generatingDesignId === event.designId) {
+      const currentRun = s.generationByDesign[event.designId];
+      if (currentRun?.generationId === event.generationId) {
+        const generationByDesign = { ...s.generationByDesign };
+        delete generationByDesign[event.designId];
+        const activeForCurrent =
+          s.currentDesignId === null ? undefined : generationByDesign[s.currentDesignId];
         useCodesignStore.setState({
-          isGenerating: false,
-          generatingDesignId: null,
-          generationStage: 'done',
+          generationByDesign,
+          isGenerating: activeForCurrent !== undefined,
+          activeGenerationId: activeForCurrent?.generationId ?? null,
+          generatingDesignId: activeForCurrent !== undefined ? s.currentDesignId : null,
+          generationStage:
+            activeForCurrent?.stage ??
+            (s.currentDesignId === event.designId ? 'done' : s.generationStage),
           streamingAssistantText: null,
         });
       }

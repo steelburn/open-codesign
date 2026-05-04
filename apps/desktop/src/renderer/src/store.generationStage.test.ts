@@ -66,8 +66,10 @@ function resetStore() {
   useCodesignStore.setState({
     ...initialState,
     previewSource: null,
+    generationByDesign: {},
     isGenerating: false,
     activeGenerationId: null,
+    generatingDesignId: null,
     generationStage: 'idle',
     errorMessage: null,
     lastError: null,

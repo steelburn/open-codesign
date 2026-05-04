@@ -6,6 +6,7 @@ import {
 } from '../../preview/workspace-source.js';
 import type { CodesignState } from '../../store.js';
 import { tr } from '../lib/locale.js';
+import { projectGenerationForDesign } from './generation.js';
 import { recordPreviewSourceInPool } from './snapshots.js';
 import { FILES_TAB } from './tabs.js';
 
@@ -94,17 +95,6 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
 
     async createNewDesign(workspacePath?: string | null) {
       if (!window.codesign) return null;
-      if (get().isGenerating) {
-        // Don't silently drop the request — callers like the Examples flow
-        // assume "clicked = new design". A hidden no-op makes the prompt appear
-        // to have vanished into the current design instead.
-        get().pushToast({
-          variant: 'info',
-          title: tr('projects.notifications.createFailed'),
-          description: tr('projects.notifications.busyGenerating'),
-        });
-        return null;
-      }
       const existingNames = new Set(get().designs.map((d) => d.name));
       let n = 1;
       while (existingNames.has(`Untitled design ${n}`)) n += 1;
@@ -113,6 +103,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
         const design = await window.codesign.snapshots.createDesign(name, workspacePath);
         set({
           currentDesignId: design.id,
+          ...projectGenerationForDesign(get(), design.id),
           previewSource: null,
           errorMessage: null,
           iframeErrors: [],
@@ -208,6 +199,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
         );
         set({
           currentDesignId: id,
+          ...projectGenerationForDesign(get(), id),
           previewSource: cachedSource,
           previewSourceByDesign: incomingPool.cache,
           recentDesignIds: incomingPool.recent,
@@ -270,6 +262,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
         );
         set({
           currentDesignId: id,
+          ...projectGenerationForDesign(get(), id),
           previewSource: source,
           previewSourceByDesign: incomingPool.cache,
           recentDesignIds: incomingPool.recent,
@@ -365,7 +358,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
 
     async softDeleteDesign(id: string) {
       if (!window.codesign) return;
-      if (get().isGenerating) {
+      if (get().generationByDesign[id] !== undefined) {
         get().pushToast({
           variant: 'info',
           title: tr('projects.notifications.deleteBlockedGenerating'),
@@ -424,7 +417,7 @@ export function makeDesignsSlice(set: SetState, get: GetState): DesignsSliceActi
     requestWorkspaceRebind(design, newPath) {
       // Block workspace changes while the current design is generating
       const state = get();
-      if (state.isGenerating && state.generatingDesignId === state.currentDesignId) {
+      if (state.generationByDesign[design.id] !== undefined) {
         return;
       }
       set({ workspaceRebindPending: { design, newPath } });

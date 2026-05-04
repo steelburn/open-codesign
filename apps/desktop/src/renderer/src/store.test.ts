@@ -42,8 +42,11 @@ function resetStore() {
   useCodesignStore.setState({
     ...initialState,
     previewSource: null,
+    generationByDesign: {},
     isGenerating: false,
     activeGenerationId: null,
+    generatingDesignId: null,
+    generationStage: 'idle',
     errorMessage: null,
     lastError: null,
     config: READY_CONFIG,
@@ -257,7 +260,15 @@ describe('useCodesignStore generation cancellation', () => {
   it('sets errorMessage and pushes a toast when window.codesign is missing during cancel', () => {
     vi.stubGlobal('window', { setTimeout });
 
-    useCodesignStore.setState({ activeGenerationId: 'gen-123' });
+    useCodesignStore.setState({
+      currentDesignId: DEFAULT_DESIGN.id,
+      generationByDesign: {
+        [DEFAULT_DESIGN.id]: { generationId: 'gen-123', stage: 'streaming' },
+      },
+      isGenerating: true,
+      activeGenerationId: 'gen-123',
+      generatingDesignId: DEFAULT_DESIGN.id,
+    });
 
     useCodesignStore.getState().cancelGeneration();
 
@@ -754,6 +765,9 @@ describe('useCodesignStore design management', () => {
 
     useCodesignStore.setState({
       currentDesignId: 'design-a',
+      generationByDesign: {
+        'design-a': { generationId: 'gen-design-a', stage: 'streaming' },
+      },
       isGenerating: true,
       generatingDesignId: 'design-a',
     });
@@ -762,9 +776,125 @@ describe('useCodesignStore design management', () => {
 
     const state = useCodesignStore.getState();
     expect(state.currentDesignId).toBe('design-b');
-    // Generation flag still set, but bound to the originating design.
-    expect(state.isGenerating).toBe(true);
-    expect(state.generatingDesignId).toBe('design-a');
+    expect(state.generationByDesign['design-a']).toBeDefined();
+    expect(state.isGenerating).toBe(false);
+    expect(state.generatingDesignId).toBeNull();
+  });
+
+  it('allows creating a new design while another design is generating', async () => {
+    const created = {
+      ...DEFAULT_DESIGN,
+      id: 'design-b',
+      name: 'Untitled design 2',
+      workspacePath: '/tmp/design-b',
+    };
+    const createDesign = vi.fn(() => Promise.resolve(created));
+    vi.stubGlobal('window', {
+      codesign: {
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+        snapshots: {
+          createDesign,
+          listDesigns: vi.fn(() => Promise.resolve([DEFAULT_DESIGN, created])),
+          list: vi.fn(() => Promise.resolve([])),
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      designs: [DEFAULT_DESIGN],
+      currentDesignId: DEFAULT_DESIGN.id,
+      generationByDesign: {
+        [DEFAULT_DESIGN.id]: { generationId: 'gen-design-a', stage: 'streaming' },
+      },
+      isGenerating: true,
+      generatingDesignId: DEFAULT_DESIGN.id,
+    });
+
+    const result = await useCodesignStore.getState().createNewDesign();
+
+    expect(result?.id).toBe('design-b');
+    expect(createDesign).toHaveBeenCalledWith('Untitled design 1', undefined);
+    expect(useCodesignStore.getState().currentDesignId).toBe('design-b');
+    expect(useCodesignStore.getState().generationByDesign[DEFAULT_DESIGN.id]).toBeDefined();
+  });
+
+  it('allows a second design to start generating while the first design is still running', async () => {
+    const designA = { ...DEFAULT_DESIGN, id: 'design-a', workspacePath: '/tmp/design-a' };
+    const designB = { ...DEFAULT_DESIGN, id: 'design-b', workspacePath: '/tmp/design-b' };
+    const pendingById = new Map<
+      string,
+      ReturnType<typeof deferred<{ artifacts: Array<{ content: string }>; message: string }>>
+    >();
+    const generate = vi.fn((payload: { generationId?: string; designId?: string }) => {
+      if (!payload.generationId) throw new Error('missing generationId');
+      const task = deferred<{ artifacts: Array<{ content: string }>; message: string }>();
+      pendingById.set(payload.generationId, task);
+      return task.promise;
+    });
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: mockChatApi(),
+        comments: mockCommentsApi(),
+        snapshots: {
+          ...mockSnapshotsApi(),
+          list: vi.fn(() => Promise.resolve([])),
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      designs: [designA, designB],
+      currentDesignId: 'design-a',
+    });
+
+    const firstRun = useCodesignStore.getState().sendPrompt({ prompt: 'first prompt' });
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+    const firstPayload = generate.mock.calls[0]?.[0] as { generationId: string; designId: string };
+
+    await useCodesignStore.getState().switchDesign('design-b');
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+
+    const secondRun = useCodesignStore.getState().sendPrompt({ prompt: 'second prompt' });
+    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(2));
+    const secondPayload = generate.mock.calls[1]?.[0] as {
+      generationId: string;
+      designId: string;
+    };
+
+    expect(firstPayload.designId).toBe('design-a');
+    expect(secondPayload.designId).toBe('design-b');
+    expect(Object.keys(useCodesignStore.getState().generationByDesign).sort()).toEqual([
+      'design-a',
+      'design-b',
+    ]);
+
+    pendingById.get(secondPayload.generationId)?.resolve({
+      artifacts: [{ content: '<html>second</html>' }],
+      message: 'Second done',
+    });
+    await secondRun;
+    expect(useCodesignStore.getState().currentDesignId).toBe('design-b');
+    expect(useCodesignStore.getState().previewSource).toBe('<html>second</html>');
+    expect(useCodesignStore.getState().generationStage).toBe('done');
+
+    pendingById.get(firstPayload.generationId)?.resolve({
+      artifacts: [{ content: '<html>first</html>' }],
+      message: 'First done',
+    });
+    await firstRun;
+
+    expect(useCodesignStore.getState().currentDesignId).toBe('design-b');
+    expect(useCodesignStore.getState().previewSource).toBe('<html>second</html>');
+    expect(useCodesignStore.getState().generationStage).toBe('done');
+    expect(useCodesignStore.getState().previewSourceByDesign['design-a']).toBe(
+      '<html>first</html>',
+    );
+    expect(useCodesignStore.getState().generationByDesign).toEqual({});
   });
 
   it('refreshes the current design when selecting it again from the hub', async () => {
@@ -836,7 +966,11 @@ describe('useCodesignStore design management', () => {
 
     useCodesignStore.setState({
       currentDesignId: 'design-a',
+      generationByDesign: {
+        'design-a': { generationId: 'gen-design-a', stage: 'streaming' },
+      },
       isGenerating: true,
+      generatingDesignId: 'design-a',
     });
 
     await useCodesignStore.getState().softDeleteDesign('design-a');
@@ -1750,6 +1884,9 @@ describe('useCodesignStore generation-blocking workspace guards', () => {
     useCodesignStore.setState({
       designs: [mockDesign],
       currentDesignId: 'design-1',
+      generationByDesign: {
+        'design-1': { generationId: 'gen-design-1', stage: 'streaming' },
+      },
       isGenerating: true,
       generatingDesignId: 'design-1',
       workspaceRebindPending: null,
@@ -1765,6 +1902,9 @@ describe('useCodesignStore generation-blocking workspace guards', () => {
     useCodesignStore.setState({
       designs: [mockDesign, { ...mockDesign, id: 'design-2' }],
       currentDesignId: 'design-1',
+      generationByDesign: {
+        'design-2': { generationId: 'gen-design-2', stage: 'streaming' },
+      },
       isGenerating: true,
       generatingDesignId: 'design-2',
       workspaceRebindPending: null,

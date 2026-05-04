@@ -1,9 +1,8 @@
 import { useT } from '@open-codesign/i18n';
 import { buildPreviewDocument } from '@open-codesign/runtime';
 import {
+  type CSSProperties,
   type DragEvent,
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -33,10 +32,6 @@ import { PinOverlay } from './comment/PinOverlay';
 import { FilesTabView, WorkspaceFilePreview } from './FilesTabView';
 import { PhoneFrame } from './PhoneFrame';
 import { PreviewToolbar } from './PreviewToolbar';
-
-// TweakPanel only mounts once there is preview source to render — defer its
-// ~4kb gzipped chunk (plus its input primitives) out of first paint.
-const TweakPanel = lazy(() => import('./TweakPanel').then((m) => ({ default: m.TweakPanel })));
 
 export type {
   AllowedPreviewMessageType,
@@ -73,6 +68,27 @@ interface PreviewSlotProps {
   registerIframe: (designId: string, el: HTMLIFrameElement | null) => void;
   onIframeError: (message: string) => void;
   onIframeLoaded: (designId: string) => void;
+}
+
+type FramedPreviewViewport = Exclude<PreviewSlotProps['viewport'], 'mobile'>;
+
+const ARTBOARD_FRAME_CLASS =
+  'relative flex-shrink-0 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white shadow-[var(--shadow-elevated)] ring-1 ring-[color-mix(in_srgb,var(--color-border)_35%,transparent)]';
+
+export function previewArtboardStyle(viewport: FramedPreviewViewport): CSSProperties {
+  return viewport === 'tablet'
+    ? {
+        width: 'var(--size-preview-tablet-width)',
+        height: 'var(--size-preview-tablet-height)',
+      }
+    : {
+        width: 'var(--size-preview-desktop-width)',
+        height: 'var(--size-preview-desktop-height)',
+      };
+}
+
+export function previewArtboardFrameClass(): string {
+  return ARTBOARD_FRAME_CLASS;
 }
 
 // One iframe per pool entry. Hidden (display:none) when not active, but kept
@@ -162,15 +178,8 @@ function PreviewSlot({
     );
   } else if (viewport === 'tablet') {
     body = (
-      <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto">
-        <div
-          className="relative"
-          style={{
-            width: 'var(--size-preview-tablet-width)',
-            height: 'var(--size-preview-tablet-height)',
-            flexShrink: 0,
-          }}
-        >
+      <div className="h-full p-6 flex flex-col items-center justify-start overflow-auto bg-[var(--color-background-secondary)]">
+        <div className={ARTBOARD_FRAME_CLASS} style={previewArtboardStyle('tablet')}>
           {showCommentUi && active ? (
             <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
           ) : null}
@@ -181,12 +190,14 @@ function PreviewSlot({
     );
   } else {
     body = (
-      <div className="h-full w-full min-w-0 relative overflow-auto">
-        {showCommentUi && active ? (
-          <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
-        ) : null}
-        {iframe}
-        {active ? pinOverlay : null}
+      <div className="h-full p-6 flex items-start justify-center overflow-auto bg-[var(--color-background-secondary)]">
+        <div className={ARTBOARD_FRAME_CLASS} style={previewArtboardStyle('desktop')}>
+          {showCommentUi && active ? (
+            <div className={COMMENT_HINT_CLASS}>{commentHintLabel}</div>
+          ) : null}
+          {iframe}
+          {active ? pinOverlay : null}
+        </div>
       </div>
     );
   }
@@ -496,11 +507,6 @@ export function PreviewPane({ onPickStarter }: PreviewPaneProps) {
           onDragOver={(e) => e.preventDefault()}
         >
           {body}
-          {previewSource ? (
-            <Suspense fallback={null}>
-              <TweakPanel iframeRef={iframeRef} />
-            </Suspense>
-          ) : null}
         </div>
         {commentBubble && interactionMode === 'comment'
           ? (() => {

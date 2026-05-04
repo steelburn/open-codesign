@@ -16,7 +16,7 @@ import {
 } from '../../preview/workspace-source.js';
 import type { CodesignState } from '../../store.js';
 import { modelRef, newId, normalizeReferenceUrl, tr, uniqueFiles } from '../lib/locale.js';
-import { finishIfCurrent, isReadyConfig } from '../lib/ready-config.js';
+import { isReadyConfig } from '../lib/ready-config.js';
 import {
   buildGenerateDisplayMessage,
   buildGenerateErrorDescription,
@@ -56,6 +56,124 @@ type ProviderFixPatch = {
   wire?: WireApi;
   reasoningLevel?: ReasoningLevel | null;
 };
+
+function projectedGenerationFields(
+  state: CodesignState,
+  generationByDesign: CodesignState['generationByDesign'] = state.generationByDesign,
+  idleStage: GenerationStage = 'idle',
+): Pick<
+  CodesignState,
+  'isGenerating' | 'activeGenerationId' | 'generatingDesignId' | 'generationStage'
+> {
+  const currentDesignId = state.currentDesignId;
+  const current = currentDesignId === null ? undefined : generationByDesign[currentDesignId];
+  return {
+    isGenerating: current !== undefined,
+    activeGenerationId: current?.generationId ?? null,
+    generatingDesignId: current !== undefined ? currentDesignId : null,
+    generationStage: current?.stage ?? idleStage,
+  };
+}
+
+export function projectGenerationForDesign(
+  state: CodesignState,
+  designId: string | null,
+): Pick<
+  CodesignState,
+  'isGenerating' | 'activeGenerationId' | 'generatingDesignId' | 'generationStage'
+> {
+  const run = designId === null ? undefined : state.generationByDesign[designId];
+  return {
+    isGenerating: run !== undefined,
+    activeGenerationId: run?.generationId ?? null,
+    generatingDesignId: run !== undefined ? designId : null,
+    generationStage: run?.stage ?? 'idle',
+  };
+}
+
+function findDesignIdForGeneration(
+  generationByDesign: CodesignState['generationByDesign'],
+  generationId: string,
+): string | null {
+  for (const [designId, run] of Object.entries(generationByDesign)) {
+    if (run.generationId === generationId) return designId;
+  }
+  return null;
+}
+
+function isCurrentGenerationForDesign(
+  state: CodesignState,
+  designId: string | null,
+  generationId: string,
+): designId is string {
+  if (designId === null) return false;
+  return state.generationByDesign[designId]?.generationId === generationId;
+}
+
+function startGenerationForDesign(set: SetState, designId: string, generationId: string): void {
+  set((state) => {
+    const generationByDesign = {
+      ...state.generationByDesign,
+      [designId]: { generationId, stage: 'sending' as GenerationStage },
+    };
+    return {
+      generationByDesign,
+      ...projectedGenerationFields(
+        state,
+        generationByDesign,
+        state.currentDesignId === designId ? 'idle' : state.generationStage,
+      ),
+    };
+  });
+}
+
+function updateGenerationStageById(
+  get: GetState,
+  set: SetState,
+  generationId: string,
+  stage: GenerationStage,
+): void {
+  const designId = findDesignIdForGeneration(get().generationByDesign, generationId);
+  if (designId === null) return;
+  set((state) => {
+    const current = state.generationByDesign[designId];
+    if (current?.generationId !== generationId) return {};
+    const generationByDesign = {
+      ...state.generationByDesign,
+      [designId]: { generationId, stage },
+    };
+    return {
+      generationByDesign,
+      ...projectedGenerationFields(
+        state,
+        generationByDesign,
+        state.currentDesignId === designId ? 'idle' : state.generationStage,
+      ),
+    };
+  });
+}
+
+function finishGenerationForDesign(
+  set: SetState,
+  designId: string,
+  generationId: string,
+  terminalStage: GenerationStage,
+): void {
+  set((state) => {
+    const current = state.generationByDesign[designId];
+    if (current?.generationId !== generationId) return {};
+    const generationByDesign = { ...state.generationByDesign };
+    delete generationByDesign[designId];
+    return {
+      generationByDesign,
+      ...projectedGenerationFields(
+        state,
+        generationByDesign,
+        state.currentDesignId === designId ? terminalStage : state.generationStage,
+      ),
+    };
+  });
+}
 
 interface PromptRequest {
   prompt: string;
@@ -163,7 +281,7 @@ function advanceStageIfCurrent(
   generationId: string,
   stage: GenerationStage,
 ): void {
-  if (get().activeGenerationId === generationId) set({ generationStage: stage });
+  updateGenerationStageById(get, set, generationId, stage);
 }
 
 function applyGenerateSuccess(
@@ -180,88 +298,76 @@ function applyGenerateSuccess(
   },
   designIdAtStart: string | null,
 ): void {
+  const designId = designIdAtStart ?? get().currentDesignId;
+  const stateBefore = get();
+  if (!isCurrentGenerationForDesign(stateBefore, designId, generationId)) return;
+
   const firstArtifact = result.artifacts[0];
   const assistantMessage = result.message || tr('common.done');
   const { usage, rejected: rejectedUsageFields } = coerceUsageSnapshot(result);
-  let didApply = false;
-  finishIfCurrent<CodesignState>(set, generationId, (_state) => {
-    didApply = true;
-    const nextSource = firstArtifact?.content ?? _state.previewSource;
+
+  set((state) => {
+    if (!isCurrentGenerationForDesign(state, designId, generationId)) return {};
+    const generationByDesign = { ...state.generationByDesign };
+    delete generationByDesign[designId];
+    const isCurrentDesign = state.currentDesignId === designId;
+    const nextSource = firstArtifact?.content ?? (isCurrentDesign ? state.previewSource : null);
     const pool =
-      _state.currentDesignId !== null && nextSource !== null
+      firstArtifact?.content !== undefined
         ? recordPreviewSourceInPool(
-            _state.previewSourceByDesign,
-            _state.recentDesignIds,
-            _state.currentDesignId,
-            nextSource,
+            state.previewSourceByDesign,
+            state.recentDesignIds,
+            designId,
+            firstArtifact.content,
           )
-        : { cache: _state.previewSourceByDesign, recent: _state.recentDesignIds };
+        : { cache: state.previewSourceByDesign, recent: state.recentDesignIds };
     return {
-      previewSource: nextSource,
+      ...(isCurrentDesign ? { previewSource: nextSource } : {}),
       previewSourceByDesign: pool.cache,
       recentDesignIds: pool.recent,
-      isGenerating: false,
-      activeGenerationId: null,
-      generatingDesignId: null,
-      generationStage: 'done' as GenerationStage,
+      generationByDesign,
+      ...projectedGenerationFields(
+        state,
+        generationByDesign,
+        isCurrentDesign ? 'done' : state.generationStage,
+      ),
       lastUsage: usage,
     };
   });
-  // If the user switched designs mid-generation, didApply is false but we
-  // still want the fresh artifact in the pool so the design they generated
-  // for shows the new content the next time they switch back to it.
-  if (!didApply && firstArtifact?.content && designIdAtStart !== null) {
-    const state = get();
-    const pool = recordPreviewSourceInPool(
-      state.previewSourceByDesign,
-      state.recentDesignIds,
-      designIdAtStart,
-      firstArtifact.content,
-    );
-    set({ previewSourceByDesign: pool.cache, recentDesignIds: pool.recent });
+
+  if (firstArtifact && get().currentDesignId === designId) {
+    get().openCanvasFileTab(firstArtifact.entryPath ?? DEFAULT_SOURCE_ENTRY);
   }
-  if (didApply) {
-    // Auto-open the generated file as a tab so the user sees the preview
-    // immediately. The v0.2 workspace contract writes `App.jsx` first.
-    if (firstArtifact) {
-      get().openCanvasFileTab(firstArtifact.entryPath ?? DEFAULT_SOURCE_ENTRY);
-    }
-    // Prefer the designId captured when the prompt was sent — if the user
-    // switched designs mid-generation, get().currentDesignId would now point
-    // at the new one and we'd write the artifact + assistant text into the
-    // wrong chat. Fall back to current only when older callers did not pass
-    // a captured id.
-    const designId = designIdAtStart ?? get().currentDesignId;
-    if (designId) {
-      const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
-      if (artifact !== null) {
-        void persistDesignState(get, designId, get().previewSource, artifact);
-      }
-      // Sidebar v2: append chat rows for artifact delivery.
-      // When agent runtime is active (tool_call rows exist), useAgentStream
-      // already persists assistant_text on turn_end with artifact stripping.
-      // Skip the legacy assistant_text append entirely to avoid duplicates
-      // and raw design source leaking into chat.
-      const agentRuntimeActive = get().chatMessages.some((m) => m.kind === 'tool_call');
-      if (!agentRuntimeActive && assistantMessage.trim().length > 0) {
-        void get().appendChatMessage({
-          designId,
-          kind: 'assistant_text',
-          payload: { text: assistantMessage },
-        });
-      }
-      if (firstArtifact) {
-        void get().appendChatMessage({
-          designId,
-          kind: 'artifact_delivered',
-          payload: { createdAt: new Date().toISOString() },
-        });
-      }
-    }
-    if (rejectedUsageFields.length > 0) {
-      const detail = rejectedUsageFields.join(', ');
-      console.warn('[open-codesign] dropped non-finite usage values from provider:', detail);
-    }
+
+  const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
+  if (artifact !== null) {
+    void persistDesignState(get, designId, firstArtifact?.content ?? null, artifact);
+  }
+  // Sidebar v2: append chat rows for artifact delivery.
+  // When agent runtime is active (tool_call rows exist), useAgentStream
+  // already persists assistant_text on turn_end with artifact stripping.
+  // Skip the legacy assistant_text append entirely to avoid duplicates
+  // and raw design source leaking into chat.
+  const agentRuntimeActive = get().chatMessages.some(
+    (m) => m.designId === designId && m.kind === 'tool_call',
+  );
+  if (!agentRuntimeActive && assistantMessage.trim().length > 0) {
+    void get().appendChatMessage({
+      designId,
+      kind: 'assistant_text',
+      payload: { text: assistantMessage },
+    });
+  }
+  if (firstArtifact) {
+    void get().appendChatMessage({
+      designId,
+      kind: 'artifact_delivered',
+      payload: { createdAt: new Date().toISOString() },
+    });
+  }
+  if (rejectedUsageFields.length > 0) {
+    const detail = rejectedUsageFields.join(', ');
+    console.warn('[open-codesign] dropped non-finite usage values from provider:', detail);
   }
 }
 
@@ -272,11 +378,14 @@ function applyGenerateError(
   err: unknown,
   designIdAtStart: string | null,
 ): void {
+  const designId = designIdAtStart ?? get().currentDesignId;
+  const stateBefore = get();
+  if (!isCurrentGenerationForDesign(stateBefore, designId, generationId)) return;
+
   const rawMsg = err instanceof Error ? err.message : tr('errors.unknown');
   const cfg = get().config;
   const hypothesis = deriveGenerateHypothesis(err, cfg);
   const displayMsg = buildGenerateDisplayMessage(rawMsg, hypothesis);
-  if (get().activeGenerationId !== generationId) return;
   // TODO: replace with rendererLogger once renderer-logger lands
   console.error('[store] applyGenerateError', {
     generationId,
@@ -284,23 +393,19 @@ function applyGenerateError(
     message: rawMsg,
   });
 
-  finishIfCurrent<CodesignState>(set, generationId, () => ({
-    isGenerating: false,
-    activeGenerationId: null,
-    generatingDesignId: null,
-    streamingAssistantText: null,
-    errorMessage: displayMsg,
-    lastError: displayMsg,
-    generationStage: 'error' as GenerationStage,
-  }));
-  const designId = designIdAtStart ?? get().currentDesignId;
-  if (designId) {
-    void get().appendChatMessage({
-      designId,
-      kind: 'error',
-      payload: { message: displayMsg },
+  finishGenerationForDesign(set, designId, generationId, 'error');
+  if (get().currentDesignId === designId) {
+    set({
+      streamingAssistantText: null,
+      errorMessage: displayMsg,
+      lastError: displayMsg,
     });
   }
+  void get().appendChatMessage({
+    designId,
+    kind: 'error',
+    payload: { message: displayMsg },
+  });
   const code = extractCodesignErrorCode(err) ?? 'GENERATION_FAILED';
   const upstream = extractUpstreamContext(err);
 
@@ -503,7 +608,6 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
           hasAttachments: (input.attachments?.length ?? 0) > 0,
         },
       });
-      if (get().isGenerating) return;
       if (!window.codesign) {
         const msg = tr('errors.rendererDisconnected');
         set({ errorMessage: msg, lastError: msg });
@@ -556,13 +660,11 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         });
         return;
       }
+      if (get().generationByDesign[designIdAtStart] !== undefined) return;
 
       const generationId = newId();
+      startGenerationForDesign(set, designIdAtStart, generationId);
       set(() => ({
-        isGenerating: true,
-        activeGenerationId: generationId,
-        generatingDesignId: designIdAtStart,
-        generationStage: 'sending',
         streamingAssistantText: null,
         errorMessage: null,
         lastPromptInput: request,
@@ -652,6 +754,8 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       recordAction({ type: 'prompt.cancel' });
       const id = get().activeGenerationId;
       if (!id) return;
+      const designId = findDesignIdForGeneration(get().generationByDesign, id);
+      if (designId === null) return;
       if (!window.codesign) {
         const msg = tr('errors.rendererDisconnected');
         set({ errorMessage: msg, lastError: msg });
@@ -672,13 +776,10 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       void window.codesign
         .cancelGeneration(id)
         .then(() => {
-          finishIfCurrent<CodesignState>(set, id, () => ({
-            isGenerating: false,
-            activeGenerationId: null,
-            generatingDesignId: null,
-            streamingAssistantText: null,
-            generationStage: 'idle' as GenerationStage,
-          }));
+          finishGenerationForDesign(set, designId, id, 'idle');
+          if (get().currentDesignId === designId) {
+            set({ streamingAssistantText: null });
+          }
         })
         .catch((err) => {
           const msg = err instanceof Error ? err.message : tr('errors.unknown');
@@ -707,7 +808,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
 
     async applyInlineComment(comment) {
       const trimmed = comment.trim();
-      if (!trimmed || get().isGenerating) return;
+      if (!trimmed) return;
       if (!window.codesign) return;
       const cfg = get().config;
       const source = get().previewSource;
@@ -721,16 +822,14 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         designIdAtStart === null
       )
         return;
+      if (get().generationByDesign[designIdAtStart] !== undefined) return;
 
       const userMessageText = `Edit ${selection.tag}: ${trimmed}`;
       const referenceUrl = normalizeReferenceUrl(get().referenceUrl);
       const attachments = uniqueFiles(get().inputFiles);
       const generationId = newId();
-
+      startGenerationForDesign(set, designIdAtStart, generationId);
       set(() => ({
-        isGenerating: true,
-        activeGenerationId: generationId,
-        generatingDesignId: designIdAtStart,
         errorMessage: null,
         iframeErrors: [],
       }));
@@ -754,55 +853,51 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
         const firstArtifact = result.artifacts[0];
         const assistantText = result.message || tr('common.applied');
         const { usage, rejected: rejectedUsageFields } = coerceUsageSnapshot(result);
+        finishGenerationForDesign(set, designIdAtStart, generationId, 'done');
         set((s) => {
-          const nextSource = firstArtifact?.content ?? s.previewSource;
+          const isCurrentDesign = s.currentDesignId === designIdAtStart;
+          const nextSource = firstArtifact?.content ?? (isCurrentDesign ? s.previewSource : null);
           const pool =
-            s.currentDesignId !== null && nextSource !== null
+            firstArtifact?.content !== undefined
               ? recordPreviewSourceInPool(
                   s.previewSourceByDesign,
                   s.recentDesignIds,
-                  s.currentDesignId,
-                  nextSource,
+                  designIdAtStart,
+                  firstArtifact.content,
                 )
               : { cache: s.previewSourceByDesign, recent: s.recentDesignIds };
           return {
-            previewSource: nextSource,
+            ...(isCurrentDesign ? { previewSource: nextSource, selectedElement: null } : {}),
             previewSourceByDesign: pool.cache,
             recentDesignIds: pool.recent,
-            isGenerating: false,
-            generatingDesignId: null,
-            selectedElement: null,
             lastUsage: usage,
           };
         });
-        if (designIdAtStart) {
-          void get().appendChatMessage({
-            designId: designIdAtStart,
-            kind: 'assistant_text',
-            payload: { text: assistantText },
-          });
-          const artifact = artifactFromResult(firstArtifact, userMessageText, assistantText);
-          void persistDesignState(get, designIdAtStart, get().previewSource, artifact);
-        }
+        void get().appendChatMessage({
+          designId: designIdAtStart,
+          kind: 'assistant_text',
+          payload: { text: assistantText },
+        });
+        const artifact = artifactFromResult(firstArtifact, userMessageText, assistantText);
+        void persistDesignState(get, designIdAtStart, firstArtifact?.content ?? null, artifact);
         if (rejectedUsageFields.length > 0) {
           const detail = rejectedUsageFields.join(', ');
           console.warn('[open-codesign] dropped non-finite usage values from provider:', detail);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : tr('errors.unknown');
-        set(() => ({
-          isGenerating: false,
-          generatingDesignId: null,
-          errorMessage: msg,
-          lastError: msg,
-        }));
-        if (designIdAtStart) {
-          void get().appendChatMessage({
-            designId: designIdAtStart,
-            kind: 'error',
-            payload: { message: msg },
+        finishGenerationForDesign(set, designIdAtStart, generationId, 'error');
+        if (get().currentDesignId === designIdAtStart) {
+          set({
+            errorMessage: msg,
+            lastError: msg,
           });
         }
+        void get().appendChatMessage({
+          designId: designIdAtStart,
+          kind: 'error',
+          payload: { message: msg },
+        });
         get().pushToast({
           variant: 'error',
           title: tr('notifications.inlineCommentFailed'),
@@ -814,8 +909,9 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
     tryAutoPolish(designId, locale) {
       const s = get();
       if (!s.autoPolishEnabled) return;
+      if (s.currentDesignId !== designId) return;
       if (s.autoPolishFired.has(designId)) return;
-      if (s.isGenerating) return;
+      if (s.generationByDesign[designId] !== undefined) return;
       const designMessages = s.chatMessages.filter((m) => m.designId === designId);
       const hasAssistantText = designMessages.some((m) => m.kind === 'assistant_text');
       if (!hasAssistantText) return;

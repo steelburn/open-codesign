@@ -2,7 +2,7 @@ import { useT } from '@open-codesign/i18n';
 import { buildPreviewDocument, isRenderablePath } from '@open-codesign/runtime';
 import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
 import { FileCode2, Folder, FolderOpen } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { type DesignFileEntry, type DesignFileKind, useDesignFiles } from '../hooks/useDesignFiles';
@@ -16,6 +16,8 @@ import { readWorkspacePreviewSource } from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
 
 export { resolveReferencedWorkspacePreviewPath } from '../preview/workspace-source';
+
+const TweakPanel = lazy(() => import('./TweakPanel').then((m) => ({ default: m.TweakPanel })));
 
 function truncatePath(path: string, maxLength = 40): string {
   if (path.length <= maxLength) return path;
@@ -179,7 +181,7 @@ export function isRenderableDesignFileKind(kind: DesignFileKind | undefined): bo
   return kind === 'html' || kind === 'jsx' || kind === 'tsx';
 }
 
-type FilePreviewKind =
+export type FilePreviewKind =
   | 'runtime'
   | 'markdown'
   | 'text'
@@ -213,6 +215,11 @@ function extensionOf(path: string): string {
   return index <= 0 ? '' : name.slice(index).toLowerCase();
 }
 
+export function isMainDesignSourcePath(path: string): boolean {
+  const normalized = path.replaceAll('\\', '/');
+  return normalized === DEFAULT_SOURCE_ENTRY || normalized === LEGACY_SOURCE_ENTRY;
+}
+
 export function isMarkdownPreviewFile(path: string, kind: DesignFileKind | undefined): boolean {
   const lower = path.toLowerCase();
   return (
@@ -238,6 +245,16 @@ export function previewKindForFile(
   if (kind === 'text' || kind === 'css' || kind === 'js') return 'text';
   if (UNSUPPORTED_PREVIEW_EXTENSIONS.has(extensionOf(path))) return 'unsupported';
   return 'text';
+}
+
+export function shouldShowTweakPanelForFile(input: {
+  path: string;
+  previewKind: FilePreviewKind;
+  hasPreviewSource: boolean;
+}): boolean {
+  return (
+    input.hasPreviewSource && input.previewKind === 'runtime' && isMainDesignSourcePath(input.path)
+  );
 }
 
 export function defaultWorkspacePreviewPath(files: DesignFileEntry[]): string | null {
@@ -418,6 +435,11 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     previewKind === 'audio' ||
     previewKind === 'pdf';
   const [previewSource, setPreviewSource] = useState<WorkspacePreviewSource | null>(null);
+  const showTweakPanel = shouldShowTweakPanelForFile({
+    path,
+    previewKind,
+    hasPreviewSource: previewSource !== null,
+  });
   const previewDependencyKey = workspacePreviewDependencyKey(
     workspaceFiles,
     path,
@@ -535,23 +557,30 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   }
 
   return (
-    <iframe
-      ref={iframeRef}
-      title={`design-preview-${path}`}
-      sandbox="allow-scripts"
-      srcDoc={srcDoc}
-      onLoad={() => {
-        const win = iframeRef.current?.contentWindow;
-        if (!win) return;
-        try {
-          win.postMessage({ __codesign: true, type: 'SET_MODE', mode: interactionMode }, '*');
-        } catch (err) {
-          const reason = err instanceof Error ? err.message : String(err);
-          pushIframeError(`SET_MODE postMessage failed: ${reason}`);
-        }
-      }}
-      className="w-full h-full bg-white border-0 block"
-    />
+    <>
+      <iframe
+        ref={iframeRef}
+        title={`design-preview-${path}`}
+        sandbox="allow-scripts"
+        srcDoc={srcDoc}
+        onLoad={() => {
+          const win = iframeRef.current?.contentWindow;
+          if (!win) return;
+          try {
+            win.postMessage({ __codesign: true, type: 'SET_MODE', mode: interactionMode }, '*');
+          } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            pushIframeError(`SET_MODE postMessage failed: ${reason}`);
+          }
+        }}
+        className="w-full h-full bg-white border-0 block"
+      />
+      {showTweakPanel ? (
+        <Suspense fallback={null}>
+          <TweakPanel iframeRef={iframeRef} />
+        </Suspense>
+      ) : null}
+    </>
   );
 }
 
