@@ -1,9 +1,7 @@
 # Multi-screen consistency
 
-Use `DESIGN.md` as the baton across screens or artifacts.
+Use `DESIGN.md` as the multi-screen baton.
 
-- Before creating a second screen or artifact, check for `DESIGN.md`.
-- If absent, create one from the first artifact's resolved tokens.
-- Update it when reusable color, font, rounded, shadow rationale, or component patterns appear.
-- Promote stable TWEAK_DEFAULTS values to `DESIGN.md` when they become cross-screen tokens.
-- Reuse component and token names unless the user asks for a variant.
+- Before a second screen, read it; if absent, create one from resolved tokens.
+- Update stable colors, type, radius, spacing, components, and TWEAK_DEFAULTS values; reuse names unless asked for a variant.
+- New `DESIGN.md` starts with Google-compatible frontmatter: `---\nversion: alpha\nname: Project Design System\n---`; add `## Overview`. Keys: `version`, `name`, `colors`, `typography`, `rounded`, `spacing`, `components`.

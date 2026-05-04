@@ -3,13 +3,13 @@
 // stat slide. Pick whichever frame fits the slide; copy its function into your
 // artifact and swap the copy. Page number strip auto-renders.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#CC785C',
-  bg: '#faf8f3',
-  ink: '#1a1a1a',
-  muted: '#6b6258',
-  rule: '#e6dfd1',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#CC785C",
+  "bg": "#faf8f3",
+  "ink": "#1a1a1a",
+  "muted": "#6b6258",
+  "rule": "#e6dfd1"
+}/*EDITMODE-END*/;
 
 const SERIF = "'Fraunces', 'DM Serif Display', Georgia, serif";
 const SANS = "'DM Sans', system-ui, sans-serif";

@@ -121,6 +121,85 @@ export function replaceEditmodeBlock(source: string, newTokens: EditmodeTokens):
   return replaceMarkerBlock(source, 'EDITMODE', json);
 }
 
+function parseLegacyStringLiteral(raw: string): string | null {
+  if (raw.length < 2) return null;
+  const quote = raw[0];
+  if ((quote !== '"' && quote !== "'") || raw[raw.length - 1] !== quote) return null;
+  const body = raw.slice(1, -1);
+  if (quote === '"') {
+    try {
+      return JSON.parse(raw) as string;
+    } catch {
+      return null;
+    }
+  }
+  return body.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+}
+
+function parseLegacyPrimitive(raw: string): EditmodeTokenValue | null {
+  const text = raw.trim();
+  const stringValue = parseLegacyStringLiteral(text);
+  if (stringValue !== null) return stringValue;
+  if (text === 'true') return true;
+  if (text === 'false') return false;
+  if (/^-?\d+(?:\.\d+)?$/.test(text)) return Number(text);
+  return null;
+}
+
+function parseLegacyKey(raw: string): string | null {
+  const text = raw.trim();
+  const quoted = parseLegacyStringLiteral(text);
+  if (quoted !== null && quoted.trim().length > 0) return quoted;
+  return /^[A-Za-z_$][\w$]*$/.test(text) ? text : null;
+}
+
+function parseLegacyEditmodeObject(raw: string): EditmodeTokens | null {
+  const text = raw.trim();
+  if (!text.startsWith('{') || !text.endsWith('}')) return null;
+  const body = text.slice(1, -1).trim();
+  if (body.length === 0) return {};
+
+  const tokens: EditmodeTokens = {};
+  for (const rawLine of body.split('\n')) {
+    const line = rawLine.trim();
+    if (line.length === 0) continue;
+    const entry = line.endsWith(',') ? line.slice(0, -1).trimEnd() : line;
+    const colon = entry.indexOf(':');
+    if (colon <= 0) return null;
+    const key = parseLegacyKey(entry.slice(0, colon));
+    if (key === null) return null;
+    const value = parseLegacyPrimitive(entry.slice(colon + 1));
+    if (value === null) return null;
+    tokens[key] = value;
+  }
+  return tokens;
+}
+
+/**
+ * Upgrades the old built-in-template EDITMODE form:
+ *
+ *   /*EDITMODE-BEGIN*\/ { accent: '#6366f1', } /*EDITMODE-END*\/
+ *
+ * to the canonical JSON form consumed by `parseEditmodeBlock()`. This is not a
+ * general JavaScript evaluator; it only accepts the simple flat string/number/
+ * boolean objects that older Open CoDesign bundled templates used.
+ */
+export function normalizeLegacyEditmodeBlock(source: string): string | null {
+  const block = findMarkerBlock(source, 'EDITMODE');
+  if (block === null) return null;
+  const raw = block.inner.trim();
+  if (raw.length === 0) return null;
+  try {
+    JSON.parse(raw);
+    return null;
+  } catch {
+    // Fall through to the legacy flat-object parser.
+  }
+  const tokens = parseLegacyEditmodeObject(raw);
+  if (tokens === null) return null;
+  return replaceMarkerBlock(source, 'EDITMODE', JSON.stringify(tokens, null, 2));
+}
+
 /**
  * Kept for older runtime call sites. v0.2 no longer repairs missing EDITMODE
  * markers; the agent must emit the canonical protocol itself.

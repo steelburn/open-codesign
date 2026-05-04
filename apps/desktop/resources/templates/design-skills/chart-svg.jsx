@@ -3,13 +3,13 @@
 // categorical → bar, share-of-total → donut, dense KPI inline → sparkline). All
 // numerical labels render in DM Sans / mono with tabular figures, never italic.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  stroke: '#CC785C',
-  fill: 'rgba(204,120,92,0.15)',
-  grid: '#ece8df',
-  axis: '#999999',
-  bg: '#ffffff',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "stroke": "#CC785C",
+  "fill": "rgba(204,120,92,0.15)",
+  "grid": "#ece8df",
+  "axis": "#999999",
+  "bg": "#ffffff"
+}/*EDITMODE-END*/;
 
 const SANS = "'DM Sans', system-ui, sans-serif";
 const MONO = "'JetBrains Mono', ui-monospace, monospace";

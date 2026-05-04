@@ -1,8 +1,8 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  bezelColor: '#0f0f12',
-  screenBg: '#1a1a1f',
-  state: 'open',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "bezelColor": "#0f0f12",
+  "screenBg": "#1a1a1f",
+  "state": "open"
+}/*EDITMODE-END*/;
 
 function Panel({ children, width }) {
   return (

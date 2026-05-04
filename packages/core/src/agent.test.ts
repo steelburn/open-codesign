@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AgentEvent, AgentMessage, AgentOptions } from '@mariozechner/pi-agent-core';
@@ -1147,6 +1147,60 @@ describe('generateViaAgent()', () => {
       expect(sys).not.toContain('FULL CHART SKILL BODY');
     } finally {
       rmSync(templatesRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the latest workspace root for scaffold writes', async () => {
+    scriptedAgent = {
+      assistantText: 'done',
+      executeTool: {
+        name: 'scaffold',
+        params: { kind: 'demo-frame', destPath: 'frames/demo.jsx' },
+      },
+    };
+    const templatesRoot = mkdtempSync(path.join(tmpdir(), 'codesign-agent-templates-'));
+    const oldRoot = mkdtempSync(path.join(tmpdir(), 'codesign-agent-old-workspace-'));
+    const newRoot = mkdtempSync(path.join(tmpdir(), 'codesign-agent-new-workspace-'));
+    mkdirSync(path.join(templatesRoot, 'scaffolds', 'device-frames'), { recursive: true });
+    writeFileSync(
+      path.join(templatesRoot, 'scaffolds', 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        scaffolds: {
+          'demo-frame': {
+            description: 'Demo frame',
+            path: 'device-frames/demo.jsx',
+            category: 'device-frame',
+            license: 'MIT-internal',
+            source: 'test fixture',
+          },
+        },
+      }),
+    );
+    writeFileSync(
+      path.join(templatesRoot, 'scaffolds', 'device-frames', 'demo.jsx'),
+      'export const Demo = true;\n',
+      'utf8',
+    );
+    try {
+      await generateViaAgent({
+        prompt: 'copy a frame',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        templatesRoot,
+        workspaceRoot: oldRoot,
+        getWorkspaceRoot: () => newRoot,
+      });
+
+      expect(existsSync(path.join(oldRoot, 'frames', 'demo.jsx'))).toBe(false);
+      expect(readFileSync(path.join(newRoot, 'frames', 'demo.jsx'), 'utf8')).toContain(
+        'export const Demo = true',
+      );
+    } finally {
+      rmSync(templatesRoot, { recursive: true, force: true });
+      rmSync(oldRoot, { recursive: true, force: true });
+      rmSync(newRoot, { recursive: true, force: true });
     }
   });
 

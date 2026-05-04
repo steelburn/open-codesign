@@ -4,15 +4,15 @@
 // KPIs. Numbers always render in DM Sans bold or JetBrains Mono with tabular
 // figures — never italic serif.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#7dd4d4',
-  positive: '#4ade80',
-  negative: '#f87171',
-  darkBg: 'oklch(15% 0.01 260)',
-  darkPanel: 'oklch(19% 0.01 260)',
-  lightBg: '#f7f7f5',
-  lightPanel: '#ffffff',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#7dd4d4",
+  "positive": "#4ade80",
+  "negative": "#f87171",
+  "darkBg": "oklch(15% 0.01 260)",
+  "darkPanel": "oklch(19% 0.01 260)",
+  "lightBg": "#f7f7f5",
+  "lightPanel": "#ffffff"
+}/*EDITMODE-END*/;
 
 const SANS = "'DM Sans', system-ui, sans-serif";
 const MONO = "'JetBrains Mono', ui-monospace, monospace";

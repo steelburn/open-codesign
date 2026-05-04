@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -73,6 +73,35 @@ describe('scaffold tool', () => {
       expect(result.ok).toBe(true);
       expect(result.written?.startsWith(wsroot)).toBe(true);
       expect(result.bytes).toBeGreaterThan(0);
+    } finally {
+      rmSync(wsroot, { recursive: true, force: true });
+    }
+  });
+
+  it('normalizes legacy EDITMODE blocks while copying stale templates', async () => {
+    writeFileSync(
+      path.join(scaffoldsRoot, 'device-frames', 'demo.jsx'),
+      `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
+  accentColor: '#0a84ff',
+  scale: 1,
+} /*EDITMODE-END*/;
+export const Demo = () => null;
+`,
+      'utf8',
+    );
+    const wsroot = path.join(tmpdir(), `codesign-scaffold-ws-${process.pid}-${Date.now()}`);
+    mkdirSync(wsroot, { recursive: true });
+    try {
+      const result = await runScaffold({
+        kind: 'demo-frame',
+        destPath: 'frames/test.jsx',
+        workspaceRoot: wsroot,
+        scaffoldsRoot,
+      });
+      expect(result).toMatchObject({ ok: true, normalizedEditmode: true });
+      const written = readFileSync(path.join(wsroot, 'frames', 'test.jsx'), 'utf8');
+      expect(written).toContain('"accentColor": "#0a84ff"');
+      expect(written).not.toContain("accentColor: '#0a84ff'");
     } finally {
       rmSync(wsroot, { recursive: true, force: true });
     }

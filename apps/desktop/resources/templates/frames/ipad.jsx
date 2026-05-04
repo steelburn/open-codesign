@@ -2,10 +2,10 @@
 // content split. Uses the IOSDevice / IOSNavBar components from the
 // pre-loaded ios-frame.jsx runtime.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accentColor: '#0a84ff',
-  bgColor: '#ffffff',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#0a84ff",
+  "bgColor": "#ffffff"
+}/*EDITMODE-END*/;
 
 function App() {
   return (

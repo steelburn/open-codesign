@@ -238,9 +238,12 @@ describe('composeSystemPrompt()', () => {
 
   it('create mode defines concrete DESIGN.md promotion triggers', () => {
     const prompt = composeSystemPrompt({ mode: 'create' });
-    expect(prompt).toContain('Before creating a second screen or artifact');
+    expect(prompt).toContain('Before a second screen');
     expect(prompt).toContain('When a brand reference is adopted');
-    expect(prompt).toContain('Promote stable TWEAK_DEFAULTS values');
+    expect(prompt).toContain('TWEAK_DEFAULTS values');
+    expect(prompt).toContain('Google-compatible frontmatter');
+    expect(prompt).toContain('version: alpha');
+    expect(prompt).toContain('Keys:');
   });
 
   it('tweak mode also includes the EDITMODE protocol section', () => {
@@ -280,9 +283,13 @@ describe('composeSystemPrompt()', () => {
     expect(p).toContain('iphone-16-pro-frame');
   });
 
-  it('keeps the create prompt small enough for resource lazy-loading to matter', () => {
+  it('keeps resource-heavy guidance behind manifest-first tool calls', () => {
     const p = composeSystemPrompt({ mode: 'create', userPrompt: '做个数据看板' });
-    expect(p.length).toBeLessThan(10_000);
+    expect(p).toContain('skill(name)');
+    expect(p).toContain('scaffold({kind, destPath})');
+    expect(p).not.toContain('## Mobile Mock Design Standards');
+    expect(p).not.toContain('## Data Visualization with Recharts');
+    expect(p).not.toContain('iPhone 16 Pro with dynamic-island notch');
   });
 
   it('mode tweak ignores userPrompt and returns the full tweak prompt', () => {

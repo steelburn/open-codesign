@@ -3,12 +3,12 @@
 // link grid, and brand block + newsletter signup. Pick the variant that
 // matches the page weight (mega for marketing, minimal for app).
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#6366f1',
-  bg: '#0f0f0f',
-  heading: '#ffffff',
-  sub: '#888888',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#6366f1",
+  "bg": "#0f0f0f",
+  "heading": "#ffffff",
+  "sub": "#888888"
+}/*EDITMODE-END*/;
 
 function FooterMega({ tokens = {} }) {
   const t = {

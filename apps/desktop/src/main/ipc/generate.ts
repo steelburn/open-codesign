@@ -242,6 +242,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const toolStartedAt = new Map<string, number>();
     const runtimeVerify = makeRuntimeVerifier();
     const templatesRoot = path_module.join(app.getPath('userData'), 'templates');
+    const currentWorkspaceRoot = () => requireWorkspaceRootForDesign(designId).workspaceRoot;
     const [frames, designSkills, initialWorkspaceFiles] = await Promise.all([
       loadFrameTemplates(path_module.join(templatesRoot, 'frames')),
       loadDesignSkills(path_module.join(templatesRoot, 'design-skills')),
@@ -325,10 +326,12 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         templatesRoot,
         askBridge: (askInput) => requestAsk(id, askInput, () => getMainWindow()),
         workspaceRoot,
+        getWorkspaceRoot: currentWorkspaceRoot,
         inspectWorkspace: async () =>
-          inspectWorkspaceFiles(await readWorkspaceFilesAt(workspaceRoot)),
-        readWorkspaceFiles: (patterns) => readWorkspaceFilesAt(workspaceRoot, patterns),
-        runPreview: ({ path, vision }) => runPreview({ path, vision, workspaceRoot }),
+          inspectWorkspaceFiles(await readWorkspaceFilesAt(currentWorkspaceRoot())),
+        readWorkspaceFiles: (patterns) => readWorkspaceFilesAt(currentWorkspaceRoot(), patterns),
+        runPreview: ({ path, vision }) =>
+          runPreview({ path, vision, workspaceRoot: currentWorkspaceRoot() }),
       },
       {
         fs,

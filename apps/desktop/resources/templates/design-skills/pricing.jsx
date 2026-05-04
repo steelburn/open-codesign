@@ -3,12 +3,12 @@
 // single-CTA flat-price hero, and freemium with monthly/annual toggle.
 // Pick the variant that matches the pricing model.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#6366f1',
-  bg: '#fafafa',
-  heading: '#111111',
-  sub: '#666666',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#6366f1",
+  "bg": "#fafafa",
+  "heading": "#111111",
+  "sub": "#666666"
+}/*EDITMODE-END*/;
 
 function Pricing3TierCards({ tokens = {} }) {
   const t = {

@@ -1,7 +1,7 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  baseColor: '#e5e7eb',
-  highlight: '#f3f4f6',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "baseColor": "#e5e7eb",
+  "highlight": "#f3f4f6"
+}/*EDITMODE-END*/;
 
 function Box({ width, height, radius = 8, circle = false }) {
   return (

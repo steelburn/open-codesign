@@ -1,6 +1,7 @@
 import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import { normalizeLegacyEditmodeBlock } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 
 /**
@@ -168,6 +169,7 @@ export interface ScaffoldResult {
   reason?: string;
   written?: string;
   bytes?: number;
+  normalizedEditmode?: boolean;
 }
 
 export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult> {
@@ -206,6 +208,11 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
       reason: `scaffold source not found for kind ${req.kind} (${entry.path}): ${reason}`,
     };
   }
+  const normalizedContents = normalizeLegacyEditmodeBlock(contents);
+  const normalizedEditmode = normalizedContents !== null;
+  if (normalizedContents !== null) {
+    contents = normalizedContents;
+  }
 
   let dest: string;
   try {
@@ -219,7 +226,12 @@ export async function runScaffold(req: ScaffoldRequest): Promise<ScaffoldResult>
   }
   await mkdir(path.dirname(dest), { recursive: true });
   await writeFile(dest, contents, 'utf8');
-  return { ok: true, written: dest, bytes: Buffer.byteLength(contents, 'utf8') };
+  return {
+    ok: true,
+    written: dest,
+    bytes: Buffer.byteLength(contents, 'utf8'),
+    ...(normalizedEditmode ? { normalizedEditmode } : {}),
+  };
 }
 
 const ScaffoldParams = Type.Object({
@@ -236,7 +248,14 @@ const ScaffoldParams = Type.Object({
 });
 
 export type ScaffoldDetails =
-  | { ok: true; kind: string; destPath: string; written: string; bytes: number }
+  | {
+      ok: true;
+      kind: string;
+      destPath: string;
+      written: string;
+      bytes: number;
+      normalizedEditmode?: boolean;
+    }
   | { ok: false; kind: string; destPath: string; reason: string }
   | { ok: false; reason: string };
 
@@ -274,11 +293,12 @@ export function makeScaffoldTool(
         scaffoldsRoot,
       });
       if (result.ok && result.written && typeof result.bytes === 'number') {
+        const suffix = result.normalizedEditmode ? ' (normalized legacy EDITMODE block)' : '';
         return {
           content: [
             {
               type: 'text',
-              text: `Scaffolded ${params.kind} -> ${result.written} (${result.bytes} bytes)`,
+              text: `Scaffolded ${params.kind} -> ${result.written} (${result.bytes} bytes)${suffix}`,
             },
           ],
           details: {
@@ -287,6 +307,7 @@ export function makeScaffoldTool(
             destPath: params.destPath,
             written: result.written,
             bytes: result.bytes,
+            ...(result.normalizedEditmode ? { normalizedEditmode: true } : {}),
           },
         };
       }

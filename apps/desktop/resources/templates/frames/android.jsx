@@ -2,11 +2,11 @@
 // status bar with battery / wifi / signal, dynamic content area. Use for
 // Android-specific designs (Material You, gesture nav demos, M3 chips).
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  theme: 'light',
-  navStyle: 'gesture',
-  scale: 1,
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "navStyle": "gesture",
+  "scale": 1
+}/*EDITMODE-END*/;
 
 function AndroidPhone({ theme = 'light', navStyle = 'gesture', scale = 1, children }) {
   const dk = theme === 'dark';

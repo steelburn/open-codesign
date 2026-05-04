@@ -3,11 +3,11 @@
 // indicator, hover tooltips, and a selected-day detail panel. Use when the
 // brief asks for "calendar", "schedule", "month view", or "events".
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#6366f1',
-  todayColor: '#6366f1',
-  selectedBg: '#eef2ff',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#6366f1",
+  "todayColor": "#6366f1",
+  "selectedBg": "#eef2ff"
+}/*EDITMODE-END*/;
 
 const EVENTS = [
   { id: 1, date: '2026-04-01', title: 'Q2 Kickoff', color: '#6366f1', time: '09:00' },

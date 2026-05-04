@@ -3,11 +3,11 @@
 // usage bars. Use when the brief asks for "users table", "admin panel",
 // "data grid", or "list view".
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#6366f1',
-  headerBg: '#fafafa',
-  selectedBg: '#eef2ff',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#6366f1",
+  "headerBg": "#fafafa",
+  "selectedBg": "#eef2ff"
+}/*EDITMODE-END*/;
 
 const TABLE_DATA = Array.from({ length: 48 }, (_, i) => ({
   id: i + 1,

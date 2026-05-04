@@ -4,12 +4,12 @@
 // Use when the brief asks for "chat", "conversation", "AI assistant",
 // "agent UI", or "messaging".
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#6366f1',
-  userBg: '#6366f1',
-  assistantBg: '#f4f4f5',
-  fg: '#18181b',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#6366f1",
+  "userBg": "#6366f1",
+  "assistantBg": "#f4f4f5",
+  "fg": "#18181b"
+}/*EDITMODE-END*/;
 
 const DEMO_MESSAGES = [
   { id: 1, role: 'user', content: 'Can you help me write a Python function to parse CSV files?' },

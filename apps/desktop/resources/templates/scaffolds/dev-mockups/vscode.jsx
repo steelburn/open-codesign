@@ -1,8 +1,8 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#007acc',
-  bg: '#1e1e1e',
-  sidebarBg: '#252526',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#007acc",
+  "bg": "#1e1e1e",
+  "sidebarBg": "#252526"
+}/*EDITMODE-END*/;
 
 const FILES = [
   {

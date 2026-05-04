@@ -756,6 +756,7 @@ export async function generateViaAgent(
   // into the prompt instead of fetched through a side tool.
   const scaffoldsRoot = input.templatesRoot ? path.join(input.templatesRoot, 'scaffolds') : null;
   const brandRefsRoot = input.templatesRoot ? path.join(input.templatesRoot, 'brand-refs') : null;
+  const getWorkspaceRoot = () => input.getWorkspaceRoot?.() ?? input.workspaceRoot ?? null;
   const defaultToolsByName = new Map<string, AgentTool<TSchema, unknown>>();
   defaultToolsByName.set('set_title', makeSetTitleTool() as unknown as AgentTool<TSchema, unknown>);
   defaultToolsByName.set('set_todos', makeSetTodosTool() as unknown as AgentTool<TSchema, unknown>);
@@ -774,10 +775,10 @@ export async function generateViaAgent(
   defaultToolsByName.set(
     'scaffold',
     wrapScaffoldState(
-      makeScaffoldTool(
-        () => input.workspaceRoot ?? null,
-        () => scaffoldsRoot,
-      ) as unknown as AgentTool<TSchema, unknown>,
+      makeScaffoldTool(getWorkspaceRoot, () => scaffoldsRoot) as unknown as AgentTool<
+        TSchema,
+        unknown
+      >,
       resourceState,
     ),
   );

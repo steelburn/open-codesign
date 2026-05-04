@@ -2,11 +2,11 @@
 // crown, side button, orange Action button, and band caps. Adapt the inner
 // face for the user's brief; use `dk` to flip dark / light.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  theme: 'dark',
-  accentColor: '#ff375f',
-  scale: 1,
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "accentColor": "#ff375f",
+  "scale": 1
+}/*EDITMODE-END*/;
 
 function AppleWatchUltra({ theme = 'dark', scale = 1, children }) {
   const dk = theme === 'dark';

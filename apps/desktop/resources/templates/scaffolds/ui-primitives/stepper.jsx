@@ -1,7 +1,7 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#6366f1',
-  current: 1,
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#6366f1",
+  "current": 1
+}/*EDITMODE-END*/;
 
 const STEPS = [
   { label: 'Account', hint: 'Create your login' },

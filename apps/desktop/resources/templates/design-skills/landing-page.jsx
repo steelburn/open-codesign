@@ -4,14 +4,14 @@
 // startup (single column, big type, single CTA). For just the hero section,
 // use heroes.jsx instead.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#CC785C',
-  bg: '#fafaf7',
-  ink: '#1a1a1a',
-  muted: '#666666',
-  panel: '#ffffff',
-  rule: '#ece8df',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#CC785C",
+  "bg": "#fafaf7",
+  "ink": "#1a1a1a",
+  "muted": "#666666",
+  "panel": "#ffffff",
+  "rule": "#ece8df"
+}/*EDITMODE-END*/;
 
 const SERIF = "'Fraunces', 'DM Serif Display', Georgia, serif";
 const SANS = "'DM Sans', system-ui, sans-serif";

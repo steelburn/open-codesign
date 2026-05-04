@@ -25,7 +25,7 @@ Choose one:
 
 - Inline SVG for static charts up to roughly 30 points.
 - Chart.js from the approved cdnjs exact-version whitelist for canvas interaction.
-- Recharts only when the artifact is React; pair with `skill("data-viz-recharts")`.
+- Recharts only when the library is explicitly available or the user asked for it; pair with `skill("data-viz-recharts")`. React alone does not mean Recharts is loaded.
 
 Required elements:
 

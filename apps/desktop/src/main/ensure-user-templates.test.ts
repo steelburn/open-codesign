@@ -145,6 +145,39 @@ describe('ensureUserTemplates', () => {
     expect(repaired.scaffolds['custom-frame']?.source).toBe('User');
   });
 
+  it('repairs legacy EDITMODE blocks in existing user template copies', async () => {
+    const source = path.join(root, 'bundle', 'templates');
+    mkdirSync(path.join(source, 'frames'), { recursive: true });
+    writeFileSync(
+      path.join(source, 'frames', 'iphone.jsx'),
+      `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#0a84ff",
+  "scale": 1
+}/*EDITMODE-END*/;
+export const Frame = true;
+`,
+    );
+
+    const userData = path.join(root, 'user');
+    const userFrameDir = path.join(userData, 'templates', 'frames');
+    mkdirSync(userFrameDir, { recursive: true });
+    writeFileSync(
+      path.join(userFrameDir, 'iphone.jsx'),
+      `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
+  accentColor: '#0a84ff',
+  scale: 1,
+} /*EDITMODE-END*/;
+export const Frame = 'user-custom-body';
+`,
+    );
+
+    const result = await ensureUserTemplates(userData, source);
+    expect(result).toMatchObject({ action: 'merged', copiedFiles: 0, updatedFiles: 1 });
+    const repaired = readFileSync(path.join(userFrameDir, 'iphone.jsx'), 'utf8');
+    expect(repaired).toContain('"accentColor": "#0a84ff"');
+    expect(repaired).toContain("export const Frame = 'user-custom-body';");
+  });
+
   it('reports missing-source when the bundle dir does not exist', async () => {
     const userData = path.join(root, 'user');
     mkdirSync(userData, { recursive: true });

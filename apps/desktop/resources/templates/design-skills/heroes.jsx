@@ -4,12 +4,12 @@
 // variant that matches the brand voice; copy its function into your file
 // and override the `tokens` prop to recolor.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#6366f1',
-  bg: '#0f0f0f',
-  heading: '#ffffff',
-  sub: '#a1a1aa',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#6366f1",
+  "bg": "#0f0f0f",
+  "heading": "#ffffff",
+  "sub": "#a1a1aa"
+}/*EDITMODE-END*/;
 
 function HeroCenteredCTA({ tokens = {} }) {
   const t = {

@@ -1,7 +1,7 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  spaceColor: '#f7c0a3',
-  spaceName: 'Work',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "spaceColor": "#f7c0a3",
+  "spaceName": "Work"
+}/*EDITMODE-END*/;
 
 function _App() {
   const tabs = [

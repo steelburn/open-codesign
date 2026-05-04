@@ -559,6 +559,7 @@ export type {
 } from './editmode';
 export {
   ensureEditmodeMarkers,
+  normalizeLegacyEditmodeBlock,
   parseEditmodeBlock,
   parseTweakSchema,
   replaceEditmodeBlock,

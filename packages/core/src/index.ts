@@ -196,6 +196,9 @@ export interface GenerateInput {
   /** Absolute path to the current design's workspace on disk. When set, tools
    * that need to write files (e.g. `scaffold`) use this as the sandbox root. */
   workspaceRoot?: string | undefined;
+  /** Optional host callback for workspace roots that can change mid-run, for
+   * example when `set_title` renames an auto-managed workspace folder. */
+  getWorkspaceRoot?: (() => string | null | undefined) | undefined;
   /** Stable workspace context loaded by the host before generation. */
   projectContext?: ProjectContext | undefined;
   /** Resource state reconstructed from previous tool-call rows for this design. */

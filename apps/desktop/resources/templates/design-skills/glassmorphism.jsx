@@ -3,14 +3,14 @@
 // notification stack. Pair with a vivid gradient background — the blur is
 // what sells it. Use sparingly; glass on flat backgrounds looks muddy.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  tint: 'rgba(255,255,255,0.42)',
-  border: 'rgba(255,255,255,0.55)',
-  ink: '#1a1a1a',
-  muted: '#3a3a3a',
-  blurPx: 28,
-  gradient: 'linear-gradient(135deg, #ff7e5f 0%, #feb47b 45%, #86a8e7 100%)',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "tint": "rgba(255,255,255,0.42)",
+  "border": "rgba(255,255,255,0.55)",
+  "ink": "#1a1a1a",
+  "muted": "#3a3a3a",
+  "blurPx": 28,
+  "gradient": "linear-gradient(135deg, #ff7e5f 0%, #feb47b 45%, #86a8e7 100%)"
+}/*EDITMODE-END*/;
 
 const SANS = "'DM Sans', system-ui, sans-serif";
 const SERIF = "'Fraunces', 'DM Serif Display', Georgia, serif";

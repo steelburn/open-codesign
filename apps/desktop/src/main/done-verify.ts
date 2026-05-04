@@ -3,17 +3,21 @@
  *
  * The agent emits a JSX module (TWEAK_DEFAULTS + App + ReactDOM.createRoot).
  * We wrap it via `@open-codesign/runtime`'s `buildSrcdoc` (same path the
- * preview iframe uses), load it into an off-screen sandboxed BrowserWindow,
- * and capture every `console-message` (warn/error) plus `did-fail-load`
- * for ~3 s. The collected errors flow back through the `done` tool so the
- * agent can self-heal.
+ * preview iframe uses), write the srcdoc to a temporary HTML file, load it into
+ * an off-screen sandboxed BrowserWindow, and capture every `console-message`
+ * (warn/error) plus `did-fail-load` for ~3 s. The collected errors flow back
+ * through the `done` tool so the agent can self-heal.
  *
- * Not unit-tested: hidden BrowserWindow + Babel runtime is not viable in
- * vitest. Manual verification path: run `pnpm dev`, send a prompt that
+ * Not fully unit-tested: hidden BrowserWindow + Babel runtime is not viable
+ * in vitest. Manual verification path: run `pnpm dev`, send a prompt that
  * provokes a ReferenceError (e.g. unbound identifier inside `App`), and
  * confirm the next `done` tool result lists the error.
  */
 
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { DoneError, DoneRuntimeVerifier } from '@open-codesign/core';
 import { buildSrcdoc } from '@open-codesign/runtime';
 import { BrowserWindow } from './electron-runtime';
@@ -46,9 +50,13 @@ export function formatRuntimeLoadError(kind: string, description: string, url?: 
 export function makeRuntimeVerifier(): DoneRuntimeVerifier {
   return async (artifactSource: string): Promise<DoneError[]> => {
     const srcdoc = buildSrcdoc(artifactSource);
-    // data: URL keeps everything self-contained; no temp file to clean up.
-    // base64 sidesteps URL-encoding pitfalls for the embedded srcdoc.
-    const dataUrl = `data:text/html;base64,${Buffer.from(srcdoc, 'utf8').toString('base64')}`;
+    // BrowserWindow.loadURL can reject long data: URLs with ERR_INVALID_URL.
+    // A temp file matches preview/export and keeps verifier failures about the
+    // artifact, not about URL encoding or length.
+    const tempDir = await mkdtemp(join(tmpdir(), 'codesign-done-verify-'));
+    const verifyPath = join(tempDir, 'verify.html');
+    await writeFile(verifyPath, srcdoc, 'utf8');
+    const verifyUrl = pathToFileURL(verifyPath).href;
 
     const win = new BrowserWindow({
       show: false,
@@ -153,7 +161,7 @@ export function makeRuntimeVerifier(): DoneRuntimeVerifier {
           clearTimeout(hardTimeout);
           finish();
         });
-        void win.loadURL(dataUrl).catch((err: unknown) => {
+        void win.loadURL(verifyUrl).catch((err: unknown) => {
           pushError(
             formatRuntimeLoadError(
               'loadURL failed',
@@ -171,6 +179,7 @@ export function makeRuntimeVerifier(): DoneRuntimeVerifier {
       } catch {
         /* noop */
       }
+      await rm(tempDir, { recursive: true, force: true });
     }
 
     return errors;

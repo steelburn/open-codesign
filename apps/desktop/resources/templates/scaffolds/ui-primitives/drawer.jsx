@@ -1,7 +1,7 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  bg: '#ffffff',
-  accent: '#0f172a',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "bg": "#ffffff",
+  "accent": "#0f172a"
+}/*EDITMODE-END*/;
 
 function _App() {
   const { useState } = React;

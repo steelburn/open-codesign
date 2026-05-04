@@ -1,7 +1,7 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#10b981',
-  position: 'top-right',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#10b981",
+  "position": "top-right"
+}/*EDITMODE-END*/;
 
 const STARTER_TOASTS = [
   { id: 't1', kind: 'success', title: 'Saved', message: 'Your changes have been saved.' },

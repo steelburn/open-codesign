@@ -1,10 +1,10 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#6366f1',
-  headline: 'Design at the speed of thought',
-  sub: 'Open CoDesign turns plain language into production-ready prototypes.',
-  primaryCta: 'Get started',
-  secondaryCta: 'See live demo',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#6366f1",
+  "headline": "Design at the speed of thought",
+  "sub": "Open CoDesign turns plain language into production-ready prototypes.",
+  "primaryCta": "Get started",
+  "secondaryCta": "See live demo"
+}/*EDITMODE-END*/;
 
 function _App() {
   return (

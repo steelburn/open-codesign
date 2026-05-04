@@ -1,5 +1,59 @@
 import { findArtifactSourceReference } from '@open-codesign/runtime';
 
+function delimiterDeltaOutsideStrings(src: string, open: string, close: string): number {
+  let delta = 0;
+  let inStr: '"' | "'" | '`' | null = null;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (inLineComment) {
+      if (ch === '\n') inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (inStr) {
+      if (ch === '\\') {
+        escaped = true;
+      } else if (ch === inStr) {
+        inStr = null;
+      }
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      inLineComment = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      inStr = ch;
+      continue;
+    }
+    if (ch === open) delta += 1;
+    if (ch === close) delta -= 1;
+  }
+
+  return delta;
+}
+
 /**
  * Quick sanity gate for artifact content before we overwrite the design's
  * latest snapshot. Catches the dominant failure mode: an agent run that was
@@ -17,11 +71,7 @@ export function looksRunnableArtifact(src: string): boolean {
   if (findArtifactSourceReference(trimmed) !== null && !hasExplicitMount) return false;
   if (/<html[\s>]/i.test(trimmed) || /<body[\s>]/i.test(trimmed)) return true;
   if (!hasExplicitMount) return false;
-  const opens = (trimmed.match(/\{/g) ?? []).length;
-  const closes = (trimmed.match(/\}/g) ?? []).length;
-  if (Math.abs(opens - closes) > 2) return false;
-  const popens = (trimmed.match(/\(/g) ?? []).length;
-  const pcloses = (trimmed.match(/\)/g) ?? []).length;
-  if (Math.abs(popens - pcloses) > 2) return false;
+  if (Math.abs(delimiterDeltaOutsideStrings(trimmed, '{', '}')) > 2) return false;
+  if (Math.abs(delimiterDeltaOutsideStrings(trimmed, '(', ')')) > 2) return false;
   return true;
 }

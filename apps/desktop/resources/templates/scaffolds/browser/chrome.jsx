@@ -1,7 +1,7 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  url: 'https://example.com',
-  theme: 'light',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "url": "https://example.com",
+  "theme": "light"
+}/*EDITMODE-END*/;
 
 function _App() {
   const dark = TWEAK_DEFAULTS.theme === 'dark';

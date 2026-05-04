@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ensureEditmodeMarkers,
+  normalizeLegacyEditmodeBlock,
   parseEditmodeBlock,
   parseTweakSchema,
   replaceEditmodeBlock,
@@ -91,6 +92,35 @@ describe('replaceEditmodeBlock', () => {
     const next = { ...parsed.tokens, b: true };
     const out = replaceEditmodeBlock(src, next);
     expect(parseEditmodeBlock(out)?.tokens).toEqual({ a: 1, b: true });
+  });
+});
+
+describe('normalizeLegacyEditmodeBlock', () => {
+  it('upgrades legacy flat JS object markers into canonical JSON', () => {
+    const src = `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
+  accentColor: '#0a84ff',
+  density: 1,
+  darkMode: false,
+} /*EDITMODE-END*/;`;
+    const out = normalizeLegacyEditmodeBlock(src);
+    expect(out).not.toBeNull();
+    expect(parseEditmodeBlock(out ?? '')?.tokens).toEqual({
+      accentColor: '#0a84ff',
+      density: 1,
+      darkMode: false,
+    });
+  });
+
+  it('leaves already valid JSON markers untouched', () => {
+    const src = `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"a":1}/*EDITMODE-END*/;`;
+    expect(normalizeLegacyEditmodeBlock(src)).toBeNull();
+  });
+
+  it('does not evaluate arbitrary JavaScript expressions', () => {
+    const src = `const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
+  accentColor: computeAccent(),
+} /*EDITMODE-END*/;`;
+    expect(normalizeLegacyEditmodeBlock(src)).toBeNull();
   });
 });
 

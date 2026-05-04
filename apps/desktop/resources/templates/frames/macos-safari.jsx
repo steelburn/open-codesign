@@ -2,12 +2,12 @@
 // URL bar with back/forward and share, light or dark chrome. Use for
 // desktop web app mockups or marketing screenshots framed in browser chrome.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  theme: 'light',
-  url: 'https://example.com',
-  width: 860,
-  height: 580,
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "url": "https://example.com",
+  "width": 860,
+  "height": 580
+}/*EDITMODE-END*/;
 
 function MacOSSafari({
   url = 'https://example.com',

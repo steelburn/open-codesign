@@ -1,6 +1,6 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#3b82f6',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#3b82f6"
+}/*EDITMODE-END*/;
 
 const COLUMNS = [
   {

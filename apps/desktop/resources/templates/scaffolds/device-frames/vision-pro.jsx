@@ -1,7 +1,7 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  bezelColor: '#1a1a1c',
-  glassTint: 'rgba(120, 140, 200, 0.18)',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "bezelColor": "#1a1a1c",
+  "glassTint": "rgba(120, 140, 200, 0.18)"
+}/*EDITMODE-END*/;
 
 function _App() {
   return (

@@ -1,7 +1,7 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  url: 'apple.com',
-  title: 'Apple',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "url": "apple.com",
+  "title": "Apple"
+}/*EDITMODE-END*/;
 
 function _App() {
   return (

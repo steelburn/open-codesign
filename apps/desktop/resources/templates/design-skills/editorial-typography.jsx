@@ -5,13 +5,13 @@
 // Numerical figures (read time, dates, page numbers) render in DM Sans /
 // JetBrains Mono — never italic serif.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accent: '#8B0000',
-  bg: '#fbf8f3',
-  ink: '#1a1a1a',
-  muted: '#6b6258',
-  rule: '#e2dccd',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#8B0000",
+  "bg": "#fbf8f3",
+  "ink": "#1a1a1a",
+  "muted": "#6b6258",
+  "rule": "#e2dccd"
+}/*EDITMODE-END*/;
 
 const SERIF = "'Fraunces', 'DM Serif Display', Georgia, serif";
 const SANS = "'DM Sans', system-ui, sans-serif";

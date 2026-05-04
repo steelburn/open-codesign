@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { cp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeLegacyEditmodeBlock } from '@open-codesign/shared';
 
 export interface EnsureUserTemplatesResult {
   action: 'seeded' | 'merged' | 'skipped' | 'missing-source';
@@ -81,10 +82,54 @@ async function copyMissingFiles(sourceDir: string, destDir: string): Promise<num
 }
 
 async function repairBundledManifests(sourceDir: string, destDir: string): Promise<number> {
-  return repairScaffoldManifest(
-    path.join(sourceDir, 'scaffolds', 'manifest.json'),
-    path.join(destDir, 'scaffolds', 'manifest.json'),
+  return (
+    (await repairScaffoldManifest(
+      path.join(sourceDir, 'scaffolds', 'manifest.json'),
+      path.join(destDir, 'scaffolds', 'manifest.json'),
+    )) + (await repairLegacyEditmodeBlocks(sourceDir, destDir))
   );
+}
+
+function canContainEditmodeBlock(filePath: string): boolean {
+  const lower = filePath.toLowerCase();
+  return (
+    lower.endsWith('.jsx') ||
+    lower.endsWith('.tsx') ||
+    lower.endsWith('.js') ||
+    lower.endsWith('.html') ||
+    lower.endsWith('.css')
+  );
+}
+
+async function repairLegacyEditmodeBlocks(sourceDir: string, destDir: string): Promise<number> {
+  if (!existsSync(sourceDir) || !existsSync(destDir)) return 0;
+  let repaired = 0;
+  for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      repaired += await repairLegacyEditmodeBlocks(sourcePath, destPath);
+      continue;
+    }
+    if (!entry.isFile() || !canContainEditmodeBlock(sourcePath) || !existsSync(destPath)) continue;
+
+    let sourceRaw: string;
+    let destRaw: string;
+    try {
+      sourceRaw = await readFile(sourcePath, 'utf8');
+      destRaw = await readFile(destPath, 'utf8');
+    } catch {
+      continue;
+    }
+    if (!sourceRaw.includes('EDITMODE-BEGIN')) continue;
+    if (normalizeLegacyEditmodeBlock(sourceRaw) !== null) continue;
+
+    const next = normalizeLegacyEditmodeBlock(destRaw);
+    if (next === null || next === destRaw) continue;
+    await writeFile(destPath, next, 'utf8');
+    repaired++;
+  }
+  return repaired;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

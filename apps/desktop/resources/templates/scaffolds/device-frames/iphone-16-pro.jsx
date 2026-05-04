@@ -1,8 +1,8 @@
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  bezelColor: '#1c1c1e',
-  screenBg: '#000000',
-  accentColor: '#0a84ff',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "bezelColor": "#1c1c1e",
+  "screenBg": "#000000",
+  "accentColor": "#0a84ff"
+}/*EDITMODE-END*/;
 
 function _App() {
   return (

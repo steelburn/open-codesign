@@ -2,10 +2,10 @@
 // by the runtime. Adapt the screen contents to the user's brief; keep the
 // EDITMODE block at the top so the host can render a tweak panel.
 
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/ {
-  accentColor: '#0a84ff',
-  bgColor: '#f5f5f7',
-} /*EDITMODE-END*/;
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#0a84ff",
+  "bgColor": "#f5f5f7"
+}/*EDITMODE-END*/;
 
 function App() {
   return (

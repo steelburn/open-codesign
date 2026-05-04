@@ -2,10 +2,10 @@
 schemaVersion: 1
 name: data-viz-recharts
 description: >
-  Guides data visualization design using Recharts. Use when building charts,
-  dashboards, analytics views, or any data-driven UI with Recharts or
-  comparable charting libraries. Enforces brand-consistent colors, readable
-  axes, and accessible chart patterns.
+  Guides Recharts-specific data visualization design. Use when the user
+  explicitly asks for Recharts or an existing artifact already provides the
+  Recharts library; otherwise prefer the chart-rendering skill and inline SVG.
+  Enforces brand-consistent colors, readable axes, and accessible chart patterns.
 aliases: [recharts, react-charts, data-visualization]
 dependencies: [chart-rendering]
 validationHints:
@@ -19,6 +19,11 @@ user_invocable: true
 ---
 
 ## Data Visualization with Recharts
+
+Open CoDesign's default `App.jsx` runtime provides React and ReactDOM, not
+Recharts. If `Recharts` is not already available in the artifact context, do
+not reference `<ResponsiveContainer>`, `<LineChart>`, or other Recharts globals;
+draw the chart with inline SVG instead.
 
 ### Color Palette
 Never use Recharts default colors (`#8884d8`, `#82ca9d`, `#ffc658`). They look like every tutorial chart ever made. Define a custom palette as a const array and pass it to `<Cell fill={COLORS[index % COLORS.length]} />`.
