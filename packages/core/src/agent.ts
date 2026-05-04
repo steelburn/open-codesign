@@ -514,6 +514,32 @@ function projectContextSections(context: GenerateInput['projectContext']): strin
   return sections;
 }
 
+function existingPrimarySourcePath(fs: TextEditorFsCallbacks | undefined): string | null {
+  if (!fs) return null;
+  const primary = fs.view(DEFAULT_SOURCE_ENTRY);
+  if (primary !== null && primary.content.trim().length > 0) return DEFAULT_SOURCE_ENTRY;
+  const legacy = fs.view(LEGACY_SOURCE_ENTRY);
+  if (legacy !== null && legacy.content.trim().length > 0) return LEGACY_SOURCE_ENTRY;
+  return null;
+}
+
+function buildRevisionTurnBrief(sourcePath: string): string {
+  return [
+    `Existing ${sourcePath} is present. This is a revision turn.`,
+    'View the current file before editing.',
+    'Preserve the current design system and current structure unless the user explicitly asks for a rebuild.',
+    'Edit in place, then run preview/done before finalizing.',
+  ].join('\n');
+}
+
+function buildTurnPrompt(input: GenerateInput, fs: TextEditorFsCallbacks | undefined): string {
+  const prompt = input.prompt.trim();
+  if (input.systemPrompt) return prompt;
+  const sourcePath = existingPrimarySourcePath(fs);
+  if (sourcePath === null) return prompt;
+  return [buildRevisionTurnBrief(sourcePath), '', 'User request:', prompt].join('\n');
+}
+
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -633,7 +659,7 @@ export async function generateViaAgent(
     });
 
   const userContent = buildUserPromptWithContext(
-    input.prompt,
+    buildTurnPrompt(input, trackedFs),
     buildContextSections({
       ...(input.designSystem !== undefined ? { designSystem: input.designSystem } : {}),
       ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
@@ -655,10 +681,7 @@ export async function generateViaAgent(
   const defaultToolsByName = new Map<string, AgentTool<TSchema, unknown>>();
   defaultToolsByName.set('set_title', makeSetTitleTool() as unknown as AgentTool<TSchema, unknown>);
   defaultToolsByName.set('set_todos', makeSetTodosTool() as unknown as AgentTool<TSchema, unknown>);
-  const loadedSkills = new Set<string>([
-    ...resourceState.loadedSkills,
-    ...resourceState.loadedBrandRefs,
-  ]);
+  const loadedSkills = new Set<string>();
   defaultToolsByName.set(
     'skill',
     wrapSkillState(
@@ -752,9 +775,19 @@ export async function generateViaAgent(
     ...ctx,
     ms: Date.now() - buildStart,
     messages: historyAsAgentMessages.length + 2,
+    systemChars: augmentedSystemPrompt.length,
+    userChars: userContent.length,
+    historyCount: input.history.length,
+    toolNames: tools.map((tool) => tool.name),
     skills: resourceResult.skillCount,
     scaffolds: resourceResult.scaffoldCount,
     brandRefs: resourceResult.brandCount,
+    projectContext: {
+      agentsMd: Boolean(input.projectContext?.agentsMd?.trim()),
+      designMd: Boolean(input.projectContext?.designMd?.trim()),
+      settingsJson: Boolean(input.projectContext?.settingsJson?.trim()),
+    },
+    memoryContextCount: input.memoryContext?.length ?? 0,
     resourceWarnings: resourceResult.warnings.length,
     resourceState: {
       mutationSeq: resourceState.mutationSeq,

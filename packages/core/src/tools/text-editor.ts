@@ -60,6 +60,16 @@ function ok(text: string, details: TextEditorDetails): AgentToolResult<TextEdito
   };
 }
 
+function recoverableViewRequired(
+  path: string,
+  command: 'str_replace' | 'insert',
+): AgentToolResult<TextEditorDetails> {
+  return ok(
+    `View ${path} before editing it in this run, then retry ${command}. This protects against editing stale workspace state.`,
+    { command, path, result: { requiresView: true } },
+  );
+}
+
 function requireString(
   value: unknown,
   field: string,
@@ -92,6 +102,13 @@ export function makeTextEditorTool(
   // has blown the 1M-token limit in production. AGENTIC_TOOL_GUIDANCE already
   // asks the agent to "view once, then work from memory"; this enforces it.
   const viewCountByPath = new Map<string, number>();
+  const viewedFilePaths = new Set<string>();
+  const changedThisRunPaths = new Set<string>();
+
+  function mutationRequiresView(path: string): boolean {
+    if (viewedFilePaths.has(path) || changedThisRunPaths.has(path)) return false;
+    return fs.view(path) !== null;
+  }
 
   return {
     name: 'str_replace_based_edit_tool',
@@ -135,6 +152,7 @@ export function makeTextEditorTool(
                 .map((ln, i) => `${String(start + i).padStart(4, ' ')}  ${ln}`)
                 .join('\n');
               const header = `${path} · lines ${start}-${clampedEnd} of ${lines.length}\n`;
+              viewedFilePaths.add(path);
               return ok(header + slice, {
                 command: 'view',
                 path,
@@ -144,6 +162,7 @@ export function makeTextEditorTool(
             const count = (viewCountByPath.get(path) ?? 0) + 1;
             viewCountByPath.set(path, count);
             if (count === 1) {
+              viewedFilePaths.add(path);
               return ok(file.content, {
                 command: 'view',
                 path,
@@ -155,6 +174,7 @@ export function makeTextEditorTool(
             const head = file.content.slice(0, 400);
             const ellipsis = file.content.length > 400 ? '…' : '';
             const summary = `${path} (already viewed ${count - 1} time(s) in this run — ${file.numLines} lines total)\n\nFirst 400 chars for orientation:\n${head}${ellipsis}\n\nTo see a specific region, re-issue view with \`view_range: [startLine, endLine]\` (1-indexed). Full-file re-views are disabled for the rest of this run to keep context from blowing up.`;
+            viewedFilePaths.add(path);
             return ok(summary, {
               command: 'view',
               path,
@@ -171,19 +191,24 @@ export function makeTextEditorTool(
         case 'create': {
           const text = requireString(params.file_text, 'file_text', 'create');
           const result = await fs.create(path, text);
+          changedThisRunPaths.add(path);
           return ok(`Created ${result.path}`, { command: 'create', path, result });
         }
         case 'str_replace': {
           const oldStr = requireString(params.old_str, 'old_str', 'str_replace');
           const newStr = requireString(params.new_str, 'new_str', 'str_replace');
           if (oldStr.length === 0) throw new Error('str_replace requires non-empty old_str');
+          if (mutationRequiresView(path)) return recoverableViewRequired(path, 'str_replace');
           const result = await fs.strReplace(path, oldStr, newStr);
+          changedThisRunPaths.add(path);
           return ok(`Edited ${result.path}`, { command: 'str_replace', path, result });
         }
         case 'insert': {
           const line = requireNumber(params.insert_line, 'insert_line', 'insert');
           const text = requireString(params.new_str, 'new_str', 'insert');
+          if (mutationRequiresView(path)) return recoverableViewRequired(path, 'insert');
           const result = await fs.insert(path, line, text);
+          changedThisRunPaths.add(path);
           return ok(`Inserted at ${result.path}:${line}`, { command: 'insert', path, result });
         }
       }

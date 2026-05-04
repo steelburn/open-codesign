@@ -1150,7 +1150,7 @@ describe('generateViaAgent()', () => {
     }
   });
 
-  it('seeds skill dedup from initial resource state', async () => {
+  it('allows cross-turn loaded skills to be reloaded in the current run', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     const templatesRoot = mkdtempSync(path.join(tmpdir(), 'codesign-agent-templates-'));
     mkdirSync(path.join(templatesRoot, 'skills'), { recursive: true });
@@ -1187,10 +1187,73 @@ describe('generateViaAgent()', () => {
         (tool) => tool.name === 'skill',
       );
       const result = await skillTool?.execute('skill-call', { name: 'chart-rendering' });
-      expect(result?.details).toMatchObject({ name: 'chart-rendering', status: 'already-loaded' });
+      expect(result?.details).toMatchObject({ name: 'chart-rendering', status: 'loaded' });
+      expect(result?.content[0]).toMatchObject({
+        type: 'text',
+        text: expect.stringContaining('Full body.'),
+      });
     } finally {
       rmSync(templatesRoot, { recursive: true, force: true });
     }
+  });
+
+  it('prepends a revision turn brief when an existing workspace source is present', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent(
+      {
+        prompt: 'make the hero warmer',
+        history: [{ role: 'user', content: 'design a landing page' }],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }) },
+    );
+
+    const prompt = agentCalls[0]?.prompts[0]?.message as string;
+    expect(prompt).toContain('Existing App.jsx is present. This is a revision turn.');
+    expect(prompt).toContain('View the current file before editing.');
+    expect(prompt).toContain('make the hero warmer');
+  });
+
+  it('does not add a revision turn brief when no workspace source exists', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent(
+      {
+        prompt: 'design a fresh landing page',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { fs: makeStubFs({}) },
+    );
+
+    const prompt = agentCalls[0]?.prompts[0]?.message as string;
+    expect(prompt).not.toContain('This is a revision turn');
+    expect(prompt).toBe('design a fresh landing page');
+  });
+
+  it('does not add the generic revision turn brief to apply-comment prompts', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await applyComment(
+      {
+        artifactSource: SAMPLE_HTML,
+        comment: 'Tighten the hero.',
+        selection: {
+          selector: '#hero',
+          tag: 'section',
+          outerHTML: '<section id="hero">Hi</section>',
+          rect: { top: 0, left: 0, width: 100, height: 100 },
+        },
+        model: MODEL,
+        apiKey: 'sk-test',
+        workspaceRoot: '/tmp/codesign-test',
+      },
+      { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }) },
+    );
+
+    const prompt = agentCalls[0]?.prompts[0]?.message as string;
+    expect(prompt).toContain('Revise the design source that is already in the workspace');
+    expect(prompt).not.toContain('Existing App.jsx is present. This is a revision turn.');
   });
 
   it('returns no artifacts when prose contains a fenced ```html block but no <artifact> wrapper and no fs is provided', async () => {
