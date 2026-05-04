@@ -161,6 +161,27 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
     expect(out).toContain('TWEAK_DEFAULTS');
   });
 
+  it('hydrates tweak CSS variables before running the artifact script', () => {
+    const out = buildSrcdoc(jsxArtifact);
+
+    expect(out.indexOf('applyInitial')).toBeGreaterThan(-1);
+    expect(out.indexOf('applyInitial')).toBeLessThan(out.indexOf('AGENT_BODY_BEGIN'));
+    expect(out).toContain('--ocd-tweak-');
+    expect(out).toContain('window.__codesign_tweaks__.tokens');
+    expect(out).not.toContain('registerRunner(runner)');
+    expect(out).not.toContain('originalScript');
+  });
+
+  it('registers a cached live runner only when source reads TWEAK_DEFAULTS after declaration', () => {
+    const out =
+      buildSrcdoc(`const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{"accent":"#000"}/*EDITMODE-END*/;
+function App() { return <main style={{ color: TWEAK_DEFAULTS.accent }}>hi</main>; }
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`);
+
+    expect(out).toContain('window.__codesign_tweaks__.tokens');
+    expect(out).toContain('registerRunner(runner)');
+  });
+
   it('detects JSX via ReactDOM.createRoot signature even without EDITMODE', () => {
     const src = `function App() { return <div/>; } ReactDOM.createRoot(document.getElementById("root")).render(<App/>);`;
     const out = buildSrcdoc(src);

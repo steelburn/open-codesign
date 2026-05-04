@@ -541,7 +541,13 @@ export interface RecordRendererErrorResult {
   fingerprint: string | null;
 }
 
-export type { EditmodeBlock, TokenSchemaEntry, TweakSchema } from './editmode';
+export type {
+  EditmodeBlock,
+  EditmodeTokens,
+  EditmodeTokenValue,
+  TokenSchemaEntry,
+  TweakSchema,
+} from './editmode';
 export {
   ensureEditmodeMarkers,
   parseEditmodeBlock,

@@ -17,10 +17,11 @@ describe('parseEditmodeBlock', () => {
     });
   });
 
-  it('handles whitespace and multiline JSON', () => {
+  it('rejects non-primitive token values', () => {
     const src = `/*EDITMODE-BEGIN*/\n{\n  "a": true,\n  "b": [1,2]\n}\n/*EDITMODE-END*/`;
-    const out = parseEditmodeBlock(src);
-    expect(out?.tokens).toEqual({ a: true, b: [1, 2] });
+    expect(() => parseEditmodeBlock(src)).toThrow(
+      /EDITMODE token "b" must be a string, number, or boolean/,
+    );
   });
 
   it('returns null when no marker present', () => {

@@ -15,7 +15,11 @@
  */
 
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { parseEditmodeBlock } from '@open-codesign/shared';
+import {
+  type EditmodeTokens,
+  type EditmodeTokenValue,
+  parseEditmodeBlock,
+} from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 
 export interface TweakFileInput {
@@ -25,13 +29,13 @@ export interface TweakFileInput {
 
 export interface TweakBlock {
   file: string;
-  tokens: Record<string, unknown>;
+  tokens: EditmodeTokens;
 }
 
 export interface TweakEntry {
   file: string;
   key: string;
-  value: unknown;
+  value: EditmodeTokenValue;
 }
 
 export interface TweaksDetails {

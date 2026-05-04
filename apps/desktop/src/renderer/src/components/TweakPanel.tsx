@@ -1,6 +1,8 @@
 import { useT } from '@open-codesign/i18n';
 import {
   type EditmodeBlock,
+  type EditmodeTokens,
+  type EditmodeTokenValue,
   parseEditmodeBlock,
   parseTweakSchema,
   replaceEditmodeBlock,
@@ -9,22 +11,19 @@ import {
 } from '@open-codesign/shared';
 import { RotateCcw, SlidersHorizontal, X } from 'lucide-react';
 import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { stablePreviewSourceKey } from '../preview/helpers';
 import { persistTweakTokensToWorkspace } from '../preview/tweak-persistence';
 import { useCodesignStore } from '../store';
 import {
   ColorSwatch,
   humanize,
   isColorString,
-  JsonInput,
   NumberInput,
   RangeSlider,
   SegmentedPicker,
   Switch,
   TextInput,
 } from './TweakPanel.inputs';
-
-type TokenValue = unknown;
-type Tokens = Record<string, TokenValue>;
 
 function TokenRow({
   tokenKey,
@@ -34,8 +33,8 @@ function TokenRow({
   schemaEntry,
 }: {
   tokenKey: string;
-  value: TokenValue;
-  onChange: (next: TokenValue) => void;
+  value: EditmodeTokenValue;
+  onChange: (next: EditmodeTokenValue) => void;
   pickColorLabel: string;
   schemaEntry?: TokenSchemaEntry | undefined;
 }) {
@@ -116,9 +115,7 @@ function TokenRow({
         <NumberInput value={value} onChange={(v) => onChange(v)} />
       ) : typeof value === 'string' ? (
         <TextInput value={value} onChange={(v) => onChange(v)} />
-      ) : (
-        <JsonInput value={value} onChange={(v) => onChange(v)} />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -127,106 +124,9 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
   const t = useT();
   const previewSource = useCodesignStore((s) => s.previewSource);
   const setPreviewSource = useCodesignStore((s) => s.setPreviewSource);
+  const currentDesignId = useCodesignStore((s) => s.currentDesignId);
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
-
-  // Drag-to-reposition state. Null = default anchored position (top-right).
-  // Once dragged, the panel sticks wherever the user left it (persisted to
-  // localStorage so it survives reloads).
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(() => {
-    if (typeof localStorage === 'undefined') return null;
-    try {
-      const raw = localStorage.getItem('codesign.tweakPanel.pos');
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (typeof parsed?.left === 'number' && typeof parsed?.top === 'number') return parsed;
-    } catch {
-      /* noop */
-    }
-    return null;
-  });
-  const dragState = useRef<{
-    startX: number;
-    startY: number;
-    baseLeft: number;
-    baseTop: number;
-  } | null>(null);
-  /** Sticky flag set the moment a drag starts — survives until the next click
-   *  has been evaluated. Prevents the collapsed pill from auto-opening when
-   *  the user releases after a drag. */
-  const justDraggedRef = useRef(false);
-
-  function savePos(next: { left: number; top: number }) {
-    setPos(next);
-    try {
-      localStorage.setItem('codesign.tweakPanel.pos', JSON.stringify(next));
-    } catch {
-      /* noop */
-    }
-  }
-
-  function onDragStart(e: React.MouseEvent) {
-    const el = panelRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    // Clamp to the preview pane (the TweakPanel's offsetParent), NOT the
-    // viewport — the panel should never slide over the sidebar or top bar.
-    const parent = el.offsetParent as HTMLElement | null;
-    const bounds = parent
-      ? parent.getBoundingClientRect()
-      : ({ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight } as DOMRect);
-
-    dragState.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      baseLeft: rect.left,
-      baseTop: rect.top,
-    };
-    e.preventDefault();
-
-    let moved = false;
-    const THRESHOLD = 4;
-
-    const onMove = (ev: MouseEvent) => {
-      const st = dragState.current;
-      if (!st) return;
-      const dx = ev.clientX - st.startX;
-      const dy = ev.clientY - st.startY;
-      if (!moved) {
-        if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return;
-        moved = true;
-        justDraggedRef.current = true;
-        document.body.style.cursor = 'grabbing';
-        document.body.style.userSelect = 'none';
-      }
-      const nextLeft = Math.max(
-        bounds.left + 8,
-        Math.min(bounds.right - rect.width - 8, st.baseLeft + dx),
-      );
-      const nextTop = Math.max(
-        bounds.top + 8,
-        Math.min(bounds.bottom - rect.height - 8, st.baseTop + dy),
-      );
-      setPos({ left: nextLeft, top: nextTop });
-    };
-
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      dragState.current = null;
-      if (moved) {
-        setPos((p) => {
-          if (p) savePos(p);
-          return p;
-        });
-      }
-    };
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }
 
   const block: EditmodeBlock | null = useMemo(
     () => (previewSource ? parseEditmodeBlock(previewSource) : null),
@@ -237,11 +137,20 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
     () => (previewSource ? parseTweakSchema(previewSource) : null),
     [previewSource],
   );
+  const sourceKey = useMemo(
+    () => (previewSource ? stablePreviewSourceKey(previewSource) : ''),
+    [previewSource],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentDesignId and sourceKey intentionally reset the transient panel state when the user switches designs or a new artifact structure loads.
+  useEffect(() => {
+    setOpen(false);
+  }, [currentDesignId, sourceKey]);
 
   // Live working copy — drives the UI and the postMessage stream to the iframe
   // without paying for a full srcdoc reload on every keystroke. Persistence
   // back into `previewSource` is debounced (see persistTimer below).
-  const [liveTokens, setLiveTokens] = useState<Tokens | null>(null);
+  const [liveTokens, setLiveTokens] = useState<EditmodeTokens | null>(null);
   const liveSigRef = useRef<string>('');
   useEffect(() => {
     if (!block) {
@@ -259,7 +168,7 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
     }
   }, [block]);
 
-  const initialTokensRef = useRef<Tokens | null>(null);
+  const initialTokensRef = useRef<EditmodeTokens | null>(null);
   useEffect(() => {
     if (!block) {
       initialTokensRef.current = null;
@@ -303,13 +212,13 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
   const entries = liveTokens ? Object.entries(liveTokens) : [];
   const hasTokens = entries.length > 0;
 
-  function postLive(tokens: Tokens): void {
+  function postLive(tokens: EditmodeTokens): void {
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({ type: 'codesign:tweaks:update', tokens }, '*');
   }
 
-  function schedulePersist(tokens: Tokens): void {
+  function schedulePersist(tokens: EditmodeTokens): void {
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
     persistTimerRef.current = setTimeout(() => {
       persistTimerRef.current = null;
@@ -347,13 +256,13 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
     }, 400);
   }
 
-  function applyTokens(next: Tokens): void {
+  function applyTokens(next: EditmodeTokens): void {
     setLiveTokens(next);
     postLive(next);
     schedulePersist(next);
   }
 
-  function applyChange(key: string, next: TokenValue): void {
+  function applyChange(key: string, next: EditmodeTokenValue): void {
     if (!liveTokens) return;
     applyTokens({ ...liveTokens, [key]: next });
   }
@@ -376,22 +285,14 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
   const countBadge = hasTokens ? String(entries.length) : '—';
 
   return (
-    <div
-      ref={panelRef}
-      className={pos ? 'fixed z-20' : 'absolute right-[var(--space-5)] top-[var(--space-5)] z-20'}
-      style={pos ? { left: pos.left, top: pos.top } : undefined}
-    >
+    <div ref={panelRef} className="absolute right-[var(--space-4)] top-[var(--space-4)] z-20">
       {open ? (
         <div
           aria-label={titleText}
           className="flex w-[280px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-elevated)] backdrop-blur"
         >
           <div className="flex items-center justify-between gap-[var(--space-2)] border-b border-[var(--color-border-subtle)] px-[var(--space-3)] py-[var(--space-2)]">
-            <div
-              className="flex min-w-0 flex-1 items-center gap-[var(--space-2)] cursor-grab active:cursor-grabbing select-none"
-              onMouseDown={onDragStart}
-              title="Drag to move"
-            >
+            <div className="flex min-w-0 flex-1 select-none items-center gap-[var(--space-2)]">
               <SlidersHorizontal
                 className="h-[14px] w-[14px] text-[var(--color-accent)]"
                 aria-hidden="true"
@@ -459,17 +360,10 @@ export function TweakPanel({ iframeRef }: { iframeRef: RefObject<HTMLIFrameEleme
       ) : (
         <button
           type="button"
-          onMouseDown={onDragStart}
-          onClick={(e) => {
-            if (justDraggedRef.current) {
-              justDraggedRef.current = false;
-              e.preventDefault();
-              return;
-            }
-            setOpen(true);
-          }}
+          onClick={() => setOpen(true)}
           aria-label={openLabel}
-          className="inline-flex h-[28px] cursor-grab items-center gap-[var(--space-1_5)] rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] text-[12px] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur transition-[background-color,color,transform] duration-[var(--duration-faster)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] active:scale-[var(--scale-press-down)] active:cursor-grabbing"
+          aria-expanded={false}
+          className="inline-flex h-[30px] items-center gap-[var(--space-1_5)] rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] text-[12px] text-[var(--color-text-secondary)] shadow-[var(--shadow-soft)] backdrop-blur transition-[background-color,color,transform] duration-[var(--duration-faster)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] active:scale-[var(--scale-press-down)]"
         >
           <SlidersHorizontal className="h-[13px] w-[13px]" aria-hidden="true" />
           <span>{titleText}</span>

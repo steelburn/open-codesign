@@ -12,11 +12,11 @@ The EDITMODE block is a JSON object wrapped in marker comments near the top of `
 const TWEAK_DEFAULTS =
 /*EDITMODE-BEGIN*/
 {
-  "color-accent":   "oklch(62% 0.22 265)",
-  "color-bg":       "#f8f5f0",
-  "radius-base":    "0.5rem",
-  "font-sans":      "'Syne', system-ui, sans-serif",
-  "space-unit":     "1rem"
+  "colorAccent":   "oklch(62% 0.22 265)",
+  "colorBg":       "#f8f5f0",
+  "radiusBase":    "0.5rem",
+  "fontSans":      "'Syne', system-ui, sans-serif",
+  "spaceUnit":     "1rem"
 }
 /*EDITMODE-END*/
 ;
@@ -28,6 +28,8 @@ Rules for the EDITMODE block:
 - Keys must match the existing `TWEAK_DEFAULTS` keys.
 - Values may be string, number, or boolean.
 - Preserve formatting outside the marker block.
+- At render time, each key is available as a CSS custom property named `--ocd-tweak-<kebab-key>` on `:root`, for example `colorAccent` becomes `--ocd-tweak-color-accent`.
+- Use those CSS custom properties for visual parameters so the host can apply slider/color changes by updating CSS variables only. Do not require a React re-render, Babel recompile, or full artifact reload for ordinary visual tweaks.
 
 ## Your output responsibility (mode: tweak)
 

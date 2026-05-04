@@ -40,6 +40,7 @@ const JSX_TEMPLATE_END = '<!-- AGENT_BODY_END -->';
 const OVERLAY_MARKER = '<!-- CODESIGN_OVERLAY_SCRIPT -->';
 const JSX_RUNTIME_MARKER = '<!-- CODESIGN_JSX_RUNTIME -->';
 const STANDALONE_RUNTIME_MARKER = '<!-- CODESIGN_STANDALONE_RUNTIME -->';
+const EDITMODE_MARKER_RE = /\/\*\s*EDITMODE-BEGIN\s*\*\/[\s\S]*?\/\*\s*EDITMODE-END\s*\*\//g;
 export type RenderableSourceKind = 'html' | 'jsx' | 'tsx' | 'unknown';
 
 export interface BuildPreviewDocumentOptions {
@@ -264,8 +265,35 @@ function transformOptionsForKind(kind: 'jsx' | 'tsx'): { presets: unknown[]; fil
   return { filename: 'artifact.jsx', presets: ['react'] };
 }
 
-function compileAndRunScript(source: string, kind: 'jsx' | 'tsx'): string {
-  const sourceLiteral = escapeForScriptLiteral(source);
+function bindEditmodeTokensToRuntime(source: string): string {
+  return source.replace(EDITMODE_MARKER_RE, 'window.__codesign_tweaks__.tokens');
+}
+
+function readsTweakDefaultsAfterDeclaration(source: string): boolean {
+  let count = 0;
+  let index = source.indexOf('TWEAK_DEFAULTS');
+  while (index >= 0) {
+    count += 1;
+    if (count > 1) return true;
+    index = source.indexOf('TWEAK_DEFAULTS', index + 'TWEAK_DEFAULTS'.length);
+  }
+  return false;
+}
+
+function compileAndRunScript(
+  source: string,
+  kind: 'jsx' | 'tsx',
+  opts: { liveTweaks?: boolean } = {},
+): string {
+  const runtimeSource = opts.liveTweaks ? bindEditmodeTokensToRuntime(source) : source;
+  const registerRunner =
+    opts.liveTweaks === true && readsTweakDefaultsAfterDeclaration(source)
+      ? `
+    if (window.__codesign_tweaks__ && typeof window.__codesign_tweaks__.registerRunner === 'function') {
+      window.__codesign_tweaks__.registerRunner(runner);
+    }`
+      : '';
+  const sourceLiteral = escapeForScriptLiteral(runtimeSource);
   const optionsLiteral = JSON.stringify(transformOptionsForKind(kind));
   return `<script>
 (function() {
@@ -273,7 +301,11 @@ function compileAndRunScript(source: string, kind: 'jsx' | 'tsx'): string {
   var options = ${optionsLiteral};
   try {
     var compiled = window.Babel.transform(source, options).code;
-    new Function('React', 'ReactDOM', compiled)(window.React, window.ReactDOM);
+    var runner = function() {
+      new Function('React', 'ReactDOM', compiled)(window.React, window.ReactDOM);
+    };
+${registerRunner}
+    runner();
   } catch (err) {
     setTimeout(function() { throw err; }, 0);
   }
@@ -286,6 +318,11 @@ function jsxRuntimeComponentScripts(): string {
     compileAndRunScript(IOS_FRAME_JSX, 'jsx'),
     compileAndRunScript(DESIGN_CANVAS_JSX, 'jsx'),
   ].join('\n');
+}
+
+function applyInitialTweaksScript(source: string): string {
+  const sourceLiteral = escapeForScriptLiteral(source);
+  return `<script>if(window.__codesign_tweaks__){window.__codesign_tweaks__.applyInitial(${sourceLiteral});}</script>`;
 }
 
 function jsxRuntimeBaseScripts(): string {
@@ -305,10 +342,6 @@ function wrapJsxAsSrcdoc(
   // v0.2 requires canonical EDITMODE markers. `ensureEditmodeMarkers` is kept
   // as a no-op compatibility hook for older call sites.
   const normalized = autoMountJsxIfNeeded(ensureEditmodeMarkers(jsx));
-  // The boundary markers let us round-trip extract the agent's payload from
-  // a fully-built srcdoc later (used by EDITMODE replace flows).
-  const agentScriptLiteral = escapeForScriptLiteral(normalized);
-  const transformOptionsLiteral = JSON.stringify(transformOptionsForKind(kind));
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -326,10 +359,10 @@ ${baseTag(opts.baseHref)}<link rel="preconnect" href="https://fonts.googleapis.c
 <script>${BABEL_STANDALONE}</script>
 <script>${TWEAKS_BRIDGE_SETUP}</script>
 ${jsxRuntimeComponentScripts()}
+${applyInitialTweaksScript(normalized)}
 ${JSX_TEMPLATE_BEGIN}
-${compileAndRunScript(normalized, kind)}
+${compileAndRunScript(normalized, kind, { liveTweaks: true })}
 ${JSX_TEMPLATE_END}
-<script>if(window.__codesign_tweaks__){window.__codesign_tweaks__.originalScript=${agentScriptLiteral};window.__codesign_tweaks__.transformOptions=${transformOptionsLiteral};}</script>
 <script>${TWEAKS_BRIDGE_LISTENER}</script>
 <script>${OVERLAY_SCRIPT}</script>
 </body>

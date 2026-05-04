@@ -14,6 +14,9 @@ import { ERROR_CODES } from './error-codes';
  * tweak block"; present-but-malformed markers are a protocol error.
  */
 
+export type EditmodeTokenValue = string | number | boolean;
+export type EditmodeTokens = Record<string, EditmodeTokenValue>;
+
 interface MarkerBlock {
   start: number;
   end: number;
@@ -72,7 +75,7 @@ function replaceMarkerBlock(
 }
 
 export interface EditmodeBlock {
-  tokens: Record<string, unknown>;
+  tokens: EditmodeTokens;
   /** Raw inner span (between the markers) — useful for diagnostics. */
   raw: string;
   /** `marked` = canonical EDITMODE markers. */
@@ -102,10 +105,18 @@ export function parseEditmodeBlock(source: string): EditmodeBlock | null {
       ERROR_CODES.ARTIFACT_PROTOCOL_INVALID,
     );
   }
-  return { tokens: parsed as Record<string, unknown>, raw, source: 'marked' };
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+      throw new CodesignError(
+        `EDITMODE token "${key}" must be a string, number, or boolean`,
+        ERROR_CODES.ARTIFACT_PROTOCOL_INVALID,
+      );
+    }
+  }
+  return { tokens: parsed as EditmodeTokens, raw, source: 'marked' };
 }
 
-export function replaceEditmodeBlock(source: string, newTokens: Record<string, unknown>): string {
+export function replaceEditmodeBlock(source: string, newTokens: EditmodeTokens): string {
   const json = JSON.stringify(newTokens, null, 2);
   return replaceMarkerBlock(source, 'EDITMODE', json);
 }

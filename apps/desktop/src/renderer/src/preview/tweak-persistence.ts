@@ -1,5 +1,6 @@
 import {
   DEFAULT_SOURCE_ENTRY,
+  type EditmodeTokens,
   LEGACY_SOURCE_ENTRY,
   replaceEditmodeBlock,
 } from '@open-codesign/shared';
@@ -44,7 +45,7 @@ export async function resolveTweakWriteTarget(input: {
 export async function persistTweakTokensToWorkspace(input: {
   designId: string | null;
   previewSource: string;
-  tokens: Record<string, unknown>;
+  tokens: EditmodeTokens;
   read?: WorkspacePreviewRead | undefined;
   write?: WorkspacePreviewWrite | undefined;
 }): Promise<PersistTweakTokensResult> {
