@@ -15,6 +15,7 @@ function makeFs(content: string, extraFiles: Record<string, string> = {}): TextE
     strReplace: (path, oldStr, newStr) => {
       const current = files.get(path);
       if (current === undefined) throw new Error(`missing ${path}`);
+      if (!current.includes(oldStr)) throw new Error(`old_str not found in ${path}`);
       files.set(path, current.replace(oldStr, newStr));
       return { path };
     },
@@ -136,6 +137,49 @@ describe('str_replace_based_edit_tool', () => {
     });
 
     expect(result.details).toMatchObject({ command: 'str_replace', path: 'new.jsx' });
+  });
+
+  it('blocks repeated failed exact edits until the agent rewrites the file', async () => {
+    const tool = makeTextEditorTool(makeFs('one two three'));
+    await tool.execute('view', { command: 'view', path: 'App.jsx' });
+
+    for (let i = 0; i < 3; i += 1) {
+      const result = await tool.execute(`miss-${i}`, {
+        command: 'str_replace',
+        path: 'App.jsx',
+        old_str: `missing-${i}`,
+        new_str: 'replacement',
+      });
+      expect(result.content[0]?.type).toBe('text');
+      expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toContain(
+        'Edit failed',
+      );
+    }
+
+    const blocked = await tool.execute('blocked', {
+      command: 'str_replace',
+      path: 'App.jsx',
+      old_str: 'one',
+      new_str: 'ONE',
+    });
+    expect(blocked.content[0]?.type === 'text' ? blocked.content[0].text : '').toContain(
+      'Too many failed exact edits',
+    );
+
+    await tool.execute('rewrite', {
+      command: 'create',
+      path: 'App.jsx',
+      file_text: 'one two three',
+    });
+    const afterRewrite = await tool.execute('after-rewrite', {
+      command: 'str_replace',
+      path: 'App.jsx',
+      old_str: 'one',
+      new_str: 'ONE',
+    });
+    expect(afterRewrite.content[0]?.type === 'text' ? afterRewrite.content[0].text : '').toContain(
+      'Edited App.jsx',
+    );
   });
 
   it('does not treat a directory view as viewing a concrete file', async () => {

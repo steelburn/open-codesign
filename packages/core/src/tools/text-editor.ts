@@ -70,6 +70,21 @@ function recoverableViewRequired(
   );
 }
 
+function exactEditFailuresExceeded(
+  path: string,
+  count: number,
+): AgentToolResult<TextEditorDetails> {
+  return ok(exactEditFailuresExceededText(path, count), {
+    command: 'str_replace',
+    path,
+    result: { blocked: true, reason: 'too_many_failed_edits' },
+  });
+}
+
+function exactEditFailuresExceededText(path: string, count: number): string {
+  return `Too many failed exact edits for ${path} (${count}). Stop using str_replace/insert on this file in this run. Re-read the relevant range and use create to rewrite the complete corrected file, or ask the user to continue.`;
+}
+
 function requireString(
   value: unknown,
   field: string,
@@ -104,6 +119,8 @@ export function makeTextEditorTool(
   const viewCountByPath = new Map<string, number>();
   const viewedFilePaths = new Set<string>();
   const changedThisRunPaths = new Set<string>();
+  const failedExactEditCountByPath = new Map<string, number>();
+  const FAILED_EXACT_EDIT_LIMIT = 3;
 
   function mutationRequiresView(path: string): boolean {
     if (viewedFilePaths.has(path) || changedThisRunPaths.has(path)) return false;
@@ -191,6 +208,7 @@ export function makeTextEditorTool(
         case 'create': {
           const text = requireString(params.file_text, 'file_text', 'create');
           const result = await fs.create(path, text);
+          failedExactEditCountByPath.delete(path);
           changedThisRunPaths.add(path);
           return ok(`Created ${result.path}`, { command: 'create', path, result });
         }
@@ -199,17 +217,53 @@ export function makeTextEditorTool(
           const newStr = requireString(params.new_str, 'new_str', 'str_replace');
           if (oldStr.length === 0) throw new Error('str_replace requires non-empty old_str');
           if (mutationRequiresView(path)) return recoverableViewRequired(path, 'str_replace');
-          const result = await fs.strReplace(path, oldStr, newStr);
-          changedThisRunPaths.add(path);
-          return ok(`Edited ${result.path}`, { command: 'str_replace', path, result });
+          const failedCount = failedExactEditCountByPath.get(path) ?? 0;
+          if (failedCount >= FAILED_EXACT_EDIT_LIMIT) {
+            return exactEditFailuresExceeded(path, failedCount);
+          }
+          try {
+            const result = await fs.strReplace(path, oldStr, newStr);
+            failedExactEditCountByPath.delete(path);
+            changedThisRunPaths.add(path);
+            return ok(`Edited ${result.path}`, { command: 'str_replace', path, result });
+          } catch (err) {
+            const nextFailedCount = failedCount + 1;
+            failedExactEditCountByPath.set(path, nextFailedCount);
+            const message = err instanceof Error ? err.message : String(err);
+            const prefix =
+              nextFailedCount >= FAILED_EXACT_EDIT_LIMIT
+                ? `Edit failed: ${message}\n${exactEditFailuresExceededText(path, nextFailedCount)}`
+                : `Edit failed: ${message}. Re-read the smallest relevant range, then retry with a more exact old_str.`;
+            return ok(prefix, {
+              command: 'str_replace',
+              path,
+              result: { failed: true, failureCount: nextFailedCount, message },
+            });
+          }
         }
         case 'insert': {
           const line = requireNumber(params.insert_line, 'insert_line', 'insert');
           const text = requireString(params.new_str, 'new_str', 'insert');
           if (mutationRequiresView(path)) return recoverableViewRequired(path, 'insert');
-          const result = await fs.insert(path, line, text);
-          changedThisRunPaths.add(path);
-          return ok(`Inserted at ${result.path}:${line}`, { command: 'insert', path, result });
+          const failedCount = failedExactEditCountByPath.get(path) ?? 0;
+          if (failedCount >= FAILED_EXACT_EDIT_LIMIT) {
+            return exactEditFailuresExceeded(path, failedCount);
+          }
+          try {
+            const result = await fs.insert(path, line, text);
+            failedExactEditCountByPath.delete(path);
+            changedThisRunPaths.add(path);
+            return ok(`Inserted at ${result.path}:${line}`, { command: 'insert', path, result });
+          } catch (err) {
+            const nextFailedCount = failedCount + 1;
+            failedExactEditCountByPath.set(path, nextFailedCount);
+            const message = err instanceof Error ? err.message : String(err);
+            return ok(`Edit failed: ${message}. Re-read the target range before retrying.`, {
+              command: 'insert',
+              path,
+              result: { failed: true, failureCount: nextFailedCount, message },
+            });
+          }
         }
       }
     },
