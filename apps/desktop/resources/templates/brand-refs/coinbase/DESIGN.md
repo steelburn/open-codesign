@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Coinbase
-slug: coinbase
-category: Fintech
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Coinbase. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Coinbase Fintech design reference inspired by public brand materials.
 colors:
   primary: "#0052FF"
   secondary: "#0A0B0D"
@@ -20,56 +14,58 @@ colors:
   successGreen: "#05B169"
   errorRed: "#CF202F"
   warningAmber: "#F0B90B"
-
 typography:
   display:
-    fontFamily: "Coinbase Display, Coinbase Sans, Inter, system-ui, sans-serif"
-    weight: 500
+    fontFamily: Coinbase Display, Coinbase Sans, Inter, system-ui, sans-serif
+    fontWeight: 500
     lineHeight: 1.1
-    letterSpacing: "-0.022em"
+    letterSpacing: -0.022em
   body:
-    fontFamily: "Coinbase Sans, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Coinbase Sans, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0"
+    letterSpacing: 0em
   mono:
-    fontFamily: "Coinbase Mono, JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: Coinbase Mono, JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 6px
+  md: 12px
+  lg: 20px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96]
-
-radius:
-  none: "0"
-  sm: "6px"
-  md: "12px"
-  lg: "20px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(15,23,42,0.04)"
-  md: "0 8px 24px rgba(15,23,42,0.08)"
-  lg: "0 24px 48px rgba(15,23,42,0.12)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "240ms"
-    slow: "400ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Coinbase looks like a serious bank that ships software. The brand color is the unmistakable royal blue (`#0052FF`) — used confidently on hero CTAs and the cube logo. Marketing pages favor large editorial photography (often wide-eyed portraits or product screens), white backgrounds, generous whitespace, and a custom typeface (Coinbase Sans / Display) developed in-house.
 
 The product dashboard is calmer — white background, blue accent, dense data tables, financial-grade typography with tabular numerals.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#0052FF`) — Coinbase blue; primary CTAs, charts, links.
 - `text` (`#0A0B0D`) — near-black; primary copy.
@@ -87,6 +83,14 @@ Coinbase Sans (custom, by Coinbase) is the brand face. Display weight 500 (the b
 
 Hierarchy: hero (56-72 px) → section (32-40 px) → body (16 px) → caption (13 px). Numerals are tabular everywhere financial data appears.
 
+## Layout
+
+12-column grid, max width ~1200 px. Generous section padding (64-96 px). Dashboard uses a 240 px sidebar + main with optional right rail for transaction details. Asset detail pages combine a large chart at the top with a dense holdings table below.
+
+## Elevation & Depth
+
+The brand is mostly flat with rounded soft elevation. Cards lift on hover with a soft `sm` shadow. Modals use `md` shadow. Charts are flat — no glow, no gradient fills underneath the line. The signature "asset card" gets a soft drop shadow on hover that lifts ~2 px.
+
 ## Components
 
 - **Buttons**: 44-48 px height (taller than typical), 12 px radius. Primary: solid Coinbase blue with white text, no border, no shadow. Secondary: white with 1 px `text` border.
@@ -94,14 +98,6 @@ Hierarchy: hero (56-72 px) → section (32-40 px) → body (16 px) → caption (
 - **Charts**: line/area charts in Coinbase blue with green/red deltas; gridlines in `border`.
 - **Asset rows**: 56-64 px tall, asset icon + name + price + 24h change column, mono on numeric cells.
 - **Inputs**: 48 px height, 8 px radius, 1 px border that brightens to blue on focus.
-
-## Layout
-
-12-column grid, max width ~1200 px. Generous section padding (64-96 px). Dashboard uses a 240 px sidebar + main with optional right rail for transaction details. Asset detail pages combine a large chart at the top with a dense holdings table below.
-
-## Depth & Elevation
-
-The brand is mostly flat with rounded soft elevation. Cards lift on hover with a soft `sm` shadow. Modals use `md` shadow. Charts are flat — no glow, no gradient fills underneath the line. The signature "asset card" gets a soft drop shadow on hover that lifts ~2 px.
 
 ## Do's & Don'ts
 

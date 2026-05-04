@@ -93,6 +93,22 @@ describe('exportZip', () => {
     expect(readFileSync(join(extractDir, 'index.html'), 'utf8')).toContain('src="assets/logo.svg"');
   });
 
+  it('bundles workspace DESIGN.md when present', async () => {
+    writeFileSync(join(tempDir, 'DESIGN.md'), '---\nversion: alpha\nname: Zip Test\n---\n', 'utf8');
+    const dest = join(tempDir, 'design-md.zip');
+    await exportZip('<p>x</p>', dest, {
+      assetBasePath: tempDir,
+      assetRootPath: tempDir,
+    });
+
+    const { Unzip } = await import('zip-lib');
+    const extractDir = join(tempDir, 'design-md-extracted');
+    const unzip = new Unzip();
+    await unzip.extract(dest, extractDir);
+
+    expect(readFileSync(join(extractDir, 'DESIGN.md'), 'utf8')).toContain('Zip Test');
+  });
+
   it('throws EXPORTER_ZIP_FAILED when the destination cannot be written', async () => {
     // Pass a directory as the destination — zip-lib will fail to write a regular file there.
     await expect(exportZip('<p>x</p>', tempDir)).rejects.toMatchObject({

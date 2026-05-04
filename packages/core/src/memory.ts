@@ -88,7 +88,7 @@ export function serializeMessagesForMemory(messages: AgentMessage[]): string {
 // Summarization prompt
 // ---------------------------------------------------------------------------
 
-const MEMORY_SYSTEM_PROMPT = [
+export const MEMORY_SYSTEM_PROMPT = [
   'You maintain a structured project memory file for a design project.',
   'Output ONLY the memory file content in the specified format — no preamble, no explanation.',
   '',
@@ -108,7 +108,10 @@ const MEMORY_SYSTEM_PROMPT = [
   '- Typography: <font choices if known>',
   '',
   '## Preferences',
-  '- <key design token or preference>',
+  '- <user preference, unresolved choice, or next-turn intent>',
+  '',
+  '## Promotion Candidates',
+  '- <stable design decision that may deserve promotion to DESIGN.md>',
   '',
   '## History',
   '- v<N>: <condensed summary of each major interaction, one line each>',
@@ -117,7 +120,10 @@ const MEMORY_SYSTEM_PROMPT = [
   '- Keep total file under 3000 characters',
   '- Preserve ALL facts from the existing memory; only ADD or UPDATE',
   '- Condense older interaction history entries (merge similar items)',
-  '- Extract concrete design decisions (colors, fonts, layout patterns)',
+  '- Record user feedback, historical choices, unresolved items, and next-turn intent',
+  '- Do NOT copy full color, typography, spacing, or component token tables from DESIGN.md',
+  '- Put stable cross-screen decisions under Promotion Candidates as promotion candidate notes instead of treating them as authoritative tokens',
+  '- Treat DESIGN.md as the authoritative design-system artifact when it exists',
   "- Use the same language as the user's prompts",
   '- If no existing memory is provided, create a fresh one from the conversation',
 ].join('\n');

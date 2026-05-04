@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: IBM
-slug: ibm
-category: Enterprise
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by IBM. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: IBM Enterprise design reference inspired by public brand materials.
 colors:
   primary: "#0F62FE"
   secondary: "#161616"
@@ -22,56 +16,59 @@ colors:
   successGreen: "#24A148"
   errorRed: "#DA1E28"
   warningYellow: "#F1C21B"
-
 typography:
   display:
-    fontFamily: "IBM Plex Sans, Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 300
+    fontFamily: IBM Plex Sans, Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 300
     lineHeight: 1.1
-    letterSpacing: "0"
+    letterSpacing: 0em
   body:
-    fontFamily: "IBM Plex Sans, Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: IBM Plex Sans, Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0.16px"
+    letterSpacing: 0.16px
   mono:
-    fontFamily: "IBM Plex Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: IBM Plex Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 0px
+  md: 0px
+  lg: 0px
+  full: 0px
 spacing:
   unit: 8
-  scale: [4, 8, 16, 24, 32, 40, 48, 64, 80, 96]
-
-radius:
-  none: "0"
-  sm: "0"
-  md: "0"
-  lg: "0"
-  full: "0"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.06)"
-  md: "0 4px 12px rgba(0,0,0,0.08)"
-  lg: "0 12px 32px rgba(0,0,0,0.12)"
-
-motion:
-  duration:
-    fast: "110ms"
-    normal: "240ms"
-    slow: "400ms"
-  easing:
-    standard: "cubic-bezier(0.2, 0, 0.38, 0.9)"
-    accelerate: "cubic-bezier(0.4, 0.14, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.38, 0.9)"
+  xs: 4px
+  sm: 8px
+  md: 16px
+  lg: 24px
+  xl: 32px
+  2xl: 40px
+  3xl: 48px
+  4xl: 64px
+  5xl: 80px
+  6xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 IBM's design system (Carbon) is the canonical "calm enterprise" aesthetic. The brand color is the historic IBM blue, paired with crisp neutrals and IBM Plex (one of the most distinctive corporate typefaces in software). Marketing pages favor large editorial photography, structured grids, and the recognizable striped wordmark. The product UI (Carbon) is dense, predictable, and built for data-heavy enterprise workflows.
 
 Type is the brand. IBM Plex carries the identity more than color does.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#0F62FE`) — IBM Blue 60; primary CTAs, links, focus rings.
 - `brandBlue90` (`#001D6C`) — deep navy; secondary chrome, hover states.
@@ -91,6 +88,14 @@ IBM Plex (Plex Sans for UI, Plex Serif for editorial, Plex Mono for code) is the
 
 Hierarchy follows Carbon's expressive type scale: display-04 (54 px) → display-01 (32 px) → heading-04 (28 px) → heading-01 (16 px) → body (14 px) → caption (12 px). Numerals are tabular for data tables.
 
+## Layout
+
+Carbon uses a 16-column grid with a 2x grid mod (8/16/24 px increments). Max widths are large (1584 px) to support data-heavy enterprise apps. Marketing uses a 12-column variation with max ~1312 px and section padding of 64-96 px. The 8 px base unit is unusually large compared to consumer brands.
+
+## Elevation & Depth
+
+Carbon is rigorously flat. Default UI uses no shadows — surfaces are distinguished by background tone (`background` → `surface` → `surface02`). Elevation appears only on overlays: tooltips, popovers, modals, toasts. The "raised" style uses a single soft drop shadow.
+
 ## Components
 
 - **Buttons**: rectangular (zero radius), 32-48 px height. Primary: solid IBM Blue 60 with white text, no border. Secondary: transparent with white text on a 1 px white border (or `text` border in light).
@@ -99,14 +104,6 @@ Hierarchy follows Carbon's expressive type scale: display-04 (54 px) → display
 - **Tabs**: text only with 2 px bottom border on active, no pill background.
 - **Toasts / inline notifications**: rectangular with a left status-color bar (success/error/warning), structured icon + heading + body + actions.
 - **Cards / tiles**: borderless or with hairline border on `surface`, no rounding, no shadow on default.
-
-## Layout
-
-Carbon uses a 16-column grid with a 2x grid mod (8/16/24 px increments). Max widths are large (1584 px) to support data-heavy enterprise apps. Marketing uses a 12-column variation with max ~1312 px and section padding of 64-96 px. The 8 px base unit is unusually large compared to consumer brands.
-
-## Depth & Elevation
-
-Carbon is rigorously flat. Default UI uses no shadows — surfaces are distinguished by background tone (`background` → `surface` → `surface02`). Elevation appears only on overlays: tooltips, popovers, modals, toasts. The "raised" style uses a single soft drop shadow.
 
 ## Do's & Don'ts
 

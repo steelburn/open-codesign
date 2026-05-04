@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Airbnb
-slug: airbnb
-category: Consumer
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Airbnb. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Airbnb Consumer design reference inspired by public brand materials.
 colors:
   primary: "#FF385C"
   secondary: "#222222"
@@ -20,57 +14,59 @@ colors:
   gradientFrom: "#E61E4D"
   gradientTo: "#BD1E59"
   superhostRed: "#E31C5F"
-
 typography:
   display:
-    fontFamily: "Cereal, Circular, Inter, system-ui, sans-serif"
-    weight: 700
+    fontFamily: Cereal, Circular, Inter, system-ui, sans-serif
+    fontWeight: 700
     lineHeight: 1.15
-    letterSpacing: "-0.02em"
+    letterSpacing: -0.02em
   body:
-    fontFamily: "Cereal, Circular, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Cereal, Circular, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0"
+    letterSpacing: 0em
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, monospace"
-    weight: 400
-
+    fontFamily: ui-monospace, SFMono-Regular, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 12px
+  xl: 16px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "12px"
-  xl: "16px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.08)"
-  md: "0 6px 16px rgba(0,0,0,0.12)"
-  lg: "0 12px 28px rgba(0,0,0,0.18)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "250ms"
-    slow: "400ms"
-  easing:
-    standard: "cubic-bezier(0.2, 0, 0, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Airbnb's visual identity is human, warm, and travel-photography-driven. The Bélo logo is rounded and tactile; the brand color is a saturated coral-red ("Rausch") that feels welcoming rather than corporate. Pages are built around large square or 4:3 photography of homes and experiences, arranged in dense responsive grids.
 
 Type is humanist (Cereal, the proprietary face) with rounded terminals. Iconography follows the same logic — outline icons with rounded corners and ends.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#FF385C`) — Rausch; the unmistakable Airbnb coral-red. Used on the search button, hero CTAs, and the wishlist heart.
 - `text` (`#222222`) — near-black; primary copy.
@@ -86,6 +82,14 @@ Cereal (custom, by Dalton Maag) is the brand face — geometric humanist with ro
 
 Hierarchy uses 4-5 type sizes — large hero (40-56 px), section heading (22-26 px), card title (16 px), body (14-16 px), caption (12 px). Numerals are tabular in pricing and ratings.
 
+## Layout
+
+12-column grid, max width ~1280 px in product. Listing grids reflow from 4-up to 3-up to 2-up to 1-up across breakpoints. Section padding 48-96 px on marketing; 24-32 px in product. Map + listings split-view uses a 50/50 or 60/40 horizontal split on desktop.
+
+## Elevation & Depth
+
+The default surface is flat with hairline borders. Cards lift on hover with a soft `md` shadow. Modal sheets slide up from the bottom on mobile and use full-screen takeovers on desktop with a strong dimmed backdrop. Maps overlay floating cards with `lg` shadow. No glassmorphism or color tints.
+
 ## Components
 
 - **Search bar**: pill-shaped, 1 px border, soft shadow, four field segments separated by faint dividers, coral search icon button at the right.
@@ -93,14 +97,6 @@ Hierarchy uses 4-5 type sizes — large hero (40-56 px), section heading (22-26 
 - **Listing cards**: borderless, large rounded image (12-16 px radius), title + meta + price in a tight stack below.
 - **Star ratings**: filled black star + decimal rating + count in parens; never colored.
 - **Wishlist heart**: outline by default, fills coral on save with a small bounce.
-
-## Layout
-
-12-column grid, max width ~1280 px in product. Listing grids reflow from 4-up to 3-up to 2-up to 1-up across breakpoints. Section padding 48-96 px on marketing; 24-32 px in product. Map + listings split-view uses a 50/50 or 60/40 horizontal split on desktop.
-
-## Depth & Elevation
-
-The default surface is flat with hairline borders. Cards lift on hover with a soft `md` shadow. Modal sheets slide up from the bottom on mobile and use full-screen takeovers on desktop with a strong dimmed backdrop. Maps overlay floating cards with `lg` shadow. No glassmorphism or color tints.
 
 ## Do's & Don'ts
 

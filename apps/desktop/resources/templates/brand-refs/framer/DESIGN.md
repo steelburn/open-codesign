@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Framer
-slug: framer
-category: Design Tools
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Framer. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Framer Design Tools design reference inspired by public brand materials.
 colors:
   primary: "#0099FF"
   secondary: "#000000"
@@ -18,57 +12,61 @@ colors:
   border: "#E6E6E6"
   accent: "#0099FF"
   brandBlack: "#000000"
-
 typography:
   display:
-    fontFamily: "Inter Display, Inter, system-ui, sans-serif"
-    weight: 700
-    lineHeight: 1.0
-    letterSpacing: "-0.04em"
+    fontFamily: Inter Display, Inter, system-ui, sans-serif
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: -0.04em
   body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.4
-    letterSpacing: "-0.011em"
+    letterSpacing: -0.011em
   mono:
-    fontFamily: "JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 6px
+  md: 12px
+  lg: 20px
+  xl: 32px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192]
-
-radius:
-  none: "0"
-  sm: "6px"
-  md: "12px"
-  lg: "20px"
-  xl: "32px"
-  full: "9999px"
-
-shadows:
-  sm: "0 2px 8px rgba(0,0,0,0.04)"
-  md: "0 12px 36px rgba(0,0,0,0.08)"
-  lg: "0 32px 72px rgba(0,0,0,0.16)"
-
-motion:
-  duration:
-    fast: "200ms"
-    normal: "400ms"
-    slow: "700ms"
-  easing:
-    standard: "cubic-bezier(0.25, 0.1, 0.25, 1)"
-    spring: "cubic-bezier(0.34, 1.56, 0.64, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+  6xl: 128px
+  7xl: 192px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Framer is the website-builder for animation enthusiasts, and the marketing site never lets you forget it. Almost every element on the page moves — text scrambles in, cards lift on scroll, gradients drift. The aesthetic is large-display-typographic with enormous hero headlines (often 120-160 px), generous rounded corners (20-32 px), and an ultra-bright "Framer blue" accent.
 
 The page feels like a Pinterest moodboard staged with motion design.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#0099FF`) — bright Framer blue; primary CTAs and link color.
 - `text` (`#0F0F0F`) — near-black; primary copy.
@@ -85,6 +83,14 @@ Inter (Inter Display for hero copy) at weight 700, very tight tracking (-0.04em)
 
 The brand loves all-caps eyebrow labels above sections (12-13 px, tracked +0.05em). Numerals are tabular in pricing tables.
 
+## Layout
+
+12-column grid, max width ~1200 px, but section bands frequently break out full-bleed. Section padding is generous (96-192 px). Hero sections are intentionally tall — often a full viewport. Long marketing pages alternate light and dark bands with parallax product mockups between.
+
+## Elevation & Depth
+
+The brand leans on motion for depth more than shadow. Cards lift gently on scroll-into-view; floating mockups rotate slightly in 3D. Drop shadows are soft and long. Dark mode introduces glow effects on cards. Glassmorphism makes occasional appearances on the navigation bar.
+
 ## Components
 
 - **Buttons**: pill or large-radius (20-32 px) with the bright blue fill and white text. Heights are generous (44-56 px) with substantial horizontal padding. No border, soft shadow on hover.
@@ -92,14 +98,6 @@ The brand loves all-caps eyebrow labels above sections (12-13 px, tracked +0.05e
 - **Inputs**: 44-48 px height, large radius (12 px), 1 px border that brightens on focus.
 - **Tabs**: pill-shaped tab list with a moving background indicator.
 - **Animated text**: scramble/typewriter reveals on hero headlines; words slide in on scroll.
-
-## Layout
-
-12-column grid, max width ~1200 px, but section bands frequently break out full-bleed. Section padding is generous (96-192 px). Hero sections are intentionally tall — often a full viewport. Long marketing pages alternate light and dark bands with parallax product mockups between.
-
-## Depth & Elevation
-
-The brand leans on motion for depth more than shadow. Cards lift gently on scroll-into-view; floating mockups rotate slightly in 3D. Drop shadows are soft and long. Dark mode introduces glow effects on cards. Glassmorphism makes occasional appearances on the navigation bar.
 
 ## Do's & Don'ts
 

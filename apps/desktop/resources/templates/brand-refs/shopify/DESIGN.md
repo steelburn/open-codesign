@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Shopify
-slug: shopify
-category: E-commerce
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Shopify. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Shopify E-commerce design reference inspired by public brand materials.
 colors:
   primary: "#008060"
   secondary: "#1A1A1A"
@@ -21,57 +15,60 @@ colors:
   warning: "#FFD79D"
   critical: "#FED3D1"
   highlight: "#FFEA8A"
-
 typography:
   display:
-    fontFamily: "ABC Diatype, Inter Display, Inter, system-ui, sans-serif"
-    weight: 600
+    fontFamily: ABC Diatype, Inter Display, Inter, system-ui, sans-serif
+    fontWeight: 600
     lineHeight: 1.05
-    letterSpacing: "-0.022em"
+    letterSpacing: -0.022em
   body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "-0.005em"
+    letterSpacing: -0.005em
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, monospace"
-    weight: 400
-
+    fontFamily: ui-monospace, SFMono-Regular, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 12px
+  xl: 16px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 20, 24, 32, 48, 64, 96]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "12px"
-  xl: "16px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 0 rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.06)"
-  md: "0 4px 12px rgba(0,0,0,0.08)"
-  lg: "0 16px 32px rgba(0,0,0,0.12)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "240ms"
-    slow: "400ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 20px
+  2xl: 24px
+  3xl: 32px
+  4xl: 48px
+  5xl: 64px
+  6xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Shopify operates two distinct visual languages. The marketing site (shopify.com) is bold, editorial, and merchant-celebrating — featuring large photography of small-business products and owners, big headlines, and the signature `#008060` brand green. The product (Polaris design system) is calm, dense, businesslike — a flat near-monochrome admin UI with the same green accent.
 
 The brand believes in being merchant-first; everything on marketing celebrates the people running stores.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#008060`) — Shopify green; primary CTAs and brand chrome.
 - `marketingGreen` (`#004C3F`) — deeper forest green; full-bleed marketing hero bands.
@@ -88,6 +85,14 @@ Marketing uses ABC Diatype (Dinamo) for headlines; Polaris uses Inter throughout
 
 Hierarchy: hero (56-72 px on marketing, 28-36 px in admin) → section (24-32 px) → body (14-16 px) → caption (12-13 px). Numerals are tabular for prices, inventory counts, analytics.
 
+## Layout
+
+Marketing: 12-column grid, max width ~1280 px, generous section padding (96-128 px). Admin (Polaris): fluid layout with a left nav (~240 px), main content cards, and section sidebars on detail pages. Admin is information-dense but never crowded.
+
+## Elevation & Depth
+
+Polaris uses a small but real shadow language: cards get a subtle 1 px hairline + 1 px drop shadow, buttons get a 1 px bottom-bevel shadow that lifts on press. Modals use `md` shadow on a dimmed backdrop. Marketing leans on photography and large color blocks for depth rather than shadow.
+
 ## Components
 
 - **Buttons (marketing)**: pill or rounded-md, 44-48 px height, primary green-on-white or white-on-forest-green.
@@ -96,14 +101,6 @@ Hierarchy: hero (56-72 px on marketing, 28-36 px in admin) → section (24-32 px
 - **Status banners**: peach/salmon/lemon backgrounds with 1 px border in matching tone, icon + headline + body.
 - **Inputs**: 36 px height, 6 px radius, 1 px border, brightens to green with 2 px halo on focus.
 - **Tables**: dense rows, hairline dividers, mono on SKUs and IDs, tabular numerals on quantities and prices.
-
-## Layout
-
-Marketing: 12-column grid, max width ~1280 px, generous section padding (96-128 px). Admin (Polaris): fluid layout with a left nav (~240 px), main content cards, and section sidebars on detail pages. Admin is information-dense but never crowded.
-
-## Depth & Elevation
-
-Polaris uses a small but real shadow language: cards get a subtle 1 px hairline + 1 px drop shadow, buttons get a 1 px bottom-bevel shadow that lifts on press. Modals use `md` shadow on a dimmed backdrop. Marketing leans on photography and large color blocks for depth rather than shadow.
 
 ## Do's & Don'ts
 

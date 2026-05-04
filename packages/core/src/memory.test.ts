@@ -5,6 +5,7 @@ import {
   formatGlobalMemoryIndex,
   formatMemoryForContext,
   type GlobalMemoryEntry,
+  MEMORY_SYSTEM_PROMPT,
   parseGlobalMemoryIndex,
   serializeMessagesForMemory,
 } from './memory.js';
@@ -69,6 +70,14 @@ describe('serializeMessagesForMemory', () => {
 
   it('returns empty string for empty messages', () => {
     expect(serializeMessagesForMemory([])).toBe('');
+  });
+});
+
+describe('MEMORY_SYSTEM_PROMPT', () => {
+  it('keeps working memory distinct from authoritative DESIGN.md tokens', () => {
+    expect(MEMORY_SYSTEM_PROMPT).toContain('Do NOT copy full color, typography, spacing');
+    expect(MEMORY_SYSTEM_PROMPT).toContain('promotion candidate');
+    expect(MEMORY_SYSTEM_PROMPT).toContain('DESIGN.md');
   });
 });
 

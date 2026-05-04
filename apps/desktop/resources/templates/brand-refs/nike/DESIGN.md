@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Nike
-slug: nike
-category: Retail
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Nike. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Nike Retail design reference inspired by public brand materials.
 colors:
   primary: "#000000"
   secondary: "#FFFFFF"
@@ -18,56 +12,59 @@ colors:
   border: "#E5E5E5"
   accent: "#FA5400"
   brandRed: "#CE0E2D"
-
 typography:
   display:
-    fontFamily: "Nike Futura, Futura, Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 800
-    lineHeight: 1.0
-    letterSpacing: "-0.01em"
+    fontFamily: Nike Futura, Futura, Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 800
+    lineHeight: 1
+    letterSpacing: -0.01em
   body:
-    fontFamily: "Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0"
+    letterSpacing: 0em
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, monospace"
-    weight: 400
-
+    fontFamily: ui-monospace, SFMono-Regular, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 0px
+  md: 0px
+  lg: 0px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96, 128]
-
-radius:
-  none: "0"
-  sm: "0"
-  md: "0"
-  lg: "0"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.06)"
-  md: "0 8px 24px rgba(0,0,0,0.10)"
-  lg: "0 24px 48px rgba(0,0,0,0.16)"
-
-motion:
-  duration:
-    fast: "120ms"
-    normal: "240ms"
-    slow: "400ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+  6xl: 128px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Nike.com is editorial sportswear publishing. Hero sections are dominated by oversized athlete photography or product hero shots, with an enormous bold headline (Futura-style, often condensed and uppercase), a one-line subhead, and a single pill CTA. The grid is sharp — square corners are the default, the swoosh provides the only "curve" — and content reads like a magazine cover.
 
 The brand is monochrome with the occasional brand-red or seasonal accent — color comes from product photography.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#000000`) — black; the swoosh, primary CTAs, headlines.
 - `secondary` (`#FFFFFF`) — white; CTAs on dark hero bands.
@@ -84,6 +81,14 @@ Nike's brand wordmark uses a customized Futura. Marketing display uses Futura Ex
 
 Hierarchy: hero (72-128 px / 800 / often uppercase) → eyebrow (12-14 px / uppercase / tracked +0.05em) → body (14-16 px / 400) → caption (12 px). Numerals are tabular for sizing tables.
 
+## Layout
+
+12-column grid, max width ~1440 px. Section padding 48-96 px. Hero bands often go full-bleed with edge-to-edge photography. Product grids reflow from 4-up to 2-up to 1-up. Long-form storytelling pages alternate full-bleed hero photographs with text-and-image bands.
+
+## Elevation & Depth
+
+The brand is essentially flat. No drop shadows on default chrome. Elevation comes from photography (product on white with subtle floor shadow) and from full-bleed hero contrast. Modals use soft `md` shadow over a dimmed backdrop. No glassmorphism.
+
 ## Components
 
 - **Buttons**: pill-shaped (rounded-full), 44-52 px height, generous padding. Primary: solid black with white text on light bands; solid white with black text on dark bands. No border, no shadow.
@@ -91,14 +96,6 @@ Hierarchy: hero (72-128 px / 800 / often uppercase) → eyebrow (12-14 px / uppe
 - **Hero text**: huge bold display, often broken across lines manually for editorial pacing.
 - **Inputs**: 48 px height, square corners, 1 px black border (no rounding).
 - **Filters**: text-based with chevrons; rarely use chips.
-
-## Layout
-
-12-column grid, max width ~1440 px. Section padding 48-96 px. Hero bands often go full-bleed with edge-to-edge photography. Product grids reflow from 4-up to 2-up to 1-up. Long-form storytelling pages alternate full-bleed hero photographs with text-and-image bands.
-
-## Depth & Elevation
-
-The brand is essentially flat. No drop shadows on default chrome. Elevation comes from photography (product on white with subtle floor shadow) and from full-bleed hero contrast. Modals use soft `md` shadow over a dimmed backdrop. No glassmorphism.
 
 ## Do's & Don'ts
 

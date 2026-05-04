@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Stripe
-slug: stripe
-category: Fintech
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Stripe. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Stripe Fintech design reference inspired by public brand materials.
 colors:
   primary: "#635BFF"
   secondary: "#0A2540"
@@ -21,57 +15,60 @@ colors:
   success: "#3CB371"
   warning: "#F5A623"
   error: "#DF1B41"
-
 typography:
   display:
-    fontFamily: "Sohne, Inter, system-ui, sans-serif"
-    weight: 500
+    fontFamily: Sohne, Inter, system-ui, sans-serif
+    fontWeight: 500
     lineHeight: 1.1
-    letterSpacing: "-0.02em"
+    letterSpacing: -0.02em
   body:
-    fontFamily: "Sohne, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Sohne, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.55
-    letterSpacing: "-0.003em"
+    letterSpacing: -0.003em
   mono:
-    fontFamily: "Sohne Mono, JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: Sohne Mono, JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 16px
+  xl: 24px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 20, 24, 32, 48, 64, 96]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "16px"
-  xl: "24px"
-  full: "9999px"
-
-shadows:
-  sm: "0 2px 4px rgba(50,50,93,0.05)"
-  md: "0 6px 24px rgba(50,50,93,0.10)"
-  lg: "0 30px 60px rgba(50,50,93,0.18)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "240ms"
-    slow: "400ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 20px
+  2xl: 24px
+  3xl: 32px
+  4xl: 48px
+  5xl: 64px
+  6xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Stripe is the canonical "infrastructure looks beautiful" aesthetic. The marketing surface is famously animated — perspective-skewed multi-color gradients on the hero, parallax scroll, code blocks that look like editor screenshots. Underneath it all sits a deeply serious typographic system: Sohne, navy-on-white, ample whitespace, and code-as-art.
 
 The dashboard product is calmer: white background, indigo accent, dense data tables, subtle shadows.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#635BFF`) — Stripe-indigo; primary CTAs, links, focused inputs.
 - `secondary` (`#0A2540`) — deep navy; body text, headlines, footer chrome.
@@ -89,6 +86,14 @@ Sohne is the brand face. Display uses 500 weight (Stripe deliberately avoids bol
 
 Code is treated as a first-class design element: monospaced, syntax-highlighted with the brand palette, often shown on a dark navy background even within an otherwise light page.
 
+## Layout
+
+Marketing uses a 12-column grid with max content width ~1080 px and generous 96-128 px section padding. Product dashboard fits a fluid layout with a 240 px left nav. Vertical rhythm is generous on marketing (rarely under 24 px), tight in product (8-16 px increments).
+
+## Elevation & Depth
+
+Marketing pages are explicitly three-dimensional: parallax gradients, perspective-tilted device mockups, layered cards with soft long shadows. Product UI is the inverse — almost flat, with elevation reserved for floating menus and modals (`md` shadow at most). Never combine the two on a single surface.
+
 ## Components
 
 - **Buttons**: 36 px height, 6-8 px radius. Primary: indigo background, white text, soft shadow on hover. Secondary: white with 1 px navy border. Tertiary: text-only with chevron.
@@ -96,14 +101,6 @@ Code is treated as a first-class design element: monospaced, syntax-highlighted 
 - **Cards**: 16 px radius on marketing, 8 px in product. Marketing cards lift with soft `md` shadow; product cards stay flat with hairline border.
 - **Code blocks**: dark navy background (`#0A2540`), monospaced, syntax-highlighted with the brand palette.
 - **Tables**: hairline rows, alternating zebra is rare; column headers in `muted` smallcaps.
-
-## Layout
-
-Marketing uses a 12-column grid with max content width ~1080 px and generous 96-128 px section padding. Product dashboard fits a fluid layout with a 240 px left nav. Vertical rhythm is generous on marketing (rarely under 24 px), tight in product (8-16 px increments).
-
-## Depth & Elevation
-
-Marketing pages are explicitly three-dimensional: parallax gradients, perspective-tilted device mockups, layered cards with soft long shadows. Product UI is the inverse — almost flat, with elevation reserved for floating menus and modals (`md` shadow at most). Never combine the two on a single surface.
 
 ## Do's & Don'ts
 

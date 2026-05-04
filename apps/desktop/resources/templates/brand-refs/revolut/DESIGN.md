@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Revolut
-slug: revolut
-category: Fintech
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Revolut. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Revolut Fintech design reference inspired by public brand materials.
 colors:
   primary: "#0666EB"
   secondary: "#191C1F"
@@ -20,57 +14,59 @@ colors:
   brandBlack: "#000000"
   successGreen: "#00C46A"
   errorRed: "#FF5050"
-
 typography:
   display:
-    fontFamily: "Aeonik, Inter, system-ui, sans-serif"
-    weight: 500
+    fontFamily: Aeonik, Inter, system-ui, sans-serif
+    fontWeight: 500
     lineHeight: 1.05
-    letterSpacing: "-0.025em"
+    letterSpacing: -0.025em
   body:
-    fontFamily: "Aeonik, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Aeonik, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0"
+    letterSpacing: 0em
   mono:
-    fontFamily: "JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 8px
+  md: 16px
+  lg: 24px
+  xl: 32px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96]
-
-radius:
-  none: "0"
-  sm: "8px"
-  md: "16px"
-  lg: "24px"
-  xl: "32px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.04)"
-  md: "0 8px 24px rgba(0,0,0,0.06)"
-  lg: "0 24px 48px rgba(0,0,0,0.10)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "250ms"
-    slow: "400ms"
-  easing:
-    standard: "cubic-bezier(0.2, 0, 0, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Revolut is the slick European neobank — the marketing surface is dominated by photographic mockups of the iPhone app on glossy black or vivid colored backgrounds, with very large white headlines floating over them. The product (the iOS/Android app) is the design — marketing pages mostly exist to showcase it.
 
 The aesthetic mixes premium fintech (black metal card photography) with playful product screens (color-coded categories, currency flags, animated transactions).
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#0666EB`) — Revolut blue; primary CTAs and link color in app.
 - `secondary` (`#191C1F`) — near-black; primary marketing background, dark hero bands.
@@ -89,6 +85,14 @@ Aeonik (Cotype) is the brand face — geometric sans with friendly proportions. 
 
 Hierarchy: hero (64-96 px) → section (32-40 px) → body (16-18 px) → caption (13 px). Numerals are tabular in transaction lists and balances.
 
+## Layout
+
+Marketing pages alternate full-bleed hero bands (often dark, with phone mockups) and lighter feature bands. 12-column grid, max width ~1240 px. Section padding 64-128 px. Mobile-first feel — even desktop pages center narrow content columns to mimic phone screens.
+
+## Elevation & Depth
+
+The marketing surface is rich with depth — phone mockups float in 3D with soft shadows; metal card photography lit dramatically. The product app itself is flat with rounded soft cards. Large radii (16-32 px) and gentle shadows are the elevation grammar; no neon, no glassmorphism.
+
 ## Components
 
 - **Buttons**: 48-56 px height (tall), pill-shaped (rounded-full) on marketing, 12-16 px radius in product. Primary: black on white pages, white on dark hero bands.
@@ -96,14 +100,6 @@ Hierarchy: hero (64-96 px) → section (32-40 px) → body (16-18 px) → captio
 - **Cards**: large radii (16-24 px), white on `surface`, soft `sm` or `md` shadow.
 - **Transaction rows**: 56-64 px tall, merchant icon + category color + name + amount, mono on amount column.
 - **Inputs**: 48 px height, 12 px radius, 1 px border that brightens to blue on focus.
-
-## Layout
-
-Marketing pages alternate full-bleed hero bands (often dark, with phone mockups) and lighter feature bands. 12-column grid, max width ~1240 px. Section padding 64-128 px. Mobile-first feel — even desktop pages center narrow content columns to mimic phone screens.
-
-## Depth & Elevation
-
-The marketing surface is rich with depth — phone mockups float in 3D with soft shadows; metal card photography lit dramatically. The product app itself is flat with rounded soft cards. Large radii (16-32 px) and gentle shadows are the elevation grammar; no neon, no glassmorphism.
 
 ## Do's & Don'ts
 

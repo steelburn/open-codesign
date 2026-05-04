@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Mistral
-slug: mistral
-category: AI
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Mistral. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Mistral AI design reference inspired by public brand materials.
 colors:
   primary: "#FA520F"
   secondary: "#FFCD43"
@@ -21,56 +15,59 @@ colors:
   amber: "#FFA500"
   ember: "#E84A1A"
   flameRed: "#C8210C"
-
 typography:
   display:
-    fontFamily: "GT America, Inter, system-ui, sans-serif"
-    weight: 500
+    fontFamily: GT America, Inter, system-ui, sans-serif
+    fontWeight: 500
     lineHeight: 1.1
-    letterSpacing: "-0.02em"
+    letterSpacing: -0.02em
   body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.55
-    letterSpacing: "-0.005em"
+    letterSpacing: -0.005em
   mono:
-    fontFamily: "JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 12px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96, 128]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "12px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.04)"
-  md: "0 8px 24px rgba(0,0,0,0.08)"
-  lg: "0 24px 48px rgba(0,0,0,0.12)"
-
-motion:
-  duration:
-    fast: "120ms"
-    normal: "200ms"
-    slow: "320ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+  6xl: 128px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Mistral leans into its name — the brand colors are flame: yellow, amber, ember, deep red — laid against a warm cream background that reads almost like paper. The brand identity is distinctively French: editorial, type-led, slightly serious, with the recognizable "wind" gradient logo as the consistent visual anchor.
 
 Marketing pages feel like an academic publication that happens to ship code — long-form copy, restrained chrome, the flame gradient appearing on hero illustrations.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#FA520F`) — the dominant flame-orange; primary CTAs, brand accents.
 - `secondary` (`#FFCD43`) — flame-yellow; gradient companion.
@@ -86,6 +83,14 @@ GT America (or Inter as fallback) at weight 500 for display — Mistral, like Cu
 
 Hierarchy uses scale: hero (56-72 px) → section (32-40 px) → body (16 px) → caption (13 px).
 
+## Layout
+
+12-column grid, max content width ~1200 px. Section padding 96-128 px on marketing. Layouts feel editorial — long single-column reading sections punctuated by code samples and small product diagrams.
+
+## Elevation & Depth
+
+The brand is essentially flat. Cards lift on hover with a subtle `sm` shadow. The flame gradient on hero illustrations is the only "depth" — it implies warmth and motion. No glassmorphism, no neon glows.
+
 ## Components
 
 - **Buttons**: 36-44 px height, 4-8 px radius. Primary: solid flame-orange with white text, no border, no shadow. Secondary: transparent with 1 px border, `text` color.
@@ -93,14 +98,6 @@ Hierarchy uses scale: hero (56-72 px) → section (32-40 px) → body (16 px) �
 - **Inputs**: 40 px height, 6 px radius, 1 px `border`.
 - **Code blocks**: light cream background slightly darker than canvas, mono font, syntax highlighting using the flame palette for accent tokens.
 - **Tags / chips**: rounded-full with `surface` background, 1 px border.
-
-## Layout
-
-12-column grid, max content width ~1200 px. Section padding 96-128 px on marketing. Layouts feel editorial — long single-column reading sections punctuated by code samples and small product diagrams.
-
-## Depth & Elevation
-
-The brand is essentially flat. Cards lift on hover with a subtle `sm` shadow. The flame gradient on hero illustrations is the only "depth" — it implies warmth and motion. No glassmorphism, no neon glows.
 
 ## Do's & Don'ts
 

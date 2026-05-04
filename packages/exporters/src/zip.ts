@@ -32,6 +32,7 @@ This bundle was exported from [open-codesign](https://github.com/OpenCoworkAI/op
 \`\`\`
 .
 ├── index.html      The exported design (open in any browser)
+├── DESIGN.md       Design system handoff file (when present in workspace)
 ├── assets/         Linked assets (images, fonts, scripts)
 └── README.md       This file
 \`\`\`
@@ -86,7 +87,16 @@ export async function exportZip(
     zip.addFile(indexPath, 'index.html');
     zip.addFile(readmePath, 'README.md');
 
-    const assets = [...collectedAssets, ...(opts.assets ?? [])];
+    const designMdAssets: ZipAsset[] = [];
+    if (opts.assetRootPath) {
+      try {
+        const designMd = await fs.readFile(path.join(opts.assetRootPath, 'DESIGN.md'), 'utf8');
+        designMdAssets.push({ path: 'DESIGN.md', content: designMd });
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      }
+    }
+    const assets = [...collectedAssets, ...designMdAssets, ...(opts.assets ?? [])];
     if (assets.length > 0) {
       const stagingResolved = path.resolve(stagingDir);
       const written = new Set<string>();

@@ -26,6 +26,15 @@ export const ModelRef = z
   .strict();
 export type ModelRef = z.infer<typeof ModelRef>;
 
+export {
+  type DesignMdBodySection,
+  type DesignMdDocument,
+  type DesignMdFinding,
+  type DesignMdFindingSeverity,
+  formatDesignMdForPrompt,
+  parseDesignMd,
+  validateDesignMd,
+} from './design-md';
 export { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from './source-entries';
 
 export const DesignParam = z.discriminatedUnion('type', [

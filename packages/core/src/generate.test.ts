@@ -236,6 +236,13 @@ describe('composeSystemPrompt()', () => {
     expect(prompt).toContain('TWEAK_DEFAULTS');
   });
 
+  it('create mode defines concrete DESIGN.md promotion triggers', () => {
+    const prompt = composeSystemPrompt({ mode: 'create' });
+    expect(prompt).toContain('Before creating a second screen or artifact');
+    expect(prompt).toContain('When a brand reference is adopted');
+    expect(prompt).toContain('Promote stable TWEAK_DEFAULTS values');
+  });
+
   it('tweak mode also includes the EDITMODE protocol section', () => {
     const prompt = composeSystemPrompt({ mode: 'tweak' });
     expect(prompt).toContain('EDITMODE protocol');

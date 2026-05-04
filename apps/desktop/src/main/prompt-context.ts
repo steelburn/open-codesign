@@ -8,8 +8,10 @@ import type { AttachmentContext, ProjectContext, ReferenceUrlContext } from '@op
 import {
   CodesignError,
   ERROR_CODES,
+  formatDesignMdForPrompt,
   type LocalInputFile,
   type StoredDesignSystem,
+  validateDesignMd,
 } from '@open-codesign/shared';
 import {
   collapseWhitespace,
@@ -329,6 +331,57 @@ async function readWorkspaceText(
   }
 }
 
+async function readWorkspaceRawText(
+  workspaceRoot: string,
+  relativePath: string,
+): Promise<string | undefined> {
+  let filePath: string;
+  try {
+    filePath = await resolveSafeWorkspaceChildPath(workspaceRoot, relativePath);
+  } catch (cause) {
+    throw new CodesignError(
+      `Project context path is invalid: ${relativePath}`,
+      ERROR_CODES.CONFIG_SCHEMA_INVALID,
+      { cause },
+    );
+  }
+  try {
+    return await readFile(filePath, 'utf8');
+  } catch (err) {
+    if (isMissingFile(err)) return undefined;
+    throw new CodesignError(
+      `Failed to read project context file "${relativePath}"`,
+      ERROR_CODES.CONFIG_READ_FAILED,
+      { cause: err },
+    );
+  }
+}
+
+function safeDesignMd(raw: string): string {
+  const findings = validateDesignMd(raw);
+  const errors = findings.filter((finding) => finding.severity === 'error');
+  if (errors.length > 0) {
+    throw new CodesignError(
+      `DESIGN.md is not valid Google design.md: ${errors
+        .slice(0, 3)
+        .map((finding) => `${finding.path}: ${finding.message}`)
+        .join('; ')}`,
+      ERROR_CODES.CONFIG_SCHEMA_INVALID,
+    );
+  }
+  try {
+    return formatDesignMdForPrompt(raw);
+  } catch (cause) {
+    throw new CodesignError(
+      `DESIGN.md could not be prepared for prompt context: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+      ERROR_CODES.CONFIG_SCHEMA_INVALID,
+      { cause },
+    );
+  }
+}
+
 function safeProjectSettings(raw: string): string | undefined {
   let parsed: unknown;
   try {
@@ -366,12 +419,13 @@ function safeProjectSettings(raw: string): string | undefined {
 
 async function readProjectContext(workspaceRoot: string | undefined): Promise<ProjectContext> {
   if (!workspaceRoot) return {};
-  const [agentsMd, designMd, rawSettings] = await Promise.all([
+  const [agentsMd, rawDesignMd, rawSettings] = await Promise.all([
     readWorkspaceText(workspaceRoot, 'AGENTS.md', MAX_PROJECT_CONTEXT_CHARS),
-    readWorkspaceText(workspaceRoot, 'DESIGN.md', MAX_PROJECT_CONTEXT_CHARS),
+    readWorkspaceRawText(workspaceRoot, 'DESIGN.md'),
     readWorkspaceText(workspaceRoot, '.codesign/settings.json', MAX_PROJECT_SETTINGS_CHARS),
   ]);
   const settingsJson = rawSettings === undefined ? undefined : safeProjectSettings(rawSettings);
+  const designMd = rawDesignMd === undefined ? undefined : safeDesignMd(rawDesignMd);
   return {
     ...(agentsMd !== undefined ? { agentsMd } : {}),
     ...(designMd !== undefined ? { designMd } : {}),

@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Ferrari
-slug: ferrari
-category: Luxury
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Ferrari. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Ferrari Luxury design reference inspired by public brand materials.
 colors:
   primary: "#DA291C"
   secondary: "#000000"
@@ -19,56 +13,59 @@ colors:
   border: "#1F1F1F"
   accent: "#DA291C"
   yellowShield: "#FFCC00"
-
 typography:
   display:
-    fontFamily: "Ferrari Sans, Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 700
+    fontFamily: Ferrari Sans, Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 700
     lineHeight: 1.05
-    letterSpacing: "-0.01em"
+    letterSpacing: -0.01em
   body:
-    fontFamily: "Ferrari Sans, Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Ferrari Sans, Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0"
+    letterSpacing: 0em
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, monospace"
-    weight: 400
-
+    fontFamily: ui-monospace, SFMono-Regular, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 0px
+  md: 0px
+  lg: 2px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 16, 24, 32, 48, 64, 96, 128, 192]
-
-radius:
-  none: "0"
-  sm: "0"
-  md: "0"
-  lg: "2px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.40)"
-  md: "0 8px 24px rgba(0,0,0,0.50)"
-  lg: "0 24px 60px rgba(0,0,0,0.70)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "320ms"
-    slow: "600ms"
-  easing:
-    standard: "cubic-bezier(0.25, 0.1, 0.25, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 16px
+  lg: 24px
+  xl: 32px
+  2xl: 48px
+  3xl: 64px
+  4xl: 96px
+  5xl: 128px
+  6xl: 192px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Ferrari.com is automotive cinema. Hero bands are full-bleed cinematic video or photography of cars in motion against backdrops of black canvas, sometimes scored to engine audio. Type is reserved and editorial — Ferrari Sans (an industrial sans-serif) at modest sizes, almost always white on black or black on white. The brand red appears sparingly: the prancing horse shield, a single CTA underline, the occasional rule.
 
 The brand reads ceremonial: black canvases, slow video pans, generous space, no decoration.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#DA291C`) — Rosso Corsa; the historic Ferrari racing red. Used on the shield, primary CTAs, and rare accent rules.
 - `background` (`#000000`) — black; the dominant marketing canvas.
@@ -85,6 +82,14 @@ Ferrari Sans (custom) is the brand face. Display weight 700, modest tracking (-0
 
 Hierarchy is restrained — hero (48-72 px, the brand rarely goes massive) → eyebrow (12 px uppercase tracked +0.1em) → body (16-18 px) → caption (12 px). Numerals are tabular for technical specifications.
 
+## Layout
+
+Marketing pages alternate full-bleed cinematic bands (video or large photography) with constrained editorial bands (max ~960 px content column on dark or light surface). Section padding is large (96-192 px). The brand uses very few horizontal divisions per page — every section breathes.
+
+## Elevation & Depth
+
+The brand is essentially flat. Cinematic depth comes from photography and video — depth-of-field, lighting, motion blur. UI chrome avoids drop shadows. Elevation, when needed, is a subtle `md` shadow on modal sheets.
+
 ## Components
 
 - **Buttons**: 44-48 px height, square corners (no radius — the brand avoids rounded chrome), 1 px solid border in `text` color. Primary often shows just the label with a thin red underline as accent. Hover state inverts colors.
@@ -92,14 +97,6 @@ Hierarchy is restrained — hero (48-72 px, the brand rarely goes massive) → e
 - **Hero video**: full-bleed autoplaying car footage with no overlay UI; CTA appears on scroll-out.
 - **Cards**: borderless, anchored on photography with the model name and minimal meta below.
 - **Inputs**: 44 px height, square corners, 1 px white border.
-
-## Layout
-
-Marketing pages alternate full-bleed cinematic bands (video or large photography) with constrained editorial bands (max ~960 px content column on dark or light surface). Section padding is large (96-192 px). The brand uses very few horizontal divisions per page — every section breathes.
-
-## Depth & Elevation
-
-The brand is essentially flat. Cinematic depth comes from photography and video — depth-of-field, lighting, motion blur. UI chrome avoids drop shadows. Elevation, when needed, is a subtle `md` shadow on modal sheets.
 
 ## Do's & Don'ts
 

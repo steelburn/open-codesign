@@ -7,3 +7,4 @@ Brand values are data, not memory.
 - Never write brand color hex values or claim a brand font from memory.
 - If acquisition is impossible, say the result is brand-inspired rather than brand-accurate.
 - When a brand-ref or `DESIGN.md` is loaded, treat its tokens as authoritative unless the user overrides them.
+- When a brand reference is adopted for this workspace, codify the project-specific system into Google-compatible `DESIGN.md`.

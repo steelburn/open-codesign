@@ -22,11 +22,33 @@ function makeFs(initial: Record<string, string> = {}): TextEditorFsCallbacks {
     insert(path) {
       return { path };
     },
-    listDir() {
-      return [];
+    listDir(dir = '.') {
+      const prefix = dir === '.' || dir.length === 0 ? '' : `${dir.replace(/\/$/, '')}/`;
+      return [...map.keys()].filter((path) => path.startsWith(prefix)).sort();
     },
   };
 }
+
+const VALID_DESIGN_MD = `---
+version: alpha
+name: Project System
+colors:
+  primary: "#111111"
+typography:
+  body:
+    fontFamily: Inter
+    fontSize: 16px
+    fontWeight: 400
+rounded:
+  sm: 4px
+spacing:
+  sm: 8px
+---
+
+## Overview
+
+Use a compact product design system.
+`;
 
 describe('done tool', () => {
   it('documents unresolved-error warnings for artifact finalization', () => {
@@ -119,6 +141,47 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
     expect(res.details.status).toBe('ok');
     expect(res.details.errors).toHaveLength(0);
     expect(res.content[0]?.type).toBe('text');
+  });
+
+  it('validates DESIGN.md directly with the Google design.md rules', async () => {
+    const fs = makeFs({ 'DESIGN.md': VALID_DESIGN_MD });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-design-md', { path: 'DESIGN.md' });
+    expect(res.details.status).toBe('ok');
+    expect(res.details.path).toBe('DESIGN.md');
+  });
+
+  it('reports DESIGN.md validation errors directly', async () => {
+    const fs = makeFs({ 'DESIGN.md': VALID_DESIGN_MD.replace('rounded:', 'radius:') });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-design-md-bad', { path: 'DESIGN.md' });
+    expect(res.details.status).toBe('has_errors');
+    expect(res.details.errors.some((e) => /radius/.test(e.message))).toBe(true);
+  });
+
+  it('validates existing DESIGN.md before accepting App.jsx', async () => {
+    const fs = makeFs({
+      'App.jsx': `function App() { return <main><h1>Hi</h1></main>; }
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
+      'DESIGN.md': VALID_DESIGN_MD.replace('fontWeight: 400', 'weight: 400'),
+    });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-app-with-bad-design-md', { path: 'App.jsx' });
+    expect(res.details.status).toBe('has_errors');
+    expect(res.details.errors.some((e) => e.source === 'DESIGN.md')).toBe(true);
+  });
+
+  it('requires DESIGN.md when multiple renderable design sources exist', async () => {
+    const fs = makeFs({
+      'App.jsx': `function App() { return <main><h1>Hi</h1></main>; }
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
+      'settings.jsx': `function App() { return <main><h1>Settings</h1></main>; }
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
+    });
+    const tool = makeDoneTool(fs);
+    const res = await tool.execute('id-multi-no-design-md', { path: 'App.jsx' });
+    expect(res.details.status).toBe('has_errors');
+    expect(res.details.errors.some((e) => /DESIGN\.md/.test(e.message))).toBe(true);
   });
 
   it('flags stray content after ReactDOM.createRoot render (JSX)', async () => {

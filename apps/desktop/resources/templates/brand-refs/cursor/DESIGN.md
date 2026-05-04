@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Cursor
-slug: cursor
-category: Dev Tools
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Cursor. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Cursor Dev Tools design reference inspired by public brand materials.
 colors:
   primary: "#FFFFFF"
   secondary: "#0A0A0A"
@@ -18,56 +12,59 @@ colors:
   muted: "#888888"
   border: "#262626"
   accent: "#A6A6A6"
-
 typography:
   display:
-    fontFamily: "GT America, Inter, system-ui, sans-serif"
-    weight: 500
+    fontFamily: GT America, Inter, system-ui, sans-serif
+    fontWeight: 500
     lineHeight: 1.05
-    letterSpacing: "-0.03em"
+    letterSpacing: -0.03em
   body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.55
-    letterSpacing: "-0.011em"
+    letterSpacing: -0.011em
   mono:
-    fontFamily: "JetBrains Mono, SF Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: JetBrains Mono, SF Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 12px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96, 128]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "12px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.40)"
-  md: "0 8px 24px rgba(0,0,0,0.50)"
-  lg: "0 24px 60px rgba(0,0,0,0.60)"
-
-motion:
-  duration:
-    fast: "120ms"
-    normal: "200ms"
-    slow: "320ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+  6xl: 128px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Cursor's marketing surface is severe and editorial — pure black background, large white display type, almost no chrome, and one or two video clips of the editor in motion. The brand presents itself like a tech publication: confident, monochrome, type-led. The product itself is a VS Code fork with subtle Cursor-specific affordances (the AI sidebar, the inline diff overlay) that respect VS Code's existing visual language.
 
 The signature feel is "less than minimal" — the marketing site can fit on one screen and still say everything.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#FFFFFF`) — white; primary CTAs and headline copy on the black canvas.
 - `background` (`#000000`) — pure black; the marketing canvas.
@@ -85,6 +82,14 @@ Display uses GT America (or Inter as fallback) at weight 500, very tight trackin
 
 Mono (JetBrains Mono) appears in code mockups, diff illustrations, and the AI prompt UI. Hierarchy is enforced by scale and weight — color stays monochrome.
 
+## Layout
+
+Marketing pages use a centered single-column layout with max width ~1080 px and large vertical breaks (96-128 px). The page is short by design — hero, three feature blocks, footer. Inside the editor the layout is VS Code's: activity bar, sidebar, editor group, panel — Cursor adds a right-hand AI chat panel.
+
+## Elevation & Depth
+
+The brand is essentially flat. Editor mockups float on the page with a faint `md` shadow against the black background. No glassmorphism, no glow, no neon. Diff overlays inside the editor use color (green/red) as the only chromatic moments in the entire experience.
+
 ## Components
 
 - **Buttons**: 36-44 px height, 6 px radius. Primary: solid white background, black text, no border. Secondary: transparent with 1 px white border at 30% opacity.
@@ -92,14 +97,6 @@ Mono (JetBrains Mono) appears in code mockups, diff illustrations, and the AI pr
 - **Inline editor mockups**: framed in a `surfaceRaised` window chrome with three traffic-light dots, mono code inside.
 - **Inputs**: 40 px height, 6 px radius, 1 px `border` that brightens to white on focus.
 - **Pills / labels**: rounded-full, 12 px text, `surface` background.
-
-## Layout
-
-Marketing pages use a centered single-column layout with max width ~1080 px and large vertical breaks (96-128 px). The page is short by design — hero, three feature blocks, footer. Inside the editor the layout is VS Code's: activity bar, sidebar, editor group, panel — Cursor adds a right-hand AI chat panel.
-
-## Depth & Elevation
-
-The brand is essentially flat. Editor mockups float on the page with a faint `md` shadow against the black background. No glassmorphism, no glow, no neon. Diff overlays inside the editor use color (green/red) as the only chromatic moments in the entire experience.
 
 ## Do's & Don'ts
 

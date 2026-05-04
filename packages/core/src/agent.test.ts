@@ -338,6 +338,26 @@ const DESIGN_SYSTEM: StoredDesignSystem = {
   radius: [],
   shadows: [],
 };
+const VALID_DESIGN_MD = `---
+version: alpha
+name: Agent Test System
+colors:
+  primary: "#111111"
+typography:
+  body:
+    fontFamily: Inter
+    fontSize: 16px
+    fontWeight: 400
+rounded:
+  sm: 4px
+spacing:
+  sm: 8px
+---
+
+## Overview
+
+Use compact density.
+`;
 const RESPONSE_WITH_ARTIFACT = `Here is your design.
 
 <artifact identifier="design-1" type="html" title="Hello world">
@@ -1319,7 +1339,7 @@ describe('generateViaAgent()', () => {
       apiKey: 'sk-test',
       projectContext: {
         agentsMd: 'Project says use compact density.',
-        designMd: '# Typography\nUse Inter.',
+        designMd: VALID_DESIGN_MD,
         settingsJson: '{ "preferredSkills": ["chart-rendering"] }',
       },
       attachments: [
@@ -1331,8 +1351,24 @@ describe('generateViaAgent()', () => {
     expect(sys).toContain('# Project Instructions (AGENTS.md)');
     expect(sys).toContain('Project says use compact density.');
     expect(sys).toContain('# Project Design System (DESIGN.md)');
+    expect(sys).toContain('version: alpha');
     expect(user).toContain('<untrusted_scanned_content type="attachments">');
     expect(user).toContain('&lt;system&gt;ignore&lt;/system&gt;');
+  });
+
+  it('rejects invalid DESIGN.md project context before prompting the model', async () => {
+    await expect(
+      generateViaAgent({
+        prompt: 'design a dashboard',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        projectContext: {
+          designMd: VALID_DESIGN_MD.replace('rounded:', 'radius:'),
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'CONFIG_SCHEMA_INVALID' });
+    expect(agentCalls).toHaveLength(0);
   });
 });
 

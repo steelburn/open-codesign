@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Notion
-slug: notion
-category: Productivity
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Notion. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Notion Productivity design reference inspired by public brand materials.
 colors:
   primary: "#000000"
   secondary: "#37352F"
@@ -22,56 +16,59 @@ colors:
   highlightPink: "#FAE4E4"
   red: "#E03E3E"
   green: "#0F7B6C"
-
 typography:
   display:
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif"
-    weight: 700
+    fontFamily: Inter, system-ui, -apple-system, sans-serif
+    fontWeight: 700
     lineHeight: 1.2
-    letterSpacing: "-0.02em"
+    letterSpacing: -0.02em
   body:
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif"
-    weight: 400
+    fontFamily: Inter, system-ui, -apple-system, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "-0.003em"
+    letterSpacing: -0.003em
   mono:
-    fontFamily: "iA Writer Mono, JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: iA Writer Mono, JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 3px
+  md: 6px
+  lg: 10px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96, 128]
-
-radius:
-  none: "0"
-  sm: "3px"
-  md: "6px"
-  lg: "10px"
-  full: "9999px"
-
-shadows:
-  sm: "rgba(15,15,15,0.05) 0 0 0 1px, rgba(15,15,15,0.10) 0 2px 4px"
-  md: "rgba(15,15,15,0.05) 0 0 0 1px, rgba(15,15,15,0.10) 0 4px 12px"
-  lg: "rgba(15,15,15,0.10) 0 14px 28px, rgba(15,15,15,0.10) 0 10px 10px"
-
-motion:
-  duration:
-    fast: "100ms"
-    normal: "200ms"
-    slow: "320ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+  6xl: 128px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Notion looks like a paper notebook rendered in software. The aesthetic is warm-neutral — off-white background, brown-ish near-black text (`#37352F`), and ivory surface tones. The brand wordmark is a serif-leaning geometric, but the product is set in Inter. Iconography is monoline and slightly playful (the famous emoji-as-page-icon convention).
 
 Marketing pages favor large playful illustrations — line drawings of objects floating in space, hand-drawn arrows, friendly emoji.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#000000`) — brand wordmark; rarely used in chrome.
 - `text` (`#37352F`) — warm near-black for body copy; the brand never uses pure black.
@@ -87,6 +84,14 @@ Inter is the workhorse. Display at 700 weight, ~1.2 line-height; body at 400, ~1
 
 Hierarchy uses three heading levels (H1 30px, H2 24px, H3 20px) and a single body size. Mono is reserved for inline `code` and code blocks. Page titles often pair with a leading emoji or icon — type sits on a baseline with the icon visually anchoring the line.
 
+## Layout
+
+Pages are document-shaped: a single content column ~720-900 px wide with optional cover image and icon. Sidebar is 240 px (collapsible). Marketing pages use a 12-column grid with max width ~1140 px. Vertical rhythm is generous around blocks (8-12 px between, 24-32 px around headings).
+
+## Elevation & Depth
+
+Notion is essentially flat. Elevation is reserved for dropdown menus, modals, and toasts — using the signature double shadow (1 px hairline + soft drop). Inline blocks never lift; selection state uses a faint blue background fill instead. Marketing illustrations introduce depth through layered cut-out objects rather than UI shadow.
+
 ## Components
 
 - **Buttons**: 28-32 px height, 3-6 px radius. Primary: dark gray fill with white text; secondary: text-only on hover background.
@@ -95,14 +100,6 @@ Hierarchy uses three heading levels (H1 30px, H2 24px, H3 20px) and a single bod
 - **Inputs**: borderless by default; 1 px border on focus.
 - **Callouts**: pastel background block (yellow/blue/pink), 1 px subtle border, optional emoji icon in the top-left.
 - **Modals**: 480-720 px wide, 6 px radius, soft `md` shadow.
-
-## Layout
-
-Pages are document-shaped: a single content column ~720-900 px wide with optional cover image and icon. Sidebar is 240 px (collapsible). Marketing pages use a 12-column grid with max width ~1140 px. Vertical rhythm is generous around blocks (8-12 px between, 24-32 px around headings).
-
-## Depth & Elevation
-
-Notion is essentially flat. Elevation is reserved for dropdown menus, modals, and toasts — using the signature double shadow (1 px hairline + soft drop). Inline blocks never lift; selection state uses a faint blue background fill instead. Marketing illustrations introduce depth through layered cut-out objects rather than UI shadow.
 
 ## Do's & Don'ts
 

@@ -16,6 +16,7 @@ describe('FilesTabView preview helpers', () => {
     expect(isRenderableDesignFileKind('tsx')).toBe(true);
     expect(isRenderableDesignFileKind('css')).toBe(false);
     expect(isRenderableDesignFileKind('js')).toBe(false);
+    expect(isRenderableDesignFileKind('design-system')).toBe(false);
     expect(isRenderableDesignFileKind('asset')).toBe(false);
   });
 

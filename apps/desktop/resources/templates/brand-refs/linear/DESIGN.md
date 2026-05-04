@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Linear
-slug: linear
-category: Productivity
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Linear. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Linear Productivity design reference inspired by public brand materials.
 colors:
   primary: "#5E6AD2"
   secondary: "#26282F"
@@ -21,57 +15,60 @@ colors:
   success: "#4CB782"
   warning: "#F2C94C"
   error: "#EB5757"
-
 typography:
   display:
-    fontFamily: "Inter Display, Inter, system-ui, sans-serif"
-    weight: 600
+    fontFamily: Inter Display, Inter, system-ui, sans-serif
+    fontWeight: 600
     lineHeight: 1.1
-    letterSpacing: "-0.022em"
+    letterSpacing: -0.022em
   body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "-0.011em"
+    letterSpacing: -0.011em
   mono:
-    fontFamily: "Berkeley Mono, JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: Berkeley Mono, JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 6px
+  lg: 8px
+  xl: 12px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 20, 24, 32, 40, 48, 64]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "6px"
-  lg: "8px"
-  xl: "12px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.20)"
-  md: "0 8px 24px rgba(0,0,0,0.30)"
-  lg: "0 24px 48px rgba(0,0,0,0.40)"
-
-motion:
-  duration:
-    fast: "100ms"
-    normal: "180ms"
-    slow: "300ms"
-  easing:
-    standard: "cubic-bezier(0.25, 0.1, 0.25, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 20px
+  2xl: 24px
+  3xl: 32px
+  4xl: 40px
+  5xl: 48px
+  6xl: 64px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Linear is keyboard-first software dressed in a slate-gray cathedral. The base aesthetic is dark, near-black, with cool desaturated grays and a single periwinkle accent (`#5E6AD2`) doing all the work. Hero pages ship subtle moving gradients and abstract aurora effects, but the product UI is dense, quiet, and built for speed.
 
 Type is precise and slightly tight; spacing is compact. The brand reads less like a SaaS marketing site and more like a developer tool that happens to have a beautiful skin.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#5E6AD2`) — the periwinkle Linear-blue; used for primary CTAs, hover states on selected rows, and brand chrome.
 - `background` (`#08090A`) — the near-black canvas for the app and dark marketing pages.
@@ -89,6 +86,14 @@ Inter (with Inter Display for hero copy) is the workhorse. Display weight is 600
 
 Mono (Berkeley Mono on marketing, JetBrains Mono in product) appears in keyboard-shortcut chips and code blocks.
 
+## Layout
+
+App is a three-column layout: 240 px sidebar, fluid main, optional 320 px detail rail. Marketing pages cap at ~1100 px. Dense vertical rhythm — 4 and 8 px increments dominate; rarely above 64 px gaps in product, larger gaps (96-128 px) on marketing.
+
+## Elevation & Depth
+
+The product is essentially flat with hairline borders. Elevation is reserved for modals, popovers, and toasts — and even then, the shadow is dark and soft rather than bright. Marketing hero sections introduce a signature aurora/gradient haze that fades to background; this is the only "depth" effect on the marketing surface and is never repeated within the product UI.
+
 ## Components
 
 - **Buttons**: 28-32 px height, 6 px radius. Primary: solid `primary` background, no border, no shadow, color shift on hover. Secondary: transparent background, 1 px `border`, `text` color.
@@ -97,14 +102,6 @@ Mono (Berkeley Mono on marketing, JetBrains Mono in product) appears in keyboard
 - **Keyboard chips**: monospaced, ~10-12 px, rounded-md, 1 px border, used everywhere shortcuts are shown.
 - **Modals**: centered, 480-640 px wide, 12 px radius, soft `lg` shadow, no backdrop blur.
 - **Avatars**: rounded-full, deterministic gradient fill from initials.
-
-## Layout
-
-App is a three-column layout: 240 px sidebar, fluid main, optional 320 px detail rail. Marketing pages cap at ~1100 px. Dense vertical rhythm — 4 and 8 px increments dominate; rarely above 64 px gaps in product, larger gaps (96-128 px) on marketing.
-
-## Depth & Elevation
-
-The product is essentially flat with hairline borders. Elevation is reserved for modals, popovers, and toasts — and even then, the shadow is dark and soft rather than bright. Marketing hero sections introduce a signature aurora/gradient haze that fades to background; this is the only "depth" effect on the marketing surface and is never repeated within the product UI.
 
 ## Do's & Don'ts
 

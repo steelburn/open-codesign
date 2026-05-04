@@ -135,7 +135,7 @@ export interface WorkspaceFileEntry {
   updatedAt: string;
 }
 
-export type WorkspaceFileKind = 'html' | 'jsx' | 'tsx' | 'css' | 'js' | 'asset';
+export type WorkspaceFileKind = 'html' | 'jsx' | 'tsx' | 'css' | 'js' | 'design-system' | 'asset';
 
 export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
   content: string;
@@ -148,6 +148,7 @@ const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 
 export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
   const lower = path.toLowerCase();
+  if (lower === 'design.md' || lower.endsWith('/design.md')) return 'design-system';
   if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html';
   if (lower.endsWith('.jsx')) return 'jsx';
   if (lower.endsWith('.tsx')) return 'tsx';

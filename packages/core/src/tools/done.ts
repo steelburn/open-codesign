@@ -15,7 +15,7 @@
  */
 
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
-import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
+import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY, validateDesignMd } from '@open-codesign/shared';
 import { Type } from '@sinclair/typebox';
 import type { TextEditorFsCallbacks } from './text-editor.js';
 
@@ -23,6 +23,8 @@ const DoneParams = Type.Object({
   summary: Type.Optional(Type.String()),
   path: Type.Optional(Type.String()),
 });
+
+const DESIGN_MD_ENTRY = 'DESIGN.md';
 
 export interface DoneError {
   message: string;
@@ -42,6 +44,47 @@ function resolveDonePath(fs: TextEditorFsCallbacks, requested: string | undefine
   if (fs.view(DEFAULT_SOURCE_ENTRY) !== null) return DEFAULT_SOURCE_ENTRY;
   if (fs.view(LEGACY_SOURCE_ENTRY) !== null) return LEGACY_SOURCE_ENTRY;
   return DEFAULT_SOURCE_ENTRY;
+}
+
+function isRenderableDesignSourcePath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return (
+    lower.endsWith('.jsx') ||
+    lower.endsWith('.tsx') ||
+    lower.endsWith('.html') ||
+    lower.endsWith('.htm')
+  );
+}
+
+function validateDesignMdContent(content: string): DoneError[] {
+  return validateDesignMd(content)
+    .filter((finding) => finding.severity === 'error')
+    .map((finding) => ({
+      message: `${finding.path}: ${finding.message}`,
+      source: DESIGN_MD_ENTRY,
+    }));
+}
+
+function designMdWorkspaceErrors(fs: TextEditorFsCallbacks, activePath: string): DoneError[] {
+  const errors: DoneError[] = [];
+  const designFile = fs.view(DESIGN_MD_ENTRY);
+  if (designFile !== null) {
+    errors.push(...validateDesignMdContent(designFile.content));
+    return errors;
+  }
+  const renderable = fs
+    .listDir('.')
+    .filter((path) => isRenderableDesignSourcePath(path))
+    .filter((path) => path !== activePath);
+  if (isRenderableDesignSourcePath(activePath)) renderable.push(activePath);
+  const uniqueRenderable = [...new Set(renderable)];
+  if (uniqueRenderable.length > 1) {
+    errors.push({
+      message: `Multiple design sources found (${uniqueRenderable.join(', ')}); create a Google-compatible DESIGN.md before finishing multi-screen work.`,
+      source: DESIGN_MD_ENTRY,
+    });
+  }
+  return errors;
 }
 
 /** Host-injected runtime verifier. Receives the raw artifact source (the
@@ -336,11 +379,27 @@ export function makeDoneTool(
           details,
         };
       }
+      if (path === DESIGN_MD_ENTRY) {
+        const errors = validateDesignMdContent(file.content);
+        const status: DoneDetails['status'] = errors.length === 0 ? 'ok' : 'has_errors';
+        const details: DoneDetails = {
+          status,
+          path,
+          errors,
+          ...(params.summary !== undefined ? { summary: params.summary } : {}),
+        };
+        const text =
+          status === 'ok'
+            ? 'ok — DESIGN.md is valid Google design.md.'
+            : `has_errors\n${errors.map((e) => `- ${e.message}`).join('\n')}`;
+        return { content: [{ type: 'text', text }], details };
+      }
       const errors: DoneError[] = [
         ...findJsxStructuralIssues(file.content),
         ...(isJsxShaped(file.content) ? [] : findUnclosedTags(file.content)),
         ...findDuplicateIds(file.content),
         ...findMissingAlt(file.content),
+        ...designMdWorkspaceErrors(fs, path),
       ];
       if (runtimeVerify) {
         try {

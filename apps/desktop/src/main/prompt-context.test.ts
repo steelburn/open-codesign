@@ -4,6 +4,31 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { preparePromptContext } from './prompt-context';
 
+const VALID_DESIGN_MD = `---
+version: alpha
+name: Project System
+colors:
+  primary: "#111111"
+typography:
+  body:
+    fontFamily: Inter
+    fontSize: 16px
+    fontWeight: 400
+rounded:
+  sm: 4px
+spacing:
+  sm: 8px
+---
+
+## Overview
+
+Use Inter with compact project density.
+
+## Colors
+
+Use primary for text and key actions.
+`;
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -351,7 +376,7 @@ describe('preparePromptContext', () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-'));
     await fs.mkdir(path.join(dir, '.codesign'), { recursive: true });
     await fs.writeFile(path.join(dir, 'AGENTS.md'), 'Follow project density rules.', 'utf8');
-    await fs.writeFile(path.join(dir, 'DESIGN.md'), '# Tokens\nUse Inter.', 'utf8');
+    await fs.writeFile(path.join(dir, 'DESIGN.md'), VALID_DESIGN_MD, 'utf8');
     await fs.writeFile(
       path.join(dir, '.codesign', 'settings.json'),
       JSON.stringify({
@@ -366,10 +391,25 @@ describe('preparePromptContext', () => {
     const result = await preparePromptContext({ workspaceRoot: dir });
 
     expect(result.projectContext.agentsMd).toContain('project density');
-    expect(result.projectContext.designMd).toContain('Use Inter');
+    expect(result.projectContext.designMd).toContain('version: alpha');
+    expect(result.projectContext.designMd).toContain('Use Inter with compact project density.');
     expect(result.projectContext.settingsJson).toContain('preferredSkills');
     expect(result.projectContext.settingsJson).not.toContain('apiKey');
     expect(result.projectContext.settingsJson).not.toContain('arbitrary');
+  });
+
+  it('rejects invalid workspace DESIGN.md instead of silently ignoring it', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'codesign-project-context-design-'));
+    await fs.writeFile(
+      path.join(dir, 'DESIGN.md'),
+      VALID_DESIGN_MD.replace('rounded:', 'radius:'),
+      'utf8',
+    );
+
+    await expect(preparePromptContext({ workspaceRoot: dir })).rejects.toMatchObject({
+      name: 'CodesignError',
+      code: 'CONFIG_SCHEMA_INVALID',
+    });
   });
 
   it('rejects project context files that traverse workspace symlinks', async () => {

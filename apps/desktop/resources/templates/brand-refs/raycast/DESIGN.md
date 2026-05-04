@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Raycast
-slug: raycast
-category: Productivity
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Raycast. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Raycast Productivity design reference inspired by public brand materials.
 colors:
   primary: "#FF6363"
   secondary: "#0D0D0D"
@@ -19,57 +13,60 @@ colors:
   border: "#262626"
   accent: "#FF6363"
   highlight: "#FF8E8E"
-
 typography:
   display:
-    fontFamily: "Söhne, Inter Display, Inter, system-ui, sans-serif"
-    weight: 600
+    fontFamily: Söhne, Inter Display, Inter, system-ui, sans-serif
+    fontWeight: 600
     lineHeight: 1.05
-    letterSpacing: "-0.025em"
+    letterSpacing: -0.025em
   body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.55
-    letterSpacing: "-0.011em"
+    letterSpacing: -0.011em
   mono:
-    fontFamily: "JetBrains Mono, SF Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: JetBrains Mono, SF Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 12px
+  xl: 16px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96, 128]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "12px"
-  xl: "16px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.40)"
-  md: "0 12px 32px rgba(0,0,0,0.50)"
-  lg: "0 32px 60px rgba(0,0,0,0.60)"
-
-motion:
-  duration:
-    fast: "120ms"
-    normal: "200ms"
-    slow: "320ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+  6xl: 128px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Raycast is a beautifully crafted command palette for the Mac, and the marketing site reads like an Apple-product page rendered by an indie team that loves graphic design. Pages are dark, type-led, and full of polished product mockups (the command bar, results lists, AI chat) floating against subtle gradient backgrounds. The signature accent is coral-red (`#FF6363`) — used on the Raycast logo and primary CTAs.
 
 The product itself is a translucent floating panel — the marketing site captures that floating-glass feel with soft shadows and gentle gradients on hero sections.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#FF6363`) — Raycast coral; primary CTAs, brand mark, accent rules.
 - `background` (`#0D0D0D`) — near-black canvas.
@@ -86,6 +83,14 @@ Söhne (or Inter Display as fallback) at weight 600, tight tracking (-0.025em), 
 
 Hierarchy: hero (56-80 px) → section (32-40 px) → body (16 px) → caption/mono (13 px). Keyboard chips are everywhere — Raycast is a keyboard-first product.
 
+## Layout
+
+12-column grid, max content width ~1240 px. Section padding 96-128 px. Marketing pages center the floating command-palette mockup on a soft gradient background, then alternate feature bands below. Long-form blog posts use a narrow content column (~720 px).
+
+## Elevation & Depth
+
+The brand's signature is the floating-panel effect: a dark rounded panel with soft `md` or `lg` shadow against a subtle gradient background. Shadows are dark and long; cards lift on hover. Subtle gradient washes (radial blur, soft purple/pink tints) appear behind the hero panel — the only chromatic decoration outside coral.
+
 ## Components
 
 - **Command palette mockup**: floating dark rounded-xl panel with soft drop shadow, search input at top, list rows below with icon + label + keyboard chip on the right. The hero element of the brand.
@@ -93,14 +98,6 @@ Hierarchy: hero (56-80 px) → section (32-40 px) → body (16 px) → caption/m
 - **Keyboard chips**: monospaced ~12 px on `surfaceRaised` background, 1 px `border`, 4 px radius, often paired with a "+" or "→".
 - **Cards**: `surface` background, 12 px radius, hairline border, soft `sm` shadow.
 - **Inputs**: 36 px height, 6 px radius, 1 px border, brightens on focus.
-
-## Layout
-
-12-column grid, max content width ~1240 px. Section padding 96-128 px. Marketing pages center the floating command-palette mockup on a soft gradient background, then alternate feature bands below. Long-form blog posts use a narrow content column (~720 px).
-
-## Depth & Elevation
-
-The brand's signature is the floating-panel effect: a dark rounded panel with soft `md` or `lg` shadow against a subtle gradient background. Shadows are dark and long; cards lift on hover. Subtle gradient washes (radial blur, soft purple/pink tints) appear behind the hero panel — the only chromatic decoration outside coral.
 
 ## Do's & Don'ts
 

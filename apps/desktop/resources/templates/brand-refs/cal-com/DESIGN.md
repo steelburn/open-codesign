@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Cal.com
-slug: cal-com
-category: SaaS
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Cal.com. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Cal.com SaaS design reference inspired by public brand materials.
 colors:
   primary: "#111827"
   secondary: "#0E1A35"
@@ -20,57 +14,59 @@ colors:
   brandBlue: "#292929"
   successGreen: "#10B981"
   errorRed: "#EF4444"
-
 typography:
   display:
-    fontFamily: "Cal Sans, Inter Display, Inter, system-ui, sans-serif"
-    weight: 600
+    fontFamily: Cal Sans, Inter Display, Inter, system-ui, sans-serif
+    fontWeight: 600
     lineHeight: 1.05
-    letterSpacing: "-0.025em"
+    letterSpacing: -0.025em
   body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.55
-    letterSpacing: "-0.011em"
+    letterSpacing: -0.011em
   mono:
-    fontFamily: "JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 12px
+  xl: 16px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "12px"
-  xl: "16px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(15,23,42,0.04)"
-  md: "0 4px 16px rgba(15,23,42,0.08)"
-  lg: "0 16px 40px rgba(15,23,42,0.12)"
-
-motion:
-  duration:
-    fast: "120ms"
-    normal: "200ms"
-    slow: "320ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Cal.com is the open-source Calendly with a designer's eye. The brand uses Cal Sans — its proprietary geometric display face — paired with Inter for body. Marketing pages are calm, monochrome (near-black + white), and built around the booking-page widget itself as the hero element. The product is minimal, deliberately calendar-shaped, and respects the user's time visually as much as functionally.
 
 The brand voice is thoughtful and quietly confident — closer to a design boutique than a SaaS startup.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#111827`) — near-black; primary CTAs, brand chrome.
 - `text` (`#111827`) — primary copy.
@@ -88,6 +84,14 @@ Cal Sans (custom display, by Pablo Stanley) is the brand face — geometric sans
 
 Hierarchy: hero (56-80 px Cal Sans) → section (32-40 px) → body (16 px Inter) → caption (13 px). Mono appears for time codes and keyboard chips.
 
+## Layout
+
+12-column grid, max marketing width ~1200 px. Section padding 96-128 px on marketing. The booking page itself uses a centered narrow column (~720 px) with the widget anchored at the top. Product dashboard uses a 240 px sidebar with main content cards.
+
+## Elevation & Depth
+
+The brand is mostly flat with rounded soft elevation. The booking widget gets a subtle `sm` shadow; cards lift on hover. Modals and popovers use `md` shadow. No glassmorphism, no glow.
+
 ## Components
 
 - **Booking-page widget**: white card on `surface`, ~12 px radius, hairline border, soft `sm` shadow. Hosts a small calendar grid and a column of time slots — the brand's signature mockup.
@@ -96,14 +100,6 @@ Hierarchy: hero (56-80 px Cal Sans) → section (32-40 px) → body (16 px Inter
 - **Inputs**: 40 px height, 8 px radius, 1 px `border` brightening on focus.
 - **Tabs**: text only with bottom underline; active tab gains 2 px `text` underline.
 - **Avatars**: rounded-full with deterministic color from initials.
-
-## Layout
-
-12-column grid, max marketing width ~1200 px. Section padding 96-128 px on marketing. The booking page itself uses a centered narrow column (~720 px) with the widget anchored at the top. Product dashboard uses a 240 px sidebar with main content cards.
-
-## Depth & Elevation
-
-The brand is mostly flat with rounded soft elevation. The booking widget gets a subtle `sm` shadow; cards lift on hover. Modals and popovers use `md` shadow. No glassmorphism, no glow.
 
 ## Do's & Don'ts
 

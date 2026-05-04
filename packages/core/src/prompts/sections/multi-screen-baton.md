@@ -1,8 +1,9 @@
 # Multi-screen consistency
 
-When a workspace spans multiple screens or artifacts, use `DESIGN.md` as the baton.
+Use `DESIGN.md` as the baton across screens or artifacts.
 
-- Before creating a second screen, check whether `DESIGN.md` exists.
-- If no design system exists, create one from the first artifact's resolved tokens.
-- Update `DESIGN.md` when a new reusable color, font, radius, shadow, or component pattern appears.
-- Reuse component names and token names across screens unless the user asks for a variant.
+- Before creating a second screen or artifact, check for `DESIGN.md`.
+- If absent, create one from the first artifact's resolved tokens.
+- Update it when reusable color, font, rounded, shadow rationale, or component patterns appear.
+- Promote stable TWEAK_DEFAULTS values to `DESIGN.md` when they become cross-screen tokens.
+- Reuse component and token names unless the user asks for a variant.

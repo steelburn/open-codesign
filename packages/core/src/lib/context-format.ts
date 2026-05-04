@@ -22,7 +22,8 @@ ${payload}
 
 export function formatDesignSystem(designSystem: StoredDesignSystem): string {
   const lines = [
-    '## Design system to follow',
+    '## Linked design-system scan',
+    'This is a candidate design-system scan. DESIGN.md is the authoritative design-system artifact when present.',
     `Root path: ${designSystem.rootPath}`,
     `Summary: ${designSystem.summary}`,
   ];

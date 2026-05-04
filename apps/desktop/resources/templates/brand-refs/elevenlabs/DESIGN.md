@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: ElevenLabs
-slug: elevenlabs
-category: AI
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by ElevenLabs. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: ElevenLabs AI design reference inspired by public brand materials.
 colors:
   primary: "#000000"
   secondary: "#FFFFFF"
@@ -17,56 +11,59 @@ colors:
   muted: "#737373"
   border: "#E5E5E5"
   accent: "#000000"
-
 typography:
   display:
-    fontFamily: "Söhne, Inter Display, Inter, system-ui, sans-serif"
-    weight: 500
+    fontFamily: Söhne, Inter Display, Inter, system-ui, sans-serif
+    fontWeight: 500
     lineHeight: 1.05
-    letterSpacing: "-0.025em"
+    letterSpacing: -0.025em
   body:
-    fontFamily: "Söhne, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Söhne, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.55
-    letterSpacing: "-0.005em"
+    letterSpacing: -0.005em
   mono:
-    fontFamily: "JetBrains Mono, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: JetBrains Mono, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 12px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96, 128]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "12px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.04)"
-  md: "0 8px 24px rgba(0,0,0,0.06)"
-  lg: "0 24px 48px rgba(0,0,0,0.10)"
-
-motion:
-  duration:
-    fast: "120ms"
-    normal: "200ms"
-    slow: "320ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+  6xl: 128px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 ElevenLabs is monochrome to a fault — black, white, two grays, and audio waveforms doing the visual work. The brand identity is type-led and editorial; the marketing surface looks like a tasteful audio-tech magazine. The hero is usually a single oversized headline + an inline audio player demonstrating the voice synthesis. No bright accents, no gradients.
 
 The product UI inherits the same monochrome — black play buttons, gray waveforms, hairline borders.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#000000`) — black; primary CTAs, brand wordmark, play buttons.
 - `background` (`#FFFFFF`) — white in light mode (default).
@@ -83,6 +80,14 @@ Söhne (or Inter Display as fallback) at weight 500 for display, tight tracking 
 
 Hierarchy: hero (64-96 px) → section (32-40 px) → body (16 px) → caption/mono (13 px). Mono appears for voice IDs, timecodes, and code samples.
 
+## Layout
+
+12-column grid, max content width ~1200 px. Section padding 96-128 px. Marketing pages use single-column editorial layouts punctuated by inline audio players. Product dashboard uses a 240 px sidebar with a fluid main area; voice library views are dense card grids.
+
+## Elevation & Depth
+
+Essentially flat. Modals and popovers use soft `md` shadow on a dimmed backdrop. Voice cards lift gently on hover. Audio waveforms animate during playback (the bars rise and fall in `muted`) — this is the only motion-based depth in the brand.
+
 ## Components
 
 - **Buttons**: 36-40 px height, 6-8 px radius. Primary: solid black with white text, no border, no shadow. Secondary: white with 1 px black border.
@@ -90,14 +95,6 @@ Hierarchy: hero (64-96 px) → section (32-40 px) → body (16 px) → caption/m
 - **Voice cards**: white on `surface`, 8-12 px radius, hairline border, voice name + sample play button + tags.
 - **Inputs**: 40 px height, 6 px radius, 1 px `border` that thickens to black on focus.
 - **Tags / chips**: rounded-full, `surface` background, 12 px text in `muted`.
-
-## Layout
-
-12-column grid, max content width ~1200 px. Section padding 96-128 px. Marketing pages use single-column editorial layouts punctuated by inline audio players. Product dashboard uses a 240 px sidebar with a fluid main area; voice library views are dense card grids.
-
-## Depth & Elevation
-
-Essentially flat. Modals and popovers use soft `md` shadow on a dimmed backdrop. Voice cards lift gently on hover. Audio waveforms animate during playback (the bars rise and fall in `muted`) — this is the only motion-based depth in the brand.
 
 ## Do's & Don'ts
 

@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: SpaceX
-slug: spacex
-category: Tech
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by SpaceX. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: SpaceX Tech design reference inspired by public brand materials.
 colors:
   primary: "#FFFFFF"
   secondary: "#005288"
@@ -17,56 +11,60 @@ colors:
   muted: "#A7A7A7"
   border: "#1A1A1A"
   accent: "#005288"
-
 typography:
   display:
-    fontFamily: "D-DIN Condensed, D-DIN, DIN Condensed, Helvetica Neue Condensed, Inter, system-ui, sans-serif"
-    weight: 700
-    lineHeight: 1.0
-    letterSpacing: "0.02em"
+    fontFamily: D-DIN Condensed, D-DIN, DIN Condensed, Helvetica Neue Condensed,
+      Inter, system-ui, sans-serif
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: 0.02em
   body:
-    fontFamily: "D-DIN, Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: D-DIN, Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0.005em"
+    letterSpacing: 0.005em
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, monospace"
-    weight: 400
-
+    fontFamily: ui-monospace, SFMono-Regular, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 0px
+  md: 0px
+  lg: 0px
+  full: 0px
 spacing:
   unit: 4
-  scale: [4, 8, 16, 24, 32, 48, 64, 96, 128, 192]
-
-radius:
-  none: "0"
-  sm: "0"
-  md: "0"
-  lg: "0"
-  full: "0"
-
-shadows:
-  sm: "none"
-  md: "none"
-  lg: "0 24px 48px rgba(0,0,0,0.50)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "320ms"
-    slow: "600ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 16px
+  lg: 24px
+  xl: 32px
+  2xl: 48px
+  3xl: 64px
+  4xl: 96px
+  5xl: 128px
+  6xl: 192px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 SpaceX.com is mission-control aesthetic: full-bleed black, large rocket photography or launch video, condensed uppercase headlines in DIN, and minimal navigation. The brand vibe is institutional engineering — closer to NASA documentation than a tech startup site. Pages are short, spare, and dramatic. The single nav bar floats over hero photography; hero text reads like a mission name.
 
 Decoration is essentially absent. Type and photography do everything.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#FFFFFF`) — white; the only text color and primary CTA fill.
 - `background` (`#000000`) — pure black; the canvas of every page.
@@ -84,6 +82,14 @@ D-DIN (and D-DIN Condensed for headlines) is the brand face — a digital reviva
 
 Hierarchy: hero (64-120 px / condensed / uppercase) → eyebrow (12-13 px / uppercase / tracked +0.1em) → body (15-16 px) → caption (12 px). Numerals are tabular for telemetry-style data.
 
+## Layout
+
+Single-column hero-focused pages. Max content widths sit around 1280 px when content needs reading width, but most pages are full-bleed. Section padding is generous (96-192 px). Pages are short — often a single hero image with a caption and one CTA.
+
+## Elevation & Depth
+
+The brand is uncompromisingly flat. There is no drop shadow language at all in default chrome. Elevation arises only from photography (depth-of-field, atmospheric haze) and from videos of launches. UI chrome lives on hairline borders; modals, when used, cover the screen rather than floating.
+
 ## Components
 
 - **Buttons**: rectangular (zero radius), 1 px white border, transparent background, white uppercase label tracked +0.1em. ~40-48 px height. Hover fills white with black text.
@@ -91,14 +97,6 @@ Hierarchy: hero (64-120 px / condensed / uppercase) → eyebrow (12-13 px / uppe
 - **Mission cards**: full-bleed image with white uppercase title overlaid, no border, no shadow.
 - **Inputs**: rectangular, 1 px white border, transparent fill — feels like cockpit instrumentation.
 - **Tables / specs**: monospaced labels in `muted` smallcaps, white values; hairline dividers.
-
-## Layout
-
-Single-column hero-focused pages. Max content widths sit around 1280 px when content needs reading width, but most pages are full-bleed. Section padding is generous (96-192 px). Pages are short — often a single hero image with a caption and one CTA.
-
-## Depth & Elevation
-
-The brand is uncompromisingly flat. There is no drop shadow language at all in default chrome. Elevation arises only from photography (depth-of-field, atmospheric haze) and from videos of launches. UI chrome lives on hairline borders; modals, when used, cover the screen rather than floating.
 
 ## Do's & Don'ts
 

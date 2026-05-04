@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Apple
-slug: apple
-category: Consumer
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Apple. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Apple Consumer design reference inspired by public brand materials.
 colors:
   primary: "#0071E3"
   secondary: "#1D1D1F"
@@ -19,57 +13,61 @@ colors:
   accent: "#0071E3"
   successGreen: "#2D8A3E"
   alertRed: "#BF4800"
-
 typography:
   display:
-    fontFamily: "SF Pro Display, -apple-system, BlinkMacSystemFont, system-ui, sans-serif"
-    weight: 600
+    fontFamily: SF Pro Display, -apple-system, BlinkMacSystemFont, system-ui, sans-serif
+    fontWeight: 600
     lineHeight: 1.05
-    letterSpacing: "-0.025em"
+    letterSpacing: -0.025em
   body:
-    fontFamily: "SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif"
-    weight: 400
+    fontFamily: SF Pro Text, -apple-system, BlinkMacSystemFont, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.47
-    letterSpacing: "-0.016em"
+    letterSpacing: -0.016em
   mono:
-    fontFamily: "SF Mono, Menlo, ui-monospace, monospace"
-    weight: 400
-
+    fontFamily: SF Mono, Menlo, ui-monospace, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 6px
+  md: 12px
+  lg: 18px
+  xl: 24px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192]
-
-radius:
-  none: "0"
-  sm: "6px"
-  md: "12px"
-  lg: "18px"
-  xl: "24px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 4px rgba(0,0,0,0.04)"
-  md: "0 4px 16px rgba(0,0,0,0.08)"
-  lg: "0 24px 60px rgba(0,0,0,0.12)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "300ms"
-    slow: "600ms"
-  easing:
-    standard: "cubic-bezier(0.42, 0, 0.58, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+  6xl: 128px
+  7xl: 192px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Apple.com is the canonical "luxury technology" page: enormous product photography on white or near-black backgrounds, very large display type, generous vertical rhythm, and a pill-shaped action button in Apple-blue. Pages alternate between full-bleed product hero sections (often dark) and lighter editorial bands (often `surface` gray). Motion is subtle — fades, parallax, scroll-driven product reveals — never bouncy.
 
 The brand reads premium because it withholds: minimal color, restrained typography, almost no decoration, oceans of white space.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#0071E3`) — Apple blue; reserved for links, CTAs, focus rings.
 - `secondary` (`#1D1D1F`) — near-black; primary text and dark hero backgrounds.
@@ -86,6 +84,14 @@ SF Pro Display for headings (>20 px), SF Pro Text for body (<20 px) — Apple sh
 
 Hierarchy is enforced through enormous scale jumps: hero (80-104 px) → section (40-56 px) → eyebrow (12-14 px uppercase) → body (17 px). The 17 px body baseline is a long-standing Apple convention.
 
+## Layout
+
+12-column grid, max content width ~1024-1240 px depending on page. Vertical rhythm is generous: section padding rarely below 96 px, often 128-192 px between major bands. Hero sections often go full-bleed; secondary content respects the central column.
+
+## Elevation & Depth
+
+The product surface is nearly flat with the exception of hover-state lifts on product tiles and modal overlays. Marketing depth comes from photography (lit aluminum, OLED glow, depth-of-field) and from scroll-driven parallax — never from drop shadows on UI chrome. Translucent backdrop blur is reserved for the top navigation.
+
 ## Components
 
 - **Buttons**: pill-shaped (rounded-full or 980 px radius), 14-16 px vertical padding. Primary: solid Apple blue, white text, no border, no shadow. Secondary: blue text on transparent background with the same pill outline.
@@ -93,14 +99,6 @@ Hierarchy is enforced through enormous scale jumps: hero (80-104 px) → section
 - **Cards**: 18 px radius, soft `md` shadow on hover; product tiles often use the `surface` background.
 - **Navigation**: thin (44 px) translucent top bar with backdrop blur; expands on hover for category mega-menus.
 - **Footer**: dense multi-column legal/menu structure on `surface` background, 12 px text.
-
-## Layout
-
-12-column grid, max content width ~1024-1240 px depending on page. Vertical rhythm is generous: section padding rarely below 96 px, often 128-192 px between major bands. Hero sections often go full-bleed; secondary content respects the central column.
-
-## Depth & Elevation
-
-The product surface is nearly flat with the exception of hover-state lifts on product tiles and modal overlays. Marketing depth comes from photography (lit aluminum, OLED glow, depth-of-field) and from scroll-driven parallax — never from drop shadows on UI chrome. Translucent backdrop blur is reserved for the top navigation.
 
 ## Do's & Don'ts
 

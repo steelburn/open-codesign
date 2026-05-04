@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Starbucks
-slug: starbucks
-category: Retail
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Starbucks. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Starbucks Retail design reference inspired by public brand materials.
 colors:
   primary: "#006241"
   secondary: "#1E3932"
@@ -21,56 +15,58 @@ colors:
   housGreen: "#00754A"
   warmGold: "#CBA258"
   rewardsPurple: "#86072C"
-
 typography:
   display:
-    fontFamily: "SoDo Sans, Lander, Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 700
+    fontFamily: SoDo Sans, Lander, Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 700
     lineHeight: 1.1
-    letterSpacing: "-0.01em"
+    letterSpacing: -0.01em
   body:
-    fontFamily: "SoDo Sans, Helvetica Neue, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: SoDo Sans, Helvetica Neue, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.55
-    letterSpacing: "0"
+    letterSpacing: 0em
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, monospace"
-    weight: 400
-
+    fontFamily: ui-monospace, SFMono-Regular, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 16px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "16px"
-  full: "9999px"
-
-shadows:
-  sm: "0 1px 2px rgba(0,0,0,0.06)"
-  md: "0 8px 24px rgba(0,0,0,0.10)"
-  lg: "0 24px 48px rgba(0,0,0,0.14)"
-
-motion:
-  duration:
-    fast: "150ms"
-    normal: "250ms"
-    slow: "400ms"
-  easing:
-    standard: "cubic-bezier(0.4, 0, 0.2, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Starbucks balances heritage with friendliness. The brand color is the deep house green (`#006241`), warmed by an ivory canvas (`#F2F0EB`) and a small palette of warm accents (gold, plum, soft mint). The aesthetic is editorial-meets-friendly: large sip-photography of drinks, hand-drawn illustration accents (the famous winter snowflakes, fall leaves), bold rounded sans headlines.
 
 The mobile app is the modern face of the brand — rewards-driven, dense product cards, friendly micro-illustrations.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#006241`) — house green; brand wordmark, primary CTAs, header chrome.
 - `secondary` (`#1E3932`) — deep forest green; primary text, dark hero bands.
@@ -89,6 +85,14 @@ SoDo Sans (custom, by House Industries / Plau) is the brand face — friendly ge
 
 Hierarchy: hero (40-64 px) → section (24-32 px) → body (16-18 px) → caption (13-14 px). The brand uses comfortable, medium-large type — neither tiny nor monumental.
 
+## Layout
+
+12-column grid, max width ~1240 px. Section padding 48-96 px. The marketing site reads like a magazine — alternating image-led and copy-led bands. The mobile app is dense — drink grids, sticky bottom Order/Pay nav, and prominent rewards header.
+
+## Elevation & Depth
+
+The brand is gently rounded but mostly flat. Cards lift on hover with `sm` shadow; modal sheets use `md` shadow. The rewards card visualization uses depth (soft drop shadow, slight gradient) to feel like a physical object. Drink photography supplies most of the visual richness.
+
 ## Components
 
 - **Buttons**: pill-shaped (rounded-full), 40-48 px height, generous padding. Primary: solid house green with white text, no border, no shadow.
@@ -96,14 +100,6 @@ Hierarchy: hero (40-64 px) → section (24-32 px) → body (16-18 px) → captio
 - **Promo banners**: full-bleed bands on `surface` (ivory) or seasonal accent colors with editorial illustration.
 - **Inputs**: 44-48 px height, 8 px radius, 1 px `border` brightening on focus.
 - **Stars / rewards**: deep gold or claret pill chips with icon + count.
-
-## Layout
-
-12-column grid, max width ~1240 px. Section padding 48-96 px. The marketing site reads like a magazine — alternating image-led and copy-led bands. The mobile app is dense — drink grids, sticky bottom Order/Pay nav, and prominent rewards header.
-
-## Depth & Elevation
-
-The brand is gently rounded but mostly flat. Cards lift on hover with `sm` shadow; modal sheets use `md` shadow. The rewards card visualization uses depth (soft drop shadow, slight gradient) to feel like a physical object. Drink photography supplies most of the visual richness.
 
 ## Do's & Don'ts
 

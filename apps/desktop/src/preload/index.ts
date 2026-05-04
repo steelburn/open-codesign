@@ -56,7 +56,7 @@ export interface ValidateKeyError {
 }
 
 export type ExportFormat = 'html' | 'pdf' | 'pptx' | 'zip' | 'markdown';
-export type WorkspaceFileKind = 'html' | 'jsx' | 'tsx' | 'css' | 'js' | 'asset';
+export type WorkspaceFileKind = 'html' | 'jsx' | 'tsx' | 'css' | 'js' | 'design-system' | 'asset';
 export interface WorkspaceFileEntry {
   path: string;
   kind: WorkspaceFileKind;

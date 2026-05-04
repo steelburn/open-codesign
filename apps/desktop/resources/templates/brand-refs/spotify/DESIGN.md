@@ -1,13 +1,7 @@
 ---
+version: alpha
 name: Spotify
-slug: spotify
-category: Media
-license: MIT-attribution
-source: VoltAgent/awesome-design-md
-attribution: >
-  Inspired by Spotify. Tokens derived from publicly available CSS and
-  press materials. Not affiliated with the brand owner.
-
+description: Spotify Media design reference inspired by public brand materials.
 colors:
   primary: "#1DB954"
   secondary: "#1ED760"
@@ -19,56 +13,58 @@ colors:
   border: "#2A2A2A"
   accent: "#1ED760"
   black: "#000000"
-
 typography:
   display:
-    fontFamily: "Spotify Circular, Circular, Inter, system-ui, sans-serif"
-    weight: 900
+    fontFamily: Spotify Circular, Circular, Inter, system-ui, sans-serif
+    fontWeight: 900
     lineHeight: 1.05
-    letterSpacing: "-0.025em"
+    letterSpacing: -0.025em
   body:
-    fontFamily: "Spotify Circular, Circular, Inter, system-ui, sans-serif"
-    weight: 400
+    fontFamily: Spotify Circular, Circular, Inter, system-ui, sans-serif
+    fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: "0"
+    letterSpacing: 0em
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, monospace"
-    weight: 400
-
+    fontFamily: ui-monospace, SFMono-Regular, monospace
+    fontWeight: 400
+rounded:
+  none: 0px
+  sm: 4px
+  md: 8px
+  lg: 16px
+  full: 9999px
 spacing:
   unit: 4
-  scale: [4, 8, 12, 16, 24, 32, 48, 64, 96]
-
-radius:
-  none: "0"
-  sm: "4px"
-  md: "8px"
-  lg: "16px"
-  full: "9999px"
-
-shadows:
-  sm: "0 2px 4px rgba(0,0,0,0.30)"
-  md: "0 8px 24px rgba(0,0,0,0.50)"
-  lg: "0 16px 48px rgba(0,0,0,0.70)"
-
-motion:
-  duration:
-    fast: "120ms"
-    normal: "200ms"
-    slow: "320ms"
-  easing:
-    standard: "cubic-bezier(0.3, 0, 0, 1)"
-    accelerate: "cubic-bezier(0.4, 0, 1, 1)"
-    decelerate: "cubic-bezier(0, 0, 0.2, 1)"
+  xs: 4px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  2xl: 32px
+  3xl: 48px
+  4xl: 64px
+  5xl: 96px
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.background}"
+    typography: "{typography.body}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
 ---
 
-## Visual Theme & Atmosphere
+## Overview
 
 Spotify is dark, bold, and unapologetically loud. The background is near-black; album artwork supplies most of the color. Hero playlist headers extract the dominant color from the cover image and bleed it into a top-down gradient — a signature move that makes every page feel custom-tinted without any extra design work.
 
 Type is heavy (900 weight Circular) at large sizes and light at small sizes; the contrast is dramatic. The brand-green pill CTA ("Play") is the single most identifiable element.
 
-## Color Palette & Roles
+## Colors
 
 - `primary` (`#1DB954`) — the original Spotify green; brand wordmark and accent.
 - `secondary` (`#1ED760`) — a brighter green used for primary CTAs and hover states.
@@ -86,6 +82,14 @@ Spotify Circular (custom Circular variant) is the brand face. Display weights ju
 
 Hierarchy: hero (96-128 px / 900) → section heading (24-32 px / 700) → body (14-16 px / 400) → caption (12 px / 400 in `muted`). Numerals are tabular in track listings.
 
+## Layout
+
+App is a three-pane layout: 240 px left sidebar, fluid main, optional right "now playing" rail. Main view is a vertically scrolling stack of horizontal carousels (artist, album, playlist). Playlist pages start with a full-bleed hero (gradient extracted from cover art) followed by the track list table.
+
+## Elevation & Depth
+
+The product is dark and mostly flat, but uses gradient overlays heavily — playlist headers, "Made for You" hero cards. Elevation between cards is subtle (`surface` → `surfaceRaised` is only ~16 levels of brightness apart). Shadows are dark and soft; modals use `lg`. The "now playing" bottom bar floats above content with a soft top edge shadow.
+
 ## Components
 
 - **Play button**: primary CTA — `secondary` green pill or circle, ~56 px, no border, scales up on hover.
@@ -94,14 +98,6 @@ Hierarchy: hero (96-128 px / 900) → section heading (24-32 px / 700) → body 
 - **Track rows**: 56 px tall, hover background `surfaceRaised`, image + title/artist + duration columns.
 - **Sidebar items**: 40 px tall, icon + label, active state shows white text and a subtle vertical bar.
 - **Tags / chips**: pill-shaped, `surface` background, 12 px text.
-
-## Layout
-
-App is a three-pane layout: 240 px left sidebar, fluid main, optional right "now playing" rail. Main view is a vertically scrolling stack of horizontal carousels (artist, album, playlist). Playlist pages start with a full-bleed hero (gradient extracted from cover art) followed by the track list table.
-
-## Depth & Elevation
-
-The product is dark and mostly flat, but uses gradient overlays heavily — playlist headers, "Made for You" hero cards. Elevation between cards is subtle (`surface` → `surfaceRaised` is only ~16 levels of brightness apart). Shadows are dark and soft; modals use `lg`. The "now playing" bottom bar floats above content with a soft top edge shadow.
 
 ## Do's & Don'ts
 

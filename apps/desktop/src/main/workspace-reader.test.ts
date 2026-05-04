@@ -130,6 +130,7 @@ describe('workspace file metadata/read helpers', () => {
     expect(classifyWorkspaceFileKind('App.tsx')).toBe('tsx');
     expect(classifyWorkspaceFileKind('style.css')).toBe('css');
     expect(classifyWorkspaceFileKind('app.js')).toBe('js');
+    expect(classifyWorkspaceFileKind('DESIGN.md')).toBe('design-system');
     expect(classifyWorkspaceFileKind('assets/logo.png')).toBe('asset');
   });
 
