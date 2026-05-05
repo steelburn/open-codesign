@@ -23,7 +23,10 @@ export function HubView({ onUseExamplePrompt }: HubViewProps = {}) {
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-background)] overflow-hidden">
-      <main className="codesign-scroll-area flex-1 min-h-0 overflow-y-auto">
+      <main
+        data-codesign-hub-scroll-root
+        className="codesign-scroll-area flex-1 min-h-0 overflow-y-auto"
+      >
         <div className="mx-auto max-w-[1600px] px-[clamp(var(--space-4),3vw,var(--space-8))] py-[clamp(var(--space-4),3vw,var(--space-8))]">
           {mounted.has('recent') ? (
             <div hidden={hubTab !== 'recent'}>

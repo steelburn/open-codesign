@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  clearPreviewCardCachesForTest,
+  hubScrollRootForCard,
   needsJsxRuntime,
   parseCachedPreview,
+  readPreviewSourceForCard,
   workspaceBaseHrefForPreview,
 } from './DesignCardPreview';
 
@@ -79,5 +82,51 @@ describe('DesignCardPreview source helpers', () => {
         'screens/App.jsx',
       ),
     ).toBe('workspace://design-1/screens/');
+  });
+
+  it('uses the hub scroll container as the thumbnail visibility root', () => {
+    const root = { nodeType: 1 };
+    const card = {
+      closest: (selector: string) => (selector === '[data-codesign-hub-scroll-root]' ? root : null),
+    } as unknown as HTMLElement;
+
+    expect(hubScrollRootForCard(card)).toBe(root);
+  });
+
+  it('dedupes concurrent preview source reads for the same design version', async () => {
+    clearPreviewCardCachesForTest();
+    const globalWithWindow = globalThis as unknown as { window?: { codesign?: unknown } };
+    const previousWindow = globalWithWindow.window;
+    const list = vi.fn(
+      async () =>
+        new Promise<Array<{ artifactSource: string }>>((resolve) =>
+          setTimeout(() => resolve([{ artifactSource: '<main>cached once</main>' }]), 0),
+        ),
+    );
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: {
+        codesign: {
+          snapshots: { list },
+        },
+      },
+    });
+
+    try {
+      const [first, second] = await Promise.all([
+        readPreviewSourceForCard('design-1', '2026-05-05T00:00:00.000Z'),
+        readPreviewSourceForCard('design-1', '2026-05-05T00:00:00.000Z'),
+      ]);
+
+      expect(list).toHaveBeenCalledTimes(1);
+      expect(first).toEqual(second);
+      expect(first?.content).toBe('<main>cached once</main>');
+    } finally {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: previousWindow,
+      });
+      clearPreviewCardCachesForTest();
+    }
   });
 });

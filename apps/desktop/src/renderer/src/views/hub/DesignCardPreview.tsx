@@ -55,9 +55,14 @@ const LS_PREFIX = `designCardPreview:${CACHE_VERSION}:`;
 const LS_MAX_CHARS = 300_000; // ~ 300 KB per entry ceiling; skip caching huge sources
 const LS_MAX_ENTRIES = 40;
 const MEM_MAX_ENTRIES = 40;
+const inflightReads = new Map<string, Promise<PreviewCardSource | null>>();
 
 function cacheKey(id: string, updatedAt: string): string {
   return `${CACHE_VERSION}:${id}:${updatedAt}`;
+}
+
+function requestKey(id: string, updatedAt: string): string {
+  return `${id}:${updatedAt}`;
 }
 
 // Map preserves insertion order, so delete+set on access makes the eviction
@@ -127,6 +132,15 @@ function writeCache(key: string, source: PreviewCardSource): void {
   }
 }
 
+export function clearPreviewCardCachesForTest(): void {
+  memCache.clear();
+  inflightReads.clear();
+}
+
+export function hubScrollRootForCard(el: HTMLElement): Element | null {
+  return el.closest('[data-codesign-hub-scroll-root]');
+}
+
 export function workspaceBaseHrefForPreview(
   design: Pick<Design, 'id' | 'workspacePath'>,
   sourcePath: string,
@@ -167,6 +181,29 @@ function previewCardSourceFromRaw(content: string): PreviewCardSource | null {
   return content.trim().length > 0 ? { content, path: inferPreviewSourcePath(content) } : null;
 }
 
+export function readPreviewSourceForCard(
+  designId: string,
+  updatedAt: string,
+): Promise<PreviewCardSource | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  const key = requestKey(designId, updatedAt);
+  const existing = inflightReads.get(key);
+  if (existing !== undefined) return existing;
+
+  const bridge = window.codesign;
+  if (!bridge) return Promise.resolve(null);
+  const read = resolveDesignPreviewSource({
+    designId,
+    read: bridge.files?.read,
+    listSnapshots: bridge.snapshots.list,
+    preferSnapshotSource: true,
+  }).finally(() => {
+    inflightReads.delete(key);
+  });
+  inflightReads.set(key, read);
+  return read;
+}
+
 export function DesignCardPreview({ design }: DesignCardPreviewProps) {
   const livePreviewSource = useCodesignStore((s) => s.previewSourceByDesign[design.id]);
   const isGenerating = useCodesignStore((s) => s.generationByDesign[design.id] !== undefined);
@@ -197,7 +234,7 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
       return;
     }
     const cached = readCache(key);
-    setPreviewSource(cached);
+    setPreviewSource((current) => cached ?? current);
     setFailed(false);
   }, [design.id, design.updatedAt, livePreviewSource]);
 
@@ -226,7 +263,7 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
         }
       },
       // Pre-mount a little above/below the viewport so scrolling feels instant.
-      { rootMargin: '240px 0px' },
+      { root: hubScrollRootForCard(el), rootMargin: '320px 0px' },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -281,15 +318,11 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
     if (cached !== null) {
       setPreviewSource(cached);
       setFailed(false);
+      return;
     }
     if (typeof window === 'undefined' || !window.codesign) return;
     let cancelled = false;
-    void resolveDesignPreviewSource({
-      designId: design.id,
-      read: window.codesign.files?.read,
-      listSnapshots: window.codesign.snapshots.list,
-      preferSnapshotSource: true,
-    })
+    void readPreviewSourceForCard(design.id, design.updatedAt)
       .then((result) => {
         if (cancelled || !mounted.current) return;
         if (result === null) {
