@@ -180,6 +180,20 @@ describe('buildDesignContextPack', () => {
       { role: 'assistant', content: 'done' },
     ]);
   });
+
+  it('uses model context window only to reduce small-model history budgets', () => {
+    const largeModel = buildDesignContextPack({
+      chatRows: [userRow(0, 'request')],
+      modelContextWindow: 1_000_000,
+    });
+    const smallModel = buildDesignContextPack({
+      chatRows: [userRow(0, 'request')],
+      modelContextWindow: 80_000,
+    });
+
+    expect(largeModel.trace.contextBudgetChars).toBe(12_000);
+    expect(smallModel.trace.contextBudgetChars).toBe(4_800);
+  });
 });
 
 describe('updateDesignSessionBrief', () => {

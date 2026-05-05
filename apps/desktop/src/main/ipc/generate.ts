@@ -60,6 +60,15 @@ import { finalAssistantTextForTurn } from './assistant-text';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
 import { toolExecutionStatusForStream } from './tool-log';
 
+const DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK = 200_000;
+
+export function contextWindowForContextPack(model: unknown): number {
+  const value = (model as { contextWindow?: unknown } | null)?.contextWindow;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : DEFAULT_CONTEXT_WINDOW_FOR_CONTEXT_PACK;
+}
+
 /**
  * Pull an HTTP status code out of a caught provider error. Mirrors
  * `packages/providers/src/retry.ts::extractStatus` intentionally — we don't
@@ -600,6 +609,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             chatRows,
             brief: existingBrief,
             resourceState,
+            modelContextWindow: contextWindowForContextPack(active.model),
             workspaceState: {
               sourcePath: payload.previousSource ? 'App.jsx' : null,
               hasSource: Boolean(payload.previousSource?.trim()),

@@ -207,17 +207,20 @@ function messageChars(message: ChatMessage): number {
 
 function historyBudgetChars(input: BuildDesignContextPackInput): number {
   if (typeof input.historyBudgetChars === 'number' && Number.isFinite(input.historyBudgetChars)) {
-    return Math.max(0, Math.floor(input.historyBudgetChars));
+    return clamp(Math.floor(input.historyBudgetChars), 0, MAX_HISTORY_BUDGET_CHARS);
   }
   if (
     typeof input.modelContextWindow === 'number' &&
     Number.isFinite(input.modelContextWindow) &&
     input.modelContextWindow > 0
   ) {
+    // Use model size as a floor-pressure signal, not an invitation to stuff
+    // huge history into large-context models. Workspace files remain the source
+    // of truth; history is only intent tracking.
     return clamp(
-      Math.floor(input.modelContextWindow * 1.5),
+      Math.floor(input.modelContextWindow * 0.06),
       MIN_HISTORY_BUDGET_CHARS,
-      MAX_HISTORY_BUDGET_CHARS,
+      DEFAULT_HISTORY_BUDGET_CHARS,
     );
   }
   return DEFAULT_HISTORY_BUDGET_CHARS;
