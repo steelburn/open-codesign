@@ -304,17 +304,52 @@ function featureModeValue(setting: PromptFeatureProfile['tweaks']): PromptFeatur
   return typeof setting === 'string' ? setting : setting.mode;
 }
 
+function isAutoDesignName(name: string | undefined): boolean {
+  return name === 'Untitled design' || /^Untitled design \d+$/.test(name ?? '');
+}
+
+function autoTitleFromPrompt(prompt: string): string {
+  const condensed = prompt.replace(/\s+/g, ' ').trim();
+  if (condensed.length === 0) return 'Untitled design';
+  return condensed.length > 40 ? `${condensed.slice(0, 40).trimEnd()}…` : condensed;
+}
+
+function emitPreflightSetTitle(onEvent: GenerateViaAgentDeps['onEvent'], title: string): void {
+  if (!onEvent) return;
+  const toolCallId = 'host-set-title';
+  onEvent({
+    type: 'tool_execution_start',
+    toolCallId,
+    toolName: 'set_title',
+    args: { title },
+  } as AgentEvent);
+  onEvent({
+    type: 'tool_execution_end',
+    toolCallId,
+    toolName: 'set_title',
+    isError: false,
+    result: {
+      content: [{ type: 'text', text: `Title set: ${title}` }],
+      details: { title },
+    },
+  } as AgentEvent);
+}
+
 function agenticToolGuidance(input: {
   inspectWorkspace: boolean;
   featureProfile: PromptFeatureProfile;
+  currentDesignName?: string | undefined;
 }): string {
+  const titleStep = isAutoDesignName(input.currentDesignName)
+    ? '1. The current design title is still auto-generated. Call `set_title` once as the first tool call, before `set_todos`, `view`, `scaffold`, or file edits. Use a 2-5 word title that describes what is being designed.'
+    : '1. For a fresh design, call `set_title` once. For continuation or existing-source turns, do not call `set_title` unless the user explicitly asks to rename or pivot to a new artifact.';
   const tweakStep = explicitDisabled(input.featureProfile.tweaks)
     ? `${input.inspectWorkspace ? '6' : '5'}. Do not call \`tweaks()\` unless the user explicitly asks for controls later.`
     : featureModeValue(input.featureProfile.tweaks) === 'enabled'
       ? `${input.inspectWorkspace ? '6' : '5'}. Create 2-5 high-leverage EDITMODE controls, then call \`tweaks()\`.`
       : `${input.inspectWorkspace ? '6' : '5'}. Decide agentically whether \`tweaks()\` would materially improve iteration; do not rely on harness guesses.`;
   const requiredSteps = [
-    '1. For a fresh design, call `set_title` once. For continuation or existing-source turns, do not call `set_title` unless the user explicitly asks to rename or pivot to a new artifact.',
+    titleStep,
     '2. For multi-step or ambiguous work, call `set_todos` early with a short checklist. Do not delay a ready file mutation solely to add todos.',
     '3. Load optional resources explicitly with `skill(name)` or `scaffold({kind, destPath})` before relying on them.',
     ...(input.inspectWorkspace
@@ -338,6 +373,7 @@ function agenticToolGuidance(input: {
     '- Fresh document sequence: `set_title` -> optional `set_todos`/`skill` -> create the requested document file -> `done(path)`.',
     '- Do not call `preview` while a previewable artifact is still only a scaffold, loading state, skeleton, placeholder, or empty lower section. Preview should represent a coherent first pass unless the user explicitly asked for a loading-state design.',
     '- Existing-source sequence: optional `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. Do not edit an existing source from memory, and do not rebuild unless the user explicitly asks.',
+    '- If the design is still named `Untitled design` or `Untitled design N`, naming is not optional: call `set_title` before other work, even when a scaffold or reference source already exists.',
     '- Use `create` for new files; follow-up edits use `view`, `str_replace`, or `insert`.',
     '- Do not emit `<artifact>` tags, fenced source blocks, raw HTML/JSX/CSS, or HTML wrappers in chat.',
     '- Local workspace assets and scaffolded files are allowed. External scripts remain restricted by the base output rules.',
@@ -663,6 +699,8 @@ function buildWorkspaceBrief(
   const imageCount = (input.attachments ?? []).filter((file) =>
     file.mediaType?.startsWith('image/'),
   ).length;
+  const currentDesignName = input.currentDesignName?.trim();
+  const needsTitle = isAutoDesignName(currentDesignName);
   const hasReferenceUrl = input.referenceUrl !== null && input.referenceUrl !== undefined;
   const hasReferenceMaterials =
     attachmentCount > 0 ||
@@ -670,6 +708,9 @@ function buildWorkspaceBrief(
     (input.designSystem !== null && input.designSystem !== undefined);
   const lines = [
     'Workspace context:',
+    currentDesignName
+      ? `- Current design title: ${currentDesignName}${needsTitle ? ' (auto-generated; call set_title before other tools).' : '.'}`
+      : '- Current design title: unknown.',
     sources.length > 0
       ? `- Existing source candidates: ${sources.join(', ')}`
       : `- No existing design source was found. Create ${DEFAULT_SOURCE_ENTRY} for visual/web work, or create the requested document/handoff file for document-first work.`,
@@ -679,9 +720,13 @@ function buildWorkspaceBrief(
     `- Reference materials: attached file(s): ${attachmentCount}; image file(s): ${imageCount}; reference URL: ${hasReferenceUrl ? 'yes' : 'no'}; linked design-system scan: ${input.designSystem ? 'yes' : 'no'}.`,
   ];
   lines.push(
-    sources.length > 0
-      ? 'Before editing existing source files, inspect the workspace when available, then view the current source file. Use set_todos when the edit has multiple steps. Existing-source sequence: optional `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. For continuation or existing-source turns, do not call `set_title`; preserve and extend the current design unless the user explicitly asks for a rebuild.'
-      : `This is an empty workspace. For visual/web work, create ${DEFAULT_SOURCE_ENTRY} when the first pass is ready; for document-first work, create the requested document file. Use set_todos for multi-step work.`,
+    needsTitle
+      ? sources.length > 0
+        ? 'This workspace has source files, but the visible design title is still an auto-generated placeholder. First call `set_title` once, then inspect/view/edit. Preserve and extend existing source unless the user explicitly asks for a rebuild.'
+        : `This is an empty auto-named workspace. First call \`set_title\` once, then create ${DEFAULT_SOURCE_ENTRY} for visual/web work or the requested document file for document-first work. Use set_todos for multi-step work.`
+      : sources.length > 0
+        ? 'Before editing existing source files, inspect the workspace when available, then view the current source file. Use set_todos when the edit has multiple steps. Existing-source sequence: optional `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. For continuation or existing-source turns, do not call `set_title`; preserve and extend the current design unless the user explicitly asks for a rebuild.'
+        : `This is an empty workspace. For visual/web work, create ${DEFAULT_SOURCE_ENTRY} when the first pass is ready; for document-first work, create the requested document file. Use set_todos for multi-step work.`,
   );
   if (hasDesignMd) {
     lines.push(
@@ -819,6 +864,11 @@ export async function generateViaAgent(
         providerId: input.model.provider,
         templatesRoot: input.templatesRoot,
       });
+  const preflightTitle = isAutoDesignName(input.currentDesignName)
+    ? autoTitleFromPrompt(input.prompt)
+    : null;
+  const promptInput =
+    preflightTitle !== null ? { ...input, currentDesignName: preflightTitle } : input;
   const featureProfile = featureProfileFromRunPreferences(input.runPreferences);
   const systemPrompt =
     input.systemPrompt ??
@@ -829,7 +879,7 @@ export async function generateViaAgent(
     });
 
   const userContent = buildUserPromptWithContext(
-    buildTurnPrompt(input, trackedFs),
+    buildTurnPrompt(promptInput, trackedFs),
     buildContextSections({
       ...(input.designSystem !== undefined ? { designSystem: input.designSystem } : {}),
       ...(input.sessionContext !== undefined ? { sessionContext: input.sessionContext } : {}),
@@ -945,6 +995,7 @@ export async function generateViaAgent(
   const baseAgenticGuidance = agenticToolGuidance({
     inspectWorkspace: input.inspectWorkspace !== undefined,
     featureProfile,
+    currentDesignName: promptInput.currentDesignName,
   });
   const activeGuidance =
     deps.generateImageAsset && !imageExplicitlyDisabled
@@ -1066,6 +1117,9 @@ export async function generateViaAgent(
 
   log.info('[generate] step=send_request', ctx);
   const sendStart = Date.now();
+  if (preflightTitle !== null) {
+    emitPreflightSetTitle(deps.onEvent, preflightTitle);
+  }
   // First-turn-only retry, further guarded by a side-effect check. Multi-turn
   // requests carry half-complete agent state (tool calls mid-flight, transcript
   // accumulated in pi-agent-core's internal loop) — retrying would replay

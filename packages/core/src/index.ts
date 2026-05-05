@@ -213,6 +213,8 @@ export interface GenerateInput {
   getWorkspaceRoot?: (() => string | null | undefined) | undefined;
   /** Stable workspace context loaded by the host before generation. */
   projectContext?: ProjectContext | undefined;
+  /** User-visible design title at the start of this run. */
+  currentDesignName?: string | undefined;
   /** Resource state reconstructed from previous tool-call rows for this design. */
   initialResourceState?: ResourceStateV1 | undefined;
   /**

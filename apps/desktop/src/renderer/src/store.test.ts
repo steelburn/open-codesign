@@ -217,6 +217,62 @@ describe('useCodesignStore generation cancellation', () => {
     await initI18n('en');
   });
 
+  it('renames default designs immediately before model title generation settles', async () => {
+    const designId = 'design-auto-title';
+    let designRow = {
+      ...DEFAULT_DESIGN,
+      id: designId,
+      name: 'Untitled design 1',
+      workspacePath: '/tmp/open-codesign-auto-title',
+    };
+    const generateTask = deferred<{ artifacts: Array<{ content: string }>; message: string }>();
+    const titleTask = deferred<string>();
+    const generate = vi.fn(() => generateTask.promise);
+    const generateTitle = vi.fn(() => titleTask.promise);
+    const renameDesign = vi.fn(async (_id: string, name: string) => {
+      designRow = { ...designRow, name };
+      return designRow;
+    });
+    const listDesigns = vi.fn(async () => [designRow]);
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        generateTitle,
+        chat: mockChatApi(),
+        snapshots: {
+          ...mockSnapshotsApi(),
+          listDesigns,
+          renameDesign,
+        },
+      },
+      setTimeout,
+    });
+
+    useCodesignStore.setState({
+      designs: [designRow],
+      designsLoaded: true,
+      currentDesignId: designId,
+    });
+
+    const run = useCodesignStore.getState().sendPrompt({
+      prompt: '设计 Apple Watch 跑步教练屏幕',
+    });
+
+    await vi.waitFor(() =>
+      expect(renameDesign).toHaveBeenCalledWith(designId, '设计 Apple Watch 跑步教练屏幕'),
+    );
+    expect(generateTitle).toHaveBeenCalledOnce();
+
+    titleTask.resolve('Apple Watch 跑步教练');
+    await vi.waitFor(() =>
+      expect(renameDesign).toHaveBeenCalledWith(designId, 'Apple Watch 跑步教练'),
+    );
+
+    generateTask.resolve({ artifacts: [{ content: '<html></html>' }], message: 'Done.' });
+    await run;
+  });
+
   it('ignores stale completions from a cancelled generation after a resubmit', async () => {
     const pendingById = new Map<
       string,

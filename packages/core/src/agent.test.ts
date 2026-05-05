@@ -1352,6 +1352,33 @@ describe('generateViaAgent()', () => {
     expect(prompt).toContain('make the hero warmer');
   });
 
+  it('requires set_title first when the current design still has an auto title', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    const events: AgentEvent[] = [];
+    await generateViaAgent(
+      {
+        prompt: 'design an Apple Watch run coach',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        currentDesignName: 'Untitled design 1',
+      },
+      {
+        fs: makeStubFs({ 'frames/watch.jsx': SAMPLE_HTML }),
+        onEvent: (event) => events.push(event),
+      },
+    );
+
+    const prompt = agentCalls[0]?.prompts[0]?.message as string;
+    expect(events[0]).toMatchObject({
+      type: 'tool_execution_start',
+      toolName: 'set_title',
+      args: { title: 'design an Apple Watch run coach' },
+    });
+    expect(prompt).toContain('Current design title: design an Apple Watch run coach.');
+    expect(prompt).toContain('Existing source candidates: frames/watch.jsx');
+  });
+
   it('describes an empty workspace without implying an existing source file', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     await generateViaAgent(

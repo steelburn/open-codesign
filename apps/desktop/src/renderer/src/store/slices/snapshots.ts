@@ -191,10 +191,10 @@ async function maybeAutoRename(
   if (!window.codesign) return;
   const design = get().designs.find((d) => d.id === designId);
   if (!design || !isDefaultDesignName(design.name)) return;
-  // Try an LLM-generated title first; fall back to a truncation of the prompt
-  // if the model call fails (missing key, offline, etc). The fallback is
-  // synchronous so the design never stays on "Untitled design N".
-  let newName = autoNameFromPrompt(firstPrompt);
+  // Rename immediately with a local fallback so the design never stays on
+  // "Untitled design N" while the model title request is still in flight.
+  const fallbackName = autoNameFromPrompt(firstPrompt);
+  await renameDesignAndRefresh(get, designId, fallbackName);
   try {
     const api = window.codesign as unknown as {
       generateTitle?: (prompt: string) => Promise<string>;
@@ -202,7 +202,15 @@ async function maybeAutoRename(
     if (typeof api.generateTitle === 'function') {
       const generated = await api.generateTitle(firstPrompt);
       const trimmed = generated.trim();
-      if (trimmed.length > 0) newName = trimmed;
+      const latest = get().designs.find((d) => d.id === designId);
+      if (
+        trimmed.length > 0 &&
+        trimmed !== fallbackName &&
+        latest !== undefined &&
+        (latest.name === fallbackName || isDefaultDesignName(latest.name))
+      ) {
+        await renameDesignAndRefresh(get, designId, trimmed);
+      }
     }
   } catch (err) {
     rendererLogger.warn('store', '[title] generateTitle failed, using prompt fallback', {
@@ -210,8 +218,15 @@ async function maybeAutoRename(
       message: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+async function renameDesignAndRefresh(
+  get: GetState,
+  designId: string,
+  name: string,
+): Promise<void> {
   try {
-    await window.codesign.snapshots.renameDesign(designId, newName);
+    await window.codesign?.snapshots.renameDesign(designId, name);
     await get().loadDesigns();
   } catch (err) {
     const msg = err instanceof Error ? err.message : tr('errors.unknown');

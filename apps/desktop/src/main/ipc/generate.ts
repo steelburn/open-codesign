@@ -728,6 +728,8 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                 });
               }
             }
+            const currentDesignName =
+              db !== null ? (getDesign(db, designId)?.name ?? undefined) : undefined;
 
             logIpc.info('generate', {
               generationId: id,
@@ -839,6 +841,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   sessionContext: contextPack.contextSections,
                   ...(memoryContext !== undefined ? { memoryContext: memoryContext.sections } : {}),
                   projectContext: promptContext.projectContext,
+                  currentDesignName,
                   initialResourceState: resourceState,
                   runPreferences,
                   ...(baseUrl !== undefined ? { baseUrl } : {}),
