@@ -723,7 +723,11 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       );
       const injectedPendingEdits = input.pendingEdits ?? [];
       const trimmedInput = input.prompt.trim();
-      if (trimmedInput.length === 0 && pendingEdits.length === 0 && injectedPendingEdits.length === 0)
+      if (
+        trimmedInput.length === 0 &&
+        pendingEdits.length === 0 &&
+        injectedPendingEdits.length === 0
+      )
         return;
       const effectivePrompt =
         trimmedInput.length === 0 ? 'Apply the pending changes.' : trimmedInput;
@@ -908,8 +912,7 @@ export function makeGenerationSlice(set: SetState, get: GetState): GenerationSli
       const cfg = get().config;
       const selection = get().selectedElement;
       const designIdAtStart = get().currentDesignId;
-      if (cfg === null || !cfg.hasKey || selection === null || designIdAtStart === null)
-        return;
+      if (cfg === null || !cfg.hasKey || selection === null || designIdAtStart === null) return;
       if (get().generationByDesign[designIdAtStart] !== undefined) return;
 
       const userMessageText = `Edit ${selection.tag}: ${trimmed}`;

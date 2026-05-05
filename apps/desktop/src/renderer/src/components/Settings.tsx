@@ -1,10 +1,5 @@
 import { useT } from '@open-codesign/i18n';
-import {
-  Cpu,
-  FolderOpen,
-  Palette,
-  Sliders,
-} from 'lucide-react';
+import { Cpu, FolderOpen, Palette, Sliders } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { type SettingsTab, useCodesignStore } from '../store';
 import { AdvancedTab } from './settings/AdvancedTab';
