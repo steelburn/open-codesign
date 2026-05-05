@@ -99,6 +99,14 @@
       "license": "MIT-internal",
       "source": "Open CoDesign built-in scaffold"
     },
+    "saas-sidebar-shell": {
+      "description": "JSX SaaS app shell starter with sidebar navigation, header search, KPI cards, data rows, and drawer action.",
+      "path": "app-shells/saas-sidebar.jsx",
+      "category": "app-shell",
+      "license": "MIT-internal",
+      "source": "Open CoDesign built-in scaffold",
+      "aliases": ["dashboard-shell", "admin-shell", "sidebar-shell"]
+    },
     "cmdk-palette": {
       "description": "Raycast/cmdk-style command palette with fuzzy filter and shortcuts.",
       "path": "ui-primitives/cmdk-palette.jsx",
@@ -210,6 +218,22 @@
       "category": "deck",
       "license": "MIT-internal",
       "source": "Open CoDesign built-in scaffold"
+    },
+    "executive-brief-report": {
+      "description": "Self-contained HTML one-page executive brief/report starter; keep as .html when scaffolded.",
+      "path": "reports/executive-brief.html",
+      "category": "report",
+      "license": "MIT-internal",
+      "source": "Open CoDesign built-in scaffold",
+      "aliases": ["one-page-report", "decision-brief"]
+    },
+    "design-system-starter": {
+      "description": "Google-compatible DESIGN.md starter for workspace design-system baton files; copy to DESIGN.md.",
+      "path": "design-systems/DESIGN.md",
+      "category": "design-system",
+      "license": "MIT-internal",
+      "source": "Open CoDesign built-in scaffold",
+      "aliases": ["design-md", "tokens-starter"]
     },
     "landing-hero": {
       "description": "Landing page hero with eyebrow chip, headline, sub, and dual CTAs.",

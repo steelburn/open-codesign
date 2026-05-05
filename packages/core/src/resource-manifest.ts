@@ -185,7 +185,7 @@ export function formatResourceManifestForPrompt(manifest: ResourceManifestV1): s
   return [
     '# Available Resources',
     '',
-    'Progressive disclosure is manifest-first: choose from this index, then call `skill(name)` or `scaffold({kind, destPath})` before writing. This manifest is only a summary; it does not contain skill bodies or scaffold code.',
+    'Progressive disclosure is manifest-first: choose from this index before writing. Call `skill(name)` for method guidance, `skill("brand:<slug>")` for reference-only brand DESIGN.md, and `scaffold({kind, destPath})` to copy a concrete starter/source file. Workspace `DESIGN.md` is not a manifest resource; it is the authoritative design-system baton when present.',
     '',
     '## Design Skills',
     skillLines.length > 0 ? skillLines.join('\n') : 'No design skills available.',

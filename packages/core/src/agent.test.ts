@@ -1228,7 +1228,8 @@ describe('generateViaAgent()', () => {
       expect(sys).toContain('deps: artifact-composition');
       expect(sys).toContain('iphone-16-pro-frame');
       expect(sys).toContain('brand:acme');
-      expect(sys).toContain('call `skill(name)` or `scaffold({kind, destPath})`');
+      expect(sys).toContain('Call `skill(name)` for method guidance');
+      expect(sys).toContain('Workspace `DESIGN.md` is not a manifest resource');
       expect(sys).not.toContain('FULL CHART SKILL BODY');
     } finally {
       rmSync(templatesRoot, { recursive: true, force: true });

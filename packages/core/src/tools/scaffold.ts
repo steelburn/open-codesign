@@ -281,7 +281,7 @@ export function makeScaffoldTool(
     name: 'scaffold',
     label: 'Scaffold',
     description:
-      "Drop a prebuilt starter file into the current workspace. kind: one of the keys in <userData>/templates/scaffolds/manifest.json (device-frame / browser / dev-mockup / ui-primitive / background / surface / deck / landing). destPath: workspace-relative path. Example: scaffold({kind: 'iphone-16-pro-frame', destPath: 'frames/iphone.jsx'}).",
+      "Copy a concrete starter/source asset into the current workspace. kind: one of the keys in <userData>/templates/scaffolds/manifest.json (device-frame / browser / app-shell / dev-mockup / ui-primitive / background / surface / deck / report / design-system / landing). destPath: workspace-relative path. Example: scaffold({kind: 'iphone-16-pro-frame', destPath: 'frames/iphone.jsx'}). The tool preserves the source extension.",
     parameters: ScaffoldParams,
     async execute(_toolCallId, params): Promise<AgentToolResult<ScaffoldDetails>> {
       const workspaceRoot = getWorkspaceRoot();

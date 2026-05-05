@@ -64,6 +64,10 @@ describe('loadSkillsFromDir()', () => {
     const ids = skills.map((s) => s.id).sort();
     expect(ids).toContain('frontend-design-anti-slop');
     expect(ids).toContain('pitch-deck');
+    expect(ids).toContain('app-shell-navigation');
+    expect(ids).toContain('accessibility-states');
+    expect(ids).toContain('design-system-baton');
+    expect(ids).toContain('responsive-layout');
     expect(ids).toContain('data-viz-recharts');
     expect(ids).toContain('mobile-mock');
     expect(ids).toContain('form-layout');

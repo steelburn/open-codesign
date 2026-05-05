@@ -232,13 +232,14 @@ export function makeSkillTool(
     name: 'skill',
     label: 'Skill',
     description:
-      'Load a concrete rules sheet for a builtin design skill (form-layout, ' +
-      'empty-states, loading-skeleton, surface-elevation, cjk-typography, ' +
-      'pitch-deck, mobile-mock, data-viz-recharts, frontend-design-anti-slop) ' +
-      'or a brand reference ("brand:<slug>" — e.g. brand:vercel, brand:linear, ' +
-      'brand:stripe). Call BEFORE writing code whenever the request matches. ' +
-      'Returns markdown rules; treat them as load-bearing. One call per skill ' +
-      'per session — repeat calls return a short already-loaded response.',
+      'Load a concrete markdown rules sheet for a builtin method skill ' +
+      '(for example form-layout, responsive-layout, accessibility-states, ' +
+      'design-system-baton, app-shell-navigation, pitch-deck, mobile-mock, ' +
+      'data-viz-recharts) or a reference-only brand DESIGN.md as "brand:<slug>" ' +
+      '(for example brand:vercel, brand:linear, brand:stripe). Call BEFORE ' +
+      'writing code whenever the request matches. This tool loads guidance; it ' +
+      'does not copy scaffold files. One call per skill per session; repeat ' +
+      'calls return a short already-loaded response.',
     parameters: SkillParams,
     async execute(_toolCallId, params): Promise<AgentToolResult<SkillDetails>> {
       const name = params.name;
