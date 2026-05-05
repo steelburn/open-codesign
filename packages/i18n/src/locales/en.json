@@ -42,6 +42,20 @@
     "filesTabEmpty": "No files yet",
     "openInTab": "Open in tab",
     "previewHint": "Thumbnail preview · double-click the file or use Open in tab for full view",
+    "documentPreview": {
+      "previewLabel": "Document preview",
+      "loading": "Preparing document preview…",
+      "unavailable": "Document preview unavailable",
+      "empty": "No extractable text was found for this document.",
+      "thumbnailAlt": "{{name}} preview",
+      "stats": {
+        "author": "Author",
+        "pages": "Pages",
+        "slides": "Slides",
+        "words": "Words",
+        "worksheets": "Sheets"
+      }
+    },
     "tabsAriaLabel": "Open files",
     "closeTab": "Close {{name}}",
     "files": {
@@ -1028,14 +1042,14 @@
     }
   },
   "starterPrompts": {
-    "landing": "Build a landing page for an AI startup. Hero with a strong tagline, 3 feature cards, social proof section, CTA. Editorial typography, generous whitespace.",
-    "pitch": "Generate the first 3 slides of a pitch deck for a fintech startup: title slide, problem, solution. 16:9 format, navy palette, one orange accent.",
-    "mobile": "Design a 3-screen mobile app onboarding flow inside a phone frame: welcome, permissions, first action. Soft mint palette.",
-    "dashboard": "Build an analytics dashboard with: MRR trend line chart, pipeline stacked bars, top accounts table, and forecast gauge. Dark theme, teal + amber accents, plausible mock data.",
-    "email": "Design a transactional welcome email for a SaaS product. Single column, 600px wide, table-based. Logo header, greeting, 3 onboarding steps, CTA button, footer.",
-    "portfolio": "Design a photographer portfolio with masonry image grid using CSS gradient placeholders. Dark background, category filter pills, hover overlay with title and camera settings.",
-    "casestudy": "Create a one-page customer case study for a B2B fintech. Hero with client name, three large metrics with deltas, a CFO pull quote, a three-step 'How we did it' section, and a logo strip. Dark theme, serif headings, monospace numerals.",
-    "animation": "Build a showcase page with six organic CSS loading animations. Each in its own card: blob morph, leaf sway, ink drop, breathing circle, soft pulse, ribbon weave. Warm cream background, muted pastels, pure CSS/SVG only."
+    "landing": "Build a polished landing page for an AI startup aimed at small product teams. Include a first-viewport hero with a clear product signal, strong tagline, subhead, primary/secondary CTAs, feature section, social proof, pricing teaser, FAQ, and footer. Use editorial typography, generous whitespace, real product-oriented copy, responsive layout, and no external stock or placeholder images.",
+    "pitch": "Generate the first 3 slides of a 16:9 pitch deck for a fintech startup: title slide, problem slide, and solution slide. Use navy as the base, one orange accent, consistent footer/page numbers, simple charts or diagrams built in SVG/CSS, concise investor-ready copy, and fixed slide-safe spacing for export.",
+    "mobile": "Design a 3-screen mobile app onboarding flow inside phone frames: welcome, permissions, and first action. Show realistic app copy, progress indicators, primary/secondary buttons, permission state, and a final success hint. Use a soft mint palette, generous touch targets, accessible contrast, and no external icons or images.",
+    "dashboard": "Build an analytics dashboard for a SaaS team with MRR trend line chart, pipeline stacked bars, top accounts table, forecast gauge, date-range filters, and an empty or warning state. Use a dense dark theme, teal and amber accents, plausible mock data, accessible tables, and responsive card reflow.",
+    "email": "Design a transactional welcome email for a SaaS product. Use a 600px single-column table-based layout with logo header, greeting, 3 onboarding steps, primary CTA, fallback text link, and compliance footer. Keep it mobile-safe, use email-compatible styling, realistic copy, and no external images or scripts.",
+    "portfolio": "Design a photographer portfolio with a masonry image grid using CSS gradient or shape placeholders instead of external photos. Include wordmark nav, category filter pills, hover overlay with project title and camera settings, lightbox selected state, availability footer, dark background, and responsive two/three/four-column behavior.",
+    "casestudy": "Create a print-ready one-page customer case study for a B2B fintech. Include client hero, business context, three large before/after metrics with deltas, a CFO pull quote, three-step How we did it section, process diagram, and logo strip. Use dark theme, serif headings, monospace numerals, realistic content, and no lorem ipsum.",
+    "animation": "Build a showcase page with six organic CSS/SVG loading animations. Each loader sits in its own labeled card with a usage note, accessible status text, active/paused state, and motion polish: blob morph, leaf sway, ink drop, breathing circle, soft pulse, ribbon weave. Use warm cream background, muted pastels, responsive wrapping, and no external assets."
   },
   "hub": {
     "newDesign": "New design",
