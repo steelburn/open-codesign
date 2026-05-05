@@ -1470,6 +1470,8 @@ describe('generateViaAgent()', () => {
     expect(sys).toContain('Use `create` for new files');
     expect(sys).toContain('Progressive generation is required');
     expect(sys).toContain('small shell');
+    expect(sys).toContain('complete first pass');
+    expect(sys).toContain('Do not call `preview` while the artifact is still only a scaffold');
     expect(sys).toContain('large initial writes are rejected');
     expect(sys).toContain('Interleave major tool groups');
     expect(sys).toContain('under 18 words');

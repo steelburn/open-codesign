@@ -264,7 +264,7 @@ function agenticToolGuidance(input: { inspectWorkspace: boolean }): string {
           '5. When the workspace brief says files or reference materials are present, call `inspect_workspace` before editing, then `view` the specific files you need.',
         ]
       : []),
-    `${input.inspectWorkspace ? '6' : '5'}. Write/edit the design source at \`${DEFAULT_SOURCE_ENTRY}\`, then call \`preview(path)\` when available.`,
+    `${input.inspectWorkspace ? '6' : '5'}. Write/edit the design source at \`${DEFAULT_SOURCE_ENTRY}\` through a complete first pass, then call \`preview(path)\` when available. Do not preview scaffold-only, loading, skeleton, placeholder, or empty-section states.`,
     `${input.inspectWorkspace ? '7' : '6'}. Call \`tweaks()\` for meaningful EDITMODE controls.`,
     `${input.inspectWorkspace ? '8' : '7'}. Call \`done(path)\` after the final mutation. If it reports errors, fix and retry, but stop after ${MAX_DONE_ERROR_ROUNDS} error rounds.`,
   ];
@@ -272,8 +272,9 @@ function agenticToolGuidance(input: { inspectWorkspace: boolean }): string {
     '## Workspace output contract',
     '',
     `- Write the main design source to \`${DEFAULT_SOURCE_ENTRY}\` with \`str_replace_based_edit_tool\`; chat text is never the artifact.`,
-    '- Progressive generation is required: make the first workspace mutation a compact visible scaffold, preview it, then add sections, data, interactions, and polish in smaller edits.',
-    '- Fresh workspace sequence: `set_title` -> `set_todos` -> optional `skill`/`scaffold` -> `create App.jsx` with a small shell -> `preview(App.jsx)` -> incremental edits.',
+    '- Progressive generation is required: make the first workspace mutation a compact file scaffold, then add sections, data, interactions, and polish in smaller edits before previewing.',
+    '- Fresh workspace sequence: `set_title` -> `set_todos` -> optional `skill`/`scaffold` -> `create App.jsx` with a small shell -> incremental edits to a complete first pass -> `preview(App.jsx)`.',
+    '- Do not call `preview` while the artifact is still only a scaffold, loading state, skeleton, placeholder, or empty lower section. Preview should represent a coherent first pass unless the user explicitly asked for a loading-state design.',
     '- Existing-source sequence: `set_title` -> `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. Do not edit an existing source from memory.',
     '- Use `create` for new files; follow-up edits use `view`, `str_replace`, or `insert`.',
     '- Do not emit `<artifact>` tags, fenced source blocks, raw HTML/JSX/CSS, or HTML wrappers in chat.',

@@ -166,7 +166,8 @@ describe('str_replace_based_edit_tool', () => {
 
     const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
     expect(text).toContain('Blocked create App.jsx');
-    expect(text).toContain('compact visible scaffold');
+    expect(text).toContain('compact file scaffold');
+    expect(text).toContain('before calling preview');
     expect(result.details).toMatchObject({
       command: 'create',
       path: 'App.jsx',

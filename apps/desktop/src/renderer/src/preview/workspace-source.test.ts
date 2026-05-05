@@ -112,6 +112,35 @@ describe('workspace preview source resolution', () => {
     expect(listSnapshots).not.toHaveBeenCalled();
   });
 
+  it('can prefer the latest accepted snapshot before workspace drafts', async () => {
+    const read = vi.fn<WorkspacePreviewRead>(async (_designId, path) => ({
+      path,
+      content:
+        'function App(){ return <main id="workspace-draft">Draft</main>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
+    }));
+    const listSnapshots = vi.fn(async () => [
+      {
+        artifactSource:
+          'function App(){ return <main id="accepted-preview">Accepted</main>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
+      },
+    ]);
+
+    await expect(
+      resolveDesignPreviewSource({
+        designId: 'd1',
+        read,
+        listSnapshots,
+        preferSnapshotSource: true,
+      }),
+    ).resolves.toEqual({
+      path: 'App.jsx',
+      content:
+        'function App(){ return <main id="accepted-preview">Accepted</main>; }\nReactDOM.createRoot(document.getElementById("root")).render(<App/>);',
+    });
+    expect(listSnapshots).toHaveBeenCalledWith('d1');
+    expect(read).not.toHaveBeenCalledWith('d1', 'App.jsx');
+  });
+
   it('resolves design previews from legacy index.html when App.jsx is absent', async () => {
     const read = vi.fn<WorkspacePreviewRead>(async (_designId, path) => {
       if (path === 'App.jsx') throw new Error('missing App.jsx');

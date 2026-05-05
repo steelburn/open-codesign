@@ -94,7 +94,38 @@ export async function resolveDesignPreviewSource(input: {
   read?: WorkspacePreviewRead | undefined;
   snapshotSource?: string | null | undefined;
   listSnapshots?: DesignPreviewSnapshotList | undefined;
+  preferSnapshotSource?: boolean | undefined;
 }): Promise<WorkspacePreviewReadResult | null> {
+  async function resolveSnapshotSource(): Promise<WorkspacePreviewReadResult | null> {
+    let source =
+      typeof input.snapshotSource === 'string' && input.snapshotSource.trim().length > 0
+        ? input.snapshotSource
+        : null;
+    if (source === null && input.listSnapshots) {
+      try {
+        const snapshots = await input.listSnapshots(input.designId);
+        source = snapshots[0]?.artifactSource ?? null;
+      } catch {
+        source = null;
+      }
+    }
+    if (source === null || source.trim().length === 0) return null;
+
+    const referencesWorkspaceSource = hasWorkspaceSourceReference(source, LEGACY_SOURCE_ENTRY);
+    return resolveWorkspacePreviewSource({
+      designId: input.designId,
+      source,
+      path: referencesWorkspaceSource ? LEGACY_SOURCE_ENTRY : inferPreviewSourcePath(source),
+      read: input.read,
+      requireReferencedSource: false,
+    });
+  }
+
+  if (input.preferSnapshotSource === true) {
+    const snapshotResult = await resolveSnapshotSource();
+    if (snapshotResult !== null) return snapshotResult;
+  }
+
   if (input.read) {
     for (const path of [DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY]) {
       const result = await tryReadWorkspacePreviewSource({
@@ -106,28 +137,7 @@ export async function resolveDesignPreviewSource(input: {
     }
   }
 
-  let source =
-    typeof input.snapshotSource === 'string' && input.snapshotSource.trim().length > 0
-      ? input.snapshotSource
-      : null;
-  if (source === null && input.listSnapshots) {
-    try {
-      const snapshots = await input.listSnapshots(input.designId);
-      source = snapshots[0]?.artifactSource ?? null;
-    } catch {
-      source = null;
-    }
-  }
-  if (source === null || source.trim().length === 0) return null;
-
-  const referencesWorkspaceSource = hasWorkspaceSourceReference(source, LEGACY_SOURCE_ENTRY);
-  return resolveWorkspacePreviewSource({
-    designId: input.designId,
-    source,
-    path: referencesWorkspaceSource ? LEGACY_SOURCE_ENTRY : inferPreviewSourcePath(source),
-    read: input.read,
-    requireReferencedSource: false,
-  });
+  return resolveSnapshotSource();
 }
 
 export async function resolveWorkspacePreviewSource(input: {

@@ -97,7 +97,7 @@ function initialCreateIsTooLarge(path: string, text: string): boolean {
 function initialCreateTooLarge(path: string, text: string): AgentToolResult<TextEditorDetails> {
   const lines = text.split('\n').length;
   return ok(
-    `Blocked create ${path}: the first workspace write is too large (${text.length} chars, ${lines} lines). Create a compact visible scaffold first, call preview, then add sections with smaller str_replace/insert edits. No file was written.`,
+    `Blocked create ${path}: the first workspace write is too large (${text.length} chars, ${lines} lines). Create a compact file scaffold first, then add sections with smaller str_replace/insert edits before calling preview. No file was written.`,
     {
       command: 'create',
       path,

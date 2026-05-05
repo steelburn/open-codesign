@@ -14,7 +14,10 @@ import {
   stablePreviewSourceKey,
 } from '../preview/helpers';
 import { LoadingState } from '../preview/LoadingState';
-import { readWorkspacePreviewSource } from '../preview/workspace-source';
+import {
+  readWorkspacePreviewSource,
+  resolveDesignPreviewSource,
+} from '../preview/workspace-source';
 import { useCodesignStore } from '../store';
 
 export { resolveReferencedWorkspacePreviewPath } from '../preview/workspace-source';
@@ -271,6 +274,13 @@ export function shouldGateUnverifiedGeneratingPreview(input: {
   );
 }
 
+export function shouldUseDesignPreviewResolverForFile(input: {
+  path: string;
+  previewKind: FilePreviewKind;
+}): boolean {
+  return input.previewKind === 'runtime' && isMainDesignSourcePath(input.path);
+}
+
 export function defaultWorkspacePreviewPath(files: DesignFileEntry[]): string | null {
   return (
     files.find((f) => f.path === DEFAULT_SOURCE_ENTRY)?.path ??
@@ -446,10 +456,12 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const { files: observedFiles } = useDesignFiles(files ? null : currentDesignId);
   const workspaceFiles = files ?? observedFiles;
   const currentDesign = designs.find((d) => d.id === currentDesignId);
+  const currentDesignUpdatedAt = currentDesign?.updatedAt;
   const effectiveFile = file ?? workspaceFiles.find((f) => f.path === path) ?? null;
   const prefersPreviewSource = effectiveFile?.source === 'preview-html';
   const previewKind = previewKindForFile(path, effectiveFile?.kind);
   const renderable = previewKind === 'runtime';
+  const useDesignPreviewResolver = shouldUseDesignPreviewResolverForFile({ path, previewKind });
   const currentDesignGenerating =
     currentDesignId !== null && isGenerating && generatingDesignId === currentDesignId;
   const gateUnverifiedPreview = shouldGateUnverifiedGeneratingPreview({
@@ -495,13 +507,43 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   useEffect(() => {
     // Re-read when the file watcher reports changed metadata for either the
     // selected file or an HTML placeholder's resolved JSX/TSX source.
+    void currentDesignUpdatedAt;
     void previewDependencyKey;
     if ((!renderable && !textPreview) || !currentDesignId) {
       setPreviewSource(null);
       setReadError(null);
       return;
     }
+    if (gateUnverifiedPreview) {
+      setPreviewSource(null);
+      setReadError(null);
+      return;
+    }
     const read = window.codesign?.files?.read;
+    if (useDesignPreviewResolver) {
+      let cancelled = false;
+      setReadError(null);
+      void resolveDesignPreviewSource({
+        designId: currentDesignId,
+        read,
+        snapshotSource: currentSnapshotId === null ? currentPreviewSource : null,
+        listSnapshots: window.codesign?.snapshots.list,
+        preferSnapshotSource: true,
+      })
+        .then((result) => {
+          if (cancelled) return;
+          setPreviewSource(result);
+          if (result === null) setReadError(t('canvas.filesTabEmpty'));
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setPreviewSource(null);
+          setReadError(err instanceof Error ? err.message : t('errors.unknown'));
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
     const sourceMode = chooseWorkspacePreviewSourceMode({
       path,
       hasReadApi: typeof read === 'function',
@@ -535,6 +577,9 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     };
   }, [
     currentDesignId,
+    currentDesignUpdatedAt,
+    currentSnapshotId,
+    gateUnverifiedPreview,
     previewDependencyKey,
     path,
     currentPreviewSource,
@@ -542,6 +587,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     textPreview,
     t,
     prefersPreviewSource,
+    useDesignPreviewResolver,
   ]);
 
   const previewSourceStableKey = useMemo(

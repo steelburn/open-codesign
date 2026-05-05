@@ -319,10 +319,11 @@ describe('composeSystemPrompt()', () => {
 
   it('requires staged file generation instead of one huge initial artifact write', () => {
     const p = composeSystemPrompt({ mode: 'create' });
-    expect(p).toContain('First visible scaffold');
+    expect(p).toContain('First file scaffold');
     expect(p).toContain('Do not put the whole finished page into the first write');
-    expect(p).toContain('Preview early');
-    expect(p).toContain('Implement incrementally');
+    expect(p).toContain('Preview the complete pass');
+    expect(p).toContain('Implement the first complete pass');
+    expect(p).toContain('do not call `preview` while the file is still only a scaffold');
   });
 
   it('asks the agent to interleave concise progress notes with tool phases', () => {

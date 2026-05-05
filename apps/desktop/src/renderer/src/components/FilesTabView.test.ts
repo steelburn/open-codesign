@@ -9,6 +9,7 @@ import {
   resolveReferencedWorkspacePreviewPath,
   shouldGateUnverifiedGeneratingPreview,
   shouldShowTweakPanelForFile,
+  shouldUseDesignPreviewResolverForFile,
   workspaceBaseHrefForFile,
   workspacePreviewDependencyKey,
   workspacePreviewSourceStableKey,
@@ -113,6 +114,21 @@ describe('FilesTabView preview helpers', () => {
         currentDesignGenerating: false,
         currentSnapshotId: null,
       }),
+    ).toBe(false);
+  });
+
+  it('uses the design-level resolver for main design runtime files only', () => {
+    expect(shouldUseDesignPreviewResolverForFile({ path: 'App.jsx', previewKind: 'runtime' })).toBe(
+      true,
+    );
+    expect(
+      shouldUseDesignPreviewResolverForFile({ path: 'index.html', previewKind: 'runtime' }),
+    ).toBe(true);
+    expect(
+      shouldUseDesignPreviewResolverForFile({ path: 'screens/App.jsx', previewKind: 'runtime' }),
+    ).toBe(false);
+    expect(
+      shouldUseDesignPreviewResolverForFile({ path: 'DESIGN.md', previewKind: 'markdown' }),
     ).toBe(false);
   });
 

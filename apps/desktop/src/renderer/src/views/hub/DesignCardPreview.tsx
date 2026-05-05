@@ -239,6 +239,7 @@ export function DesignCardPreview({ design }: DesignCardPreviewProps) {
       designId: design.id,
       read: window.codesign.files?.read,
       listSnapshots: window.codesign.snapshots.list,
+      preferSnapshotSource: true,
     })
       .then((result) => {
         if (cancelled || !mounted.current) return;
