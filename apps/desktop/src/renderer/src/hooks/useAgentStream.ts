@@ -224,14 +224,18 @@ export function useAgentStream(): void {
       pending.resolved = true;
       const result = event.result;
       const durationMs = event.durationMs;
+      const finalStatus = event.status === 'error' ? 'error' : 'done';
       void pending.seqPromise.then((seq) => {
         if (seq === null) return;
         void updateChatToolStatus({
           designId,
           seq,
-          status: 'done',
+          status: finalStatus,
           ...(result !== undefined ? { result } : {}),
           ...(durationMs !== undefined ? { durationMs } : {}),
+          ...(finalStatus === 'error' && typeof event.message === 'string'
+            ? { errorMessage: event.message }
+            : {}),
         });
       });
     };

@@ -985,7 +985,8 @@ describe('generateViaAgent()', () => {
       path: 'App.jsx',
       file_text: 'function App() { return <main/>; }',
     });
-    expect(JSON.stringify(blocked.content)).toContain('Call set_todos');
+    expect(JSON.stringify(blocked.content)).toContain('set_todos is required');
+    expect(JSON.stringify(blocked.content)).toContain('No file was written');
     expect(fs.view('App.jsx')).toBeNull();
 
     await todos.execute('todos-1', { items: [{ text: 'Build invoice', checked: false }] });
@@ -1350,7 +1351,8 @@ describe('generateViaAgent()', () => {
     const prompt = agentCalls[0]?.prompts[0]?.message as string;
     expect(prompt).toContain('Workspace context');
     expect(prompt).toContain('Existing source candidates: App.jsx');
-    expect(prompt).toContain('Inspect the workspace before editing existing source files.');
+    expect(prompt).toContain('Before editing existing source files, call set_todos');
+    expect(prompt).toContain('then view the current source file');
     expect(prompt).not.toContain('revision turn');
     expect(prompt).not.toContain('takeover mode');
     expect(prompt).toContain('make the hero warmer');
@@ -1466,6 +1468,9 @@ describe('generateViaAgent()', () => {
     const sys = agentCalls[0]?.options.initialState?.systemPrompt as string;
     expect(sys).toContain('str_replace_based_edit_tool');
     expect(sys).toContain('Use `create` for new files');
+    expect(sys).toContain('Progressive generation is required');
+    expect(sys).toContain('small shell');
+    expect(sys).toContain('large initial writes are rejected');
     expect(sys).toContain('`str_replace`, or `insert`');
     expect(sys).toContain('Do not emit `<artifact>`');
     expect(sys).toContain('design source to `App.jsx`');

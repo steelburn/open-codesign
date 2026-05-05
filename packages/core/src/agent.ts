@@ -255,21 +255,26 @@ const MAX_DONE_ERROR_ROUNDS = 3;
 
 function agenticToolGuidance(input: { inspectWorkspace: boolean }): string {
   const requiredSteps = [
-    '1. Call `set_title`; call `set_todos` for multi-step work.',
-    '2. Load optional resources explicitly with `skill(name)` or `scaffold({kind, destPath})` before relying on them.',
+    '1. Call `set_title`.',
+    '2. Call `set_todos` with a short checklist before any `create`, `str_replace`, or `insert` file mutation. This is required even for fresh single-file designs.',
+    '3. If an edit tool reports `set_todos_required`, immediately call `set_todos`, then retry the same edit. The blocked edit did not write a file.',
+    '4. Load optional resources explicitly with `skill(name)` or `scaffold({kind, destPath})` before relying on them.',
     ...(input.inspectWorkspace
       ? [
-          '3. When the workspace brief says files or reference materials are present, call `inspect_workspace` before editing, then `view` the specific files you need.',
+          '5. When the workspace brief says files or reference materials are present, call `inspect_workspace` before editing, then `view` the specific files you need.',
         ]
       : []),
-    `${input.inspectWorkspace ? '4' : '3'}. Write/edit the design source at \`${DEFAULT_SOURCE_ENTRY}\`, then call \`preview(path)\` when available.`,
-    `${input.inspectWorkspace ? '5' : '4'}. Call \`tweaks()\` for meaningful EDITMODE controls.`,
-    `${input.inspectWorkspace ? '6' : '5'}. Call \`done(path)\` after the final mutation. If it reports errors, fix and retry, but stop after ${MAX_DONE_ERROR_ROUNDS} error rounds.`,
+    `${input.inspectWorkspace ? '6' : '5'}. Write/edit the design source at \`${DEFAULT_SOURCE_ENTRY}\`, then call \`preview(path)\` when available.`,
+    `${input.inspectWorkspace ? '7' : '6'}. Call \`tweaks()\` for meaningful EDITMODE controls.`,
+    `${input.inspectWorkspace ? '8' : '7'}. Call \`done(path)\` after the final mutation. If it reports errors, fix and retry, but stop after ${MAX_DONE_ERROR_ROUNDS} error rounds.`,
   ];
   return [
     '## Workspace output contract',
     '',
     `- Write the main design source to \`${DEFAULT_SOURCE_ENTRY}\` with \`str_replace_based_edit_tool\`; chat text is never the artifact.`,
+    '- Progressive generation is required: make the first workspace mutation a compact visible scaffold, preview it, then add sections, data, interactions, and polish in smaller edits.',
+    '- Fresh workspace sequence: `set_title` -> `set_todos` -> optional `skill`/`scaffold` -> `create App.jsx` with a small shell -> `preview(App.jsx)` -> incremental edits.',
+    '- Existing-source sequence: `set_title` -> `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. Do not edit an existing source from memory.',
     '- Use `create` for new files; follow-up edits use `view`, `str_replace`, or `insert`.',
     '- Do not emit `<artifact>` tags, fenced source blocks, raw HTML/JSX/CSS, or HTML wrappers in chat.',
     '- Local workspace assets and scaffolded files are allowed. External scripts remain restricted by the base output rules.',
@@ -281,6 +286,8 @@ function agenticToolGuidance(input: { inspectWorkspace: boolean }): string {
     '## File-edit discipline',
     '',
     '- Keep `old_str` small and unique. Large replacements waste context and are fragile.',
+    '- For existing files, call `view` in the same run before `str_replace` or `insert`; use the latest viewed text, not memory.',
+    '- Do not put the whole finished page into the first `create App.jsx`; large initial writes are rejected. Start small enough that the user sees files and preview quickly.',
     '- Never view just to check whether an edit succeeded; the tool reports failures.',
   ].join('\n');
 }
@@ -454,16 +461,24 @@ function wrapEditRequiresTodos(
         (command === 'create' || command === 'str_replace' || command === 'insert') &&
         !hasTodos()
       ) {
+        const path =
+          typeof params === 'object' && params !== null
+            ? (params as Record<string, unknown>)['path']
+            : undefined;
+        const pathText = typeof path === 'string' && path.trim().length > 0 ? ` ${path}` : '';
+        const message = `Blocked ${String(command)}${pathText}: set_todos is required before file mutations. Call set_todos with a short checklist, then retry this exact edit. No file was written.`;
         return {
           content: [
             {
               type: 'text',
-              text: 'Call set_todos with a short checklist before making substantive file edits, then retry this edit.',
+              text: message,
             },
           ],
           details: {
             status: 'blocked',
             reason: 'set_todos_required',
+            command,
+            ...(typeof path === 'string' ? { path } : {}),
           },
         };
       }
@@ -656,8 +671,8 @@ function buildWorkspaceBrief(
   ];
   lines.push(
     sources.length > 0
-      ? 'Inspect the workspace before editing existing source files. Preserve and extend the current design unless the user explicitly asks for a rebuild.'
-      : 'Start from the user request and any references, then create the workspace source.',
+      ? 'Before editing existing source files, call set_todos, inspect the workspace when available, then view the current source file. Preserve and extend the current design unless the user explicitly asks for a rebuild.'
+      : `This is an empty workspace. Call set_todos first, then create ${DEFAULT_SOURCE_ENTRY} as the main design source.`,
   );
   if (hasDesignMd) {
     lines.push(

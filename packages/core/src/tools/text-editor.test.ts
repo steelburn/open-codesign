@@ -3,6 +3,10 @@ import { makeTextEditorTool, type TextEditorFsCallbacks } from './text-editor.js
 
 function makeFs(content: string, extraFiles: Record<string, string> = {}): TextEditorFsCallbacks {
   const files = new Map<string, string>([['App.jsx', content], ...Object.entries(extraFiles)]);
+  return makeMapFs(files);
+}
+
+function makeMapFs(files: Map<string, string>): TextEditorFsCallbacks {
   return {
     view: (path) => {
       const file = files.get(path);
@@ -32,6 +36,10 @@ function makeFs(content: string, extraFiles: Record<string, string> = {}): TextE
       return Array.from(files.keys()).sort();
     },
   };
+}
+
+function makeEmptyFs(): TextEditorFsCallbacks {
+  return makeMapFs(new Map());
 }
 
 describe('str_replace_based_edit_tool', () => {
@@ -137,6 +145,50 @@ describe('str_replace_based_edit_tool', () => {
     });
 
     expect(result.details).toMatchObject({ command: 'str_replace', path: 'new.jsx' });
+  });
+
+  it('blocks an oversized first App.jsx create so the agent has to work incrementally', async () => {
+    const tool = makeTextEditorTool(makeEmptyFs());
+    const hugeSource = [
+      'function App() {',
+      '  return <main>',
+      ...Array.from({ length: 230 }, (_, i) => `    <section>Row ${i}</section>`),
+      '  </main>;',
+      '}',
+      "ReactDOM.createRoot(document.getElementById('root')).render(<App />);",
+    ].join('\n');
+
+    const result = await tool.execute('large-create', {
+      command: 'create',
+      path: 'App.jsx',
+      file_text: hugeSource,
+    });
+
+    const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+    expect(text).toContain('Blocked create App.jsx');
+    expect(text).toContain('compact visible scaffold');
+    expect(result.details).toMatchObject({
+      command: 'create',
+      path: 'App.jsx',
+      result: { blocked: true, reason: 'initial_create_too_large' },
+    });
+  });
+
+  it('allows a compact first App.jsx create', async () => {
+    const fs = makeEmptyFs();
+    const tool = makeTextEditorTool(fs);
+
+    const result = await tool.execute('small-create', {
+      command: 'create',
+      path: 'App.jsx',
+      file_text:
+        "function App() { return <main>Draft</main>; }\nReactDOM.createRoot(document.getElementById('root')).render(<App />);",
+    });
+
+    expect(result.content[0]?.type === 'text' ? result.content[0].text : '').toContain(
+      'Created App.jsx',
+    );
+    expect(fs.view('App.jsx')).not.toBeNull();
   });
 
   it('blocks repeated failed exact edits until the agent rewrites the file', async () => {

@@ -115,6 +115,38 @@ describe('WorkingCard.buildRows', () => {
     expect(rows[0]?.status).toBe('running');
   });
 
+  it('renders blocked creates as their own error row instead of merging into later edits', () => {
+    const rows = buildRows([
+      call({
+        toolName: 'str_replace_based_edit_tool',
+        command: 'create',
+        args: { path: 'App.jsx' },
+        status: 'error',
+        result: {
+          content: [{ type: 'text', text: 'Blocked create App.jsx: set_todos is required.' }],
+          details: { status: 'blocked', reason: 'set_todos_required' },
+        },
+      }),
+      call({
+        toolName: 'set_todos',
+        args: { items: [{ text: 'Build page', checked: false }] },
+      }),
+      call({
+        toolName: 'str_replace_based_edit_tool',
+        command: 'create',
+        args: { path: 'App.jsx' },
+        status: 'done',
+      }),
+    ]);
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.label).toBe('blocked create');
+    expect(rows[0]?.status).toBe('error');
+    expect(rows[0]?.detail).toBe('App.jsx');
+    expect(rows[2]?.label).toBe('create');
+    expect(rows[2]?.status).toBe('done');
+  });
+
   it('demotes removed helper tools to a generic legacy row', () => {
     const rows = buildRows([
       call({ toolName: 'read_url', args: { url: 'https://example.com' } }),

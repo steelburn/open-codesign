@@ -67,6 +67,7 @@ interface ToolRow {
   status: 'running' | 'done' | 'error';
   todos?: TodoItem[];
   editCount?: number;
+  errorText?: string;
 }
 
 function extractTodos(call: ChatToolCallPayload): TodoItem[] {
@@ -105,6 +106,50 @@ function isCreateCommand(call: ChatToolCallPayload): boolean {
 
 function isTextEditorTool(call: ChatToolCallPayload): boolean {
   return call.toolName === 'str_replace_based_edit_tool';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function textFromToolResult(result: unknown): string | null {
+  if (!isRecord(result)) return null;
+  const content = result['content'];
+  if (!Array.isArray(content)) return null;
+  const texts = content
+    .map((item) =>
+      isRecord(item) && item['type'] === 'text' && typeof item['text'] === 'string'
+        ? item['text']
+        : '',
+    )
+    .filter((text) => text.length > 0);
+  return texts.length > 0 ? texts.join('\n') : null;
+}
+
+function blockedReasonOf(call: ChatToolCallPayload): string | null {
+  const result = call.result;
+  if (!isRecord(result)) return null;
+  const details = result['details'];
+  if (!isRecord(details)) return null;
+  if (details['status'] === 'blocked') {
+    return typeof details['reason'] === 'string' ? details['reason'] : 'blocked';
+  }
+  const nestedResult = details['result'];
+  if (!isRecord(nestedResult)) return null;
+  if (nestedResult['blocked'] === true) {
+    return typeof nestedResult['reason'] === 'string' ? nestedResult['reason'] : 'blocked';
+  }
+  if (nestedResult['requiresView'] === true) return 'view_required';
+  return null;
+}
+
+function displayLabel(call: ChatToolCallPayload, label: string): string {
+  const blocked = blockedReasonOf(call) !== null;
+  if (!blocked && call.status !== 'error') return label;
+  const prefix = blocked ? 'blocked' : 'failed';
+  if (label === 'create') return `${prefix} create`;
+  if (label === 'edit') return `${prefix} edit`;
+  return label;
 }
 
 function pathOf(call: ChatToolCallPayload): string | null {
@@ -191,19 +236,21 @@ export function buildRows(calls: ChatToolCallPayload[]): ToolRow[] {
 
     const { Icon, label } = iconAndLabel(call);
     const detail = detailOf(call);
+    const display = displayLabel(call, label);
+    const blocked = blockedReasonOf(call) !== null || call.status === 'error';
+    const errorText = call.error?.message ?? textFromToolResult(call.result) ?? undefined;
     const isFileEdit = isTextEditorTool(call) && Boolean(detail);
 
     if (isFileEdit && detail) {
       const candidateIdx =
         lastEditIdx >= 0 && rows[lastEditIdx]?.detail === detail ? lastEditIdx : -1;
       const last = candidateIdx >= 0 ? rows[candidateIdx] : undefined;
-      if (last) {
+      if (last && !blocked && last.status !== 'error') {
         last.editCount = (last.editCount ?? 1) + 1;
         last.label = 'edit';
         last.Icon = FileEdit;
         if (call.status === 'running') last.status = 'running';
-        else if (call.status === 'error') last.status = 'error';
-        else if (last.status !== 'running' && last.status !== 'error') last.status = 'done';
+        else if (last.status !== 'running') last.status = 'done';
         continue;
       }
     }
@@ -211,9 +258,10 @@ export function buildRows(calls: ChatToolCallPayload[]): ToolRow[] {
     rows.push({
       key: `c-${i}`,
       Icon,
-      label,
+      label: display,
       detail,
       status: call.status,
+      ...(errorText !== undefined ? { errorText } : {}),
     });
     if (isFileEdit) lastEditIdx = rows.length - 1;
   }
@@ -287,12 +335,10 @@ function ToolRowView({ row }: { row: ToolRow }) {
     row.detail && row.editCount && row.editCount > 1
       ? `${row.detail} (${row.editCount} edits)`
       : row.detail;
+  const titleText = row.errorText ?? detailText ?? row.label;
 
   return (
-    <div
-      className="flex items-center gap-[6px] text-[12.5px] py-[1px]"
-      title={detailText ?? row.label}
-    >
+    <div className="flex items-center gap-[6px] text-[12.5px] py-[1px]" title={titleText}>
       {row.status === 'running' ? (
         <span className="relative inline-flex w-[14px] h-[14px] items-center justify-center shrink-0">
           <span className="absolute inline-block w-[7px] h-[7px] rounded-full bg-[var(--color-accent)] animate-pulse" />
@@ -303,7 +349,13 @@ function ToolRowView({ row }: { row: ToolRow }) {
       ) : (
         <Icon className="w-[14px] h-[14px] shrink-0 text-[var(--color-text-muted)]" aria-hidden />
       )}
-      <span className="font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-secondary)]">
+      <span
+        className={
+          row.status === 'error'
+            ? 'font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-error)]'
+            : 'font-[var(--font-mono),ui-monospace,Menlo,monospace] text-[var(--color-text-secondary)]'
+        }
+      >
         {row.label}
       </span>
       {detailText ? (

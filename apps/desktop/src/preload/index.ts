@@ -213,6 +213,7 @@ export interface AgentStreamEvent {
   // tool_call_result
   result?: unknown;
   durationMs?: number;
+  status?: 'done' | 'error';
   // fs_updated — emitted whenever the agent edit tool mutates a file in the
   // virtual fs. Renderer uses this to re-render the iframe live during
   // generation so the user can watch the design take shape.

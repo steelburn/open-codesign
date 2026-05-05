@@ -57,7 +57,7 @@ import {
 import { type Database, getDesign, recordDiagnosticEvent } from '../snapshots-db';
 import { readWorkspaceFilesAt } from '../workspace-reader';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
-import { toolExecutionIsErrorForLog } from './tool-log';
+import { toolExecutionStatusForStream } from './tool-log';
 
 /**
  * Pull an HTTP status code out of a caught provider error. Mirrors
@@ -355,10 +355,12 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             toolCount += 1;
             logIpc.info('agent.tool_start', { generationId: id, tool: event.toolName });
           } else if (event.type === 'tool_execution_end') {
+            const streamStatus = toolExecutionStatusForStream(event);
             logIpc.info('agent.tool_end', {
               generationId: id,
               tool: event.toolName,
-              isError: toolExecutionIsErrorForLog(event),
+              isError: streamStatus.status === 'error',
+              status: streamStatus.status,
             });
           } else if (event.type === 'turn_end') {
             logIpc.info('agent.turn_end', {
@@ -402,6 +404,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           if (event.type === 'tool_execution_end') {
             const startedAt = toolStartedAt.get(event.toolCallId) ?? Date.now();
             toolStartedAt.delete(event.toolCallId);
+            const streamStatus = toolExecutionStatusForStream(event);
             sendEvent({
               ...baseCtx,
               type: 'tool_call_result',
@@ -409,6 +412,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               toolCallId: event.toolCallId,
               result: event.result,
               durationMs: Date.now() - startedAt,
+              status: streamStatus.status,
+              ...(streamStatus.errorMessage !== undefined
+                ? { message: streamStatus.errorMessage }
+                : {}),
             });
             return;
           }

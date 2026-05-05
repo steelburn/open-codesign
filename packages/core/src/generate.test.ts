@@ -316,6 +316,14 @@ describe('composeSystemPrompt()', () => {
     expect(p).toContain('`App.jsx`');
     expect(p).toContain('not a standalone HTML export');
   });
+
+  it('requires staged file generation instead of one huge initial artifact write', () => {
+    const p = composeSystemPrompt({ mode: 'create' });
+    expect(p).toContain('First visible scaffold');
+    expect(p).toContain('Do not put the whole finished page into the first write');
+    expect(p).toContain('Preview early');
+    expect(p).toContain('Implement incrementally');
+  });
 });
 
 describe('prompt section .md vs TS drift', () => {

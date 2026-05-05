@@ -47,6 +47,9 @@ const TextEditorParams = Type.Object({
   view_range: Type.Optional(Type.Array(Type.Number(), { minItems: 2, maxItems: 2 })),
 });
 
+const INITIAL_SOURCE_CREATE_MAX_CHARS = 12000;
+const INITIAL_SOURCE_CREATE_MAX_LINES = 220;
+
 export interface TextEditorDetails {
   command: 'view' | 'create' | 'str_replace' | 'insert';
   path: string;
@@ -83,6 +86,31 @@ function exactEditFailuresExceeded(
 
 function exactEditFailuresExceededText(path: string, count: number): string {
   return `Too many failed exact edits for ${path} (${count}). Stop using str_replace/insert on this file in this run. Re-read the relevant range and use create to rewrite the complete corrected file, or ask the user to continue.`;
+}
+
+function initialCreateIsTooLarge(path: string, text: string): boolean {
+  if (path !== DEFAULT_SOURCE_ENTRY) return false;
+  if (text.length > INITIAL_SOURCE_CREATE_MAX_CHARS) return true;
+  return text.split('\n').length > INITIAL_SOURCE_CREATE_MAX_LINES;
+}
+
+function initialCreateTooLarge(path: string, text: string): AgentToolResult<TextEditorDetails> {
+  const lines = text.split('\n').length;
+  return ok(
+    `Blocked create ${path}: the first workspace write is too large (${text.length} chars, ${lines} lines). Create a compact visible scaffold first, call preview, then add sections with smaller str_replace/insert edits. No file was written.`,
+    {
+      command: 'create',
+      path,
+      result: {
+        blocked: true,
+        reason: 'initial_create_too_large',
+        chars: text.length,
+        lines,
+        maxChars: INITIAL_SOURCE_CREATE_MAX_CHARS,
+        maxLines: INITIAL_SOURCE_CREATE_MAX_LINES,
+      },
+    },
+  );
 }
 
 function requireString(
@@ -134,6 +162,7 @@ export function makeTextEditorTool(
       'Read and edit files in the current design via view/create/str_replace/insert commands. ' +
       `Paths are relative to the design root (e.g. "${DEFAULT_SOURCE_ENTRY}", "_starters/ios-frame.jsx"). ` +
       'Use create for new files; str_replace requires an exact match of old_str; ' +
+      `the first ${DEFAULT_SOURCE_ENTRY} create must be a compact scaffold, not the complete finished page; ` +
       'view returns file content or directory listing. ' +
       'IMPORTANT: pass `view_range: [startLine, endLine]` (1-indexed, inclusive; either bound may be -1 for EOF) ' +
       'to read only a slice of the file — strongly preferred over full-file views after the file has grown past ~100 lines. ' +
@@ -207,6 +236,9 @@ export function makeTextEditorTool(
         }
         case 'create': {
           const text = requireString(params.file_text, 'file_text', 'create');
+          if (fs.view(path) === null && initialCreateIsTooLarge(path, text)) {
+            return initialCreateTooLarge(path, text);
+          }
           const result = await fs.create(path, text);
           failedExactEditCountByPath.delete(path);
           changedThisRunPaths.add(path);

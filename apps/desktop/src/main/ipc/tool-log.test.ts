@@ -1,6 +1,6 @@
 import type { AgentEvent } from '@open-codesign/core';
 import { describe, expect, it } from 'vitest';
-import { toolExecutionIsErrorForLog } from './tool-log';
+import { toolExecutionIsErrorForLog, toolExecutionStatusForStream } from './tool-log';
 
 type ToolExecutionEndEvent = Extract<AgentEvent, { type: 'tool_execution_end' }>;
 
@@ -52,5 +52,55 @@ describe('toolExecutionIsErrorForLog', () => {
 
   it('leaves non-set_todos tool errors untouched', () => {
     expect(toolExecutionIsErrorForLog(toolEnd({ toolName: 'read' }))).toBe(true);
+  });
+});
+
+describe('toolExecutionStatusForStream', () => {
+  it('marks recoverable blocked tool results as error for the renderer', () => {
+    const status = toolExecutionStatusForStream(
+      toolEnd({
+        toolName: 'str_replace_based_edit_tool',
+        isError: false,
+        result: {
+          content: [
+            {
+              type: 'text',
+              text: 'Blocked create App.jsx: set_todos is required before file mutations.',
+            },
+          ],
+          details: {
+            status: 'blocked',
+            reason: 'set_todos_required',
+            command: 'create',
+            path: 'App.jsx',
+          },
+        },
+      }),
+    );
+
+    expect(status).toEqual({
+      status: 'error',
+      errorMessage: 'Blocked create App.jsx: set_todos is required before file mutations.',
+    });
+  });
+
+  it('marks large initial-create blocks as error even when the tool call itself succeeded', () => {
+    const status = toolExecutionStatusForStream(
+      toolEnd({
+        toolName: 'str_replace_based_edit_tool',
+        isError: false,
+        result: {
+          content: [{ type: 'text', text: 'Blocked create App.jsx: first write too large.' }],
+          details: {
+            command: 'create',
+            path: 'App.jsx',
+            result: { blocked: true, reason: 'initial_create_too_large' },
+          },
+        },
+      }),
+    );
+
+    expect(status.status).toBe('error');
+    expect(status.errorMessage).toContain('first write too large');
   });
 });
