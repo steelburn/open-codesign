@@ -125,7 +125,7 @@ describe('withInFlightGenerationForDesign', () => {
     const controller = new AbortController();
     const otherController = new AbortController();
     const inFlight = new Map<string, AbortController>();
-    const inFlightByDesign = new Map<string, string>();
+    const inFlightByDesign = new Map<string, { generationId: string; startedAt: number }>();
     let releaseFirst!: () => void;
     const firstDone = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -143,7 +143,7 @@ describe('withInFlightGenerationForDesign', () => {
       },
     );
 
-    await vi.waitFor(() => expect(inFlightByDesign.get('design-1')).toBe('gen-1'));
+    await vi.waitFor(() => expect(inFlightByDesign.get('design-1')?.generationId).toBe('gen-1'));
     await expect(
       withInFlightGenerationForDesign(
         'gen-2',
@@ -167,7 +167,7 @@ describe('withInFlightGenerationForDesign', () => {
 
   it('allows different designs to run concurrently', async () => {
     const inFlight = new Map<string, AbortController>();
-    const inFlightByDesign = new Map<string, string>();
+    const inFlightByDesign = new Map<string, { generationId: string; startedAt: number }>();
     const firstController = new AbortController();
     const secondController = new AbortController();
 
@@ -196,7 +196,7 @@ describe('withInFlightGenerationForDesign', () => {
   it('clears the design lock when cancellation removes the generation', async () => {
     const controller = makeController();
     const inFlight = new Map([['gen-1', controller]]);
-    const inFlightByDesign = new Map([['design-1', 'gen-1']]);
+    const inFlightByDesign = new Map([['design-1', { generationId: 'gen-1', startedAt: 1234 }]]);
     const logIpc = { info: vi.fn() };
 
     cancelGenerationRequest('gen-1', inFlight, logIpc, inFlightByDesign);
@@ -207,15 +207,15 @@ describe('withInFlightGenerationForDesign', () => {
 });
 
 describe('listInFlightGenerations', () => {
-  it('returns design/generation pairs from the main-process in-flight registry', () => {
+  it('returns design/generation start times from the main-process in-flight registry', () => {
     const inFlightByDesign = new Map([
-      ['design-b', 'gen-b'],
-      ['design-a', 'gen-a'],
+      ['design-b', { generationId: 'gen-b', startedAt: 2000 }],
+      ['design-a', { generationId: 'gen-a', startedAt: 1000 }],
     ]);
 
     expect(listInFlightGenerations(inFlightByDesign)).toEqual([
-      { designId: 'design-a', generationId: 'gen-a' },
-      { designId: 'design-b', generationId: 'gen-b' },
+      { designId: 'design-a', generationId: 'gen-a', startedAt: 1000 },
+      { designId: 'design-b', generationId: 'gen-b', startedAt: 2000 },
     ]);
   });
 });

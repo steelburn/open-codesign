@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getTextareaLineHeight, shouldSubmitPromptKey } from './chat/PromptInput';
+import {
+  elapsedSecondsSince,
+  formatElapsedSeconds,
+  getTextareaLineHeight,
+  shouldSubmitPromptKey,
+} from './chat/PromptInput';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -64,5 +69,17 @@ describe('shouldSubmitPromptKey', () => {
     expect(shouldSubmitPromptKey({ key: 'Enter', nativeIsComposing: true })).toBe(false);
     expect(shouldSubmitPromptKey({ key: 'Enter', keyCode: 229 })).toBe(false);
     expect(shouldSubmitPromptKey({ key: 'Enter' }, true)).toBe(false);
+  });
+});
+
+describe('elapsed generation timer helpers', () => {
+  it('derives elapsed seconds from the generation start timestamp', () => {
+    expect(elapsedSecondsSince(10_000, 35_400)).toBe(25);
+    expect(elapsedSecondsSince(10_000, 9_000)).toBe(0);
+  });
+
+  it('formats elapsed seconds as seconds first and mm:ss after a minute', () => {
+    expect(formatElapsedSeconds(25)).toBe('25s');
+    expect(formatElapsedSeconds(65)).toBe('1:05');
   });
 });

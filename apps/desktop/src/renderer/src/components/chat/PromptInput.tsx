@@ -64,6 +64,20 @@ export function getTextareaLineHeight(el: HTMLTextAreaElement): number {
   return fontSize * leading;
 }
 
+export function elapsedSecondsSince(
+  startedAt: number | null | undefined,
+  now = Date.now(),
+): number {
+  if (startedAt === null || startedAt === undefined) return 0;
+  return Math.max(0, Math.floor((now - startedAt) / 1000));
+}
+
+export function formatElapsedSeconds(elapsedSec: number): string {
+  return elapsedSec < 60
+    ? `${elapsedSec}s`
+    : `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`;
+}
+
 function resizeTextarea(el: HTMLTextAreaElement): void {
   const rowHeight = getTextareaLineHeight(el);
   el.style.height = 'auto';
@@ -117,6 +131,12 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
   const taRef = useRef<HTMLTextAreaElement>(null);
   const compositionActiveRef = useRef(false);
   const generationStage = useCodesignStore((s) => s.generationStage);
+  const generationStartedAt = useCodesignStore((s) => {
+    const currentDesignId = s.currentDesignId;
+    return currentDesignId === null
+      ? null
+      : (s.generationByDesign[currentDesignId]?.startedAt ?? null);
+  });
 
   const runningLabel = isGenerating
     ? (() => {
@@ -145,18 +165,15 @@ export const PromptInput = forwardRef<PromptInputHandle, PromptInputProps>(funct
       setElapsedSec(0);
       return;
     }
-    const start = Date.now();
-    setElapsedSec(0);
+    const start = generationStartedAt ?? Date.now();
+    setElapsedSec(elapsedSecondsSince(start));
     const id = setInterval(() => {
-      setElapsedSec(Math.floor((Date.now() - start) / 1000));
+      setElapsedSec(elapsedSecondsSince(start));
     }, 500);
     return () => clearInterval(id);
-  }, [isGenerating]);
+  }, [generationStartedAt, isGenerating]);
 
-  const elapsedText =
-    elapsedSec < 60
-      ? `${elapsedSec}s`
-      : `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, '0')}`;
+  const elapsedText = formatElapsedSeconds(elapsedSec);
 
   useEffect(() => {
     if (taRef.current) resizeTextarea(taRef.current);

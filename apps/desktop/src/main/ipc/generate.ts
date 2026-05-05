@@ -469,7 +469,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
 
   /** In-flight requests: generationId → AbortController */
   const inFlight = new Map<string, AbortController>();
-  const inFlightByDesign = new Map<string, string>();
+  const inFlightByDesign = new Map<string, { generationId: string; startedAt: number }>();
 
   const armTimeout = (id: string, controller: AbortController) =>
     armGenerationTimeout(

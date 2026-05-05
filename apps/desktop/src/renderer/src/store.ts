@@ -110,7 +110,10 @@ export interface CodesignState {
   previewSourceByDesign: Record<string, string>;
   /** Most-recent-first list of design ids in the preview pool. */
   recentDesignIds: string[];
-  generationByDesign: Record<string, { generationId: string; stage: GenerationStage }>;
+  generationByDesign: Record<
+    string,
+    { generationId: string; stage: GenerationStage; startedAt?: number }
+  >;
   isGenerating: boolean;
   activeGenerationId: string | null;
   /** Design id that owns the in-flight generation. Lets the user switch to

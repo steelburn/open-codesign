@@ -263,7 +263,7 @@ export interface AgentStreamEvent {
 
 export interface GenerationStatusResult {
   schemaVersion: 1;
-  running: Array<{ designId: string; generationId: string }>;
+  running: Array<{ designId: string; generationId: string; startedAt: number }>;
 }
 
 /**

@@ -114,7 +114,7 @@ function startGenerationForDesign(set: SetState, designId: string, generationId:
   set((state) => {
     const generationByDesign = {
       ...state.generationByDesign,
-      [designId]: { generationId, stage: 'sending' as GenerationStage },
+      [designId]: { generationId, stage: 'sending' as GenerationStage, startedAt: Date.now() },
     };
     return {
       generationByDesign,
@@ -135,12 +135,15 @@ function markGenerationRunningForDesign(
 ): void {
   set((state) => {
     const current = state.generationByDesign[designId];
-    if (current?.generationId === generationId && current.stage === stage) return {};
+    if (current?.generationId === generationId && current.stage === stage && current.startedAt) {
+      return {};
+    }
     const generationByDesign = {
       ...state.generationByDesign,
       [designId]: {
         generationId,
         stage,
+        startedAt: current?.startedAt ?? Date.now(),
       },
     };
     return {
@@ -156,7 +159,7 @@ function markGenerationRunningForDesign(
 
 function reconcileGenerationStatus(
   set: SetState,
-  running: Array<{ designId: string; generationId: string }>,
+  running: Array<{ designId: string; generationId: string; startedAt?: number }>,
 ): void {
   set((state) => {
     const next: CodesignState['generationByDesign'] = {};
@@ -164,8 +167,12 @@ function reconcileGenerationStatus(
       const existing = state.generationByDesign[item.designId];
       next[item.designId] =
         existing?.generationId === item.generationId
-          ? existing
-          : { generationId: item.generationId, stage: 'thinking' };
+          ? { ...existing, startedAt: existing.startedAt ?? item.startedAt ?? Date.now() }
+          : {
+              generationId: item.generationId,
+              stage: 'thinking',
+              startedAt: item.startedAt ?? Date.now(),
+            };
     }
     return {
       generationByDesign: next,
@@ -199,7 +206,7 @@ function updateGenerationStageById(
     if (current?.generationId !== generationId) return {};
     const generationByDesign = {
       ...state.generationByDesign,
-      [designId]: { generationId, stage },
+      [designId]: { generationId, stage, startedAt: current.startedAt ?? Date.now() },
     };
     return {
       generationByDesign,

@@ -113,7 +113,7 @@ describe('generationStage transitions', () => {
       codesign: mockCodesignApi({
         generationStatus: vi.fn(async () => ({
           schemaVersion: 1,
-          running: [{ designId: DEFAULT_DESIGN.id, generationId: 'gen-main' }],
+          running: [{ designId: DEFAULT_DESIGN.id, generationId: 'gen-main', startedAt: 1234 }],
         })),
       }),
       setTimeout,
@@ -123,6 +123,7 @@ describe('generationStage transitions', () => {
 
     expect(useCodesignStore.getState().generationByDesign[DEFAULT_DESIGN.id]).toEqual({
       generationId: 'gen-main',
+      startedAt: 1234,
       stage: 'thinking',
     });
     expect(useCodesignStore.getState().isGenerating).toBe(true);

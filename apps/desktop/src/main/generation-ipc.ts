@@ -4,11 +4,16 @@ export interface CancellationLogger {
   info: (event: string, payload: { id: string }) => void;
 }
 
+export interface InFlightGeneration {
+  generationId: string;
+  startedAt: number;
+}
+
 export function cancelGenerationRequest(
   raw: unknown,
   inFlight: Map<string, AbortController>,
   logIpc: CancellationLogger,
-  inFlightByDesign?: Map<string, string>,
+  inFlightByDesign?: Map<string, InFlightGeneration>,
 ): void {
   if (typeof raw !== 'string') {
     throw new CodesignError(
@@ -23,8 +28,8 @@ export function cancelGenerationRequest(
   controller.abort();
   inFlight.delete(raw);
   if (inFlightByDesign !== undefined) {
-    for (const [designId, generationId] of inFlightByDesign) {
-      if (generationId === raw) inFlightByDesign.delete(designId);
+    for (const [designId, generation] of inFlightByDesign) {
+      if (generation.generationId === raw) inFlightByDesign.delete(designId);
     }
   }
   logIpc.info('generate.cancelled', { id: raw });
@@ -50,32 +55,33 @@ export async function withInFlightGenerationForDesign<T>(
   id: string,
   designId: string,
   inFlight: Map<string, AbortController>,
-  inFlightByDesign: Map<string, string>,
+  inFlightByDesign: Map<string, InFlightGeneration>,
   controller: AbortController,
   run: () => Promise<T>,
 ): Promise<T> {
   const existing = inFlightByDesign.get(designId);
-  if (existing !== undefined && existing !== id) {
+  if (existing !== undefined && existing.generationId !== id) {
     throw new CodesignError(
       'A generation is already running for this design. Wait for it to finish or stop it before continuing.',
       'GENERATION_ALREADY_RUNNING',
     );
   }
-  inFlightByDesign.set(designId, id);
+  const startedAt = existing?.startedAt ?? Date.now();
+  inFlightByDesign.set(designId, { generationId: id, startedAt });
   try {
     return await withInFlightGeneration(id, inFlight, controller, run);
   } finally {
-    if (inFlightByDesign.get(designId) === id) {
+    if (inFlightByDesign.get(designId)?.generationId === id) {
       inFlightByDesign.delete(designId);
     }
   }
 }
 
 export function listInFlightGenerations(
-  inFlightByDesign: ReadonlyMap<string, string>,
-): Array<{ designId: string; generationId: string }> {
+  inFlightByDesign: ReadonlyMap<string, InFlightGeneration>,
+): Array<{ designId: string; generationId: string; startedAt: number }> {
   return [...inFlightByDesign.entries()]
-    .map(([designId, generationId]) => ({ designId, generationId }))
+    .map(([designId, generation]) => ({ designId, ...generation }))
     .sort((a, b) => a.designId.localeCompare(b.designId));
 }
 
