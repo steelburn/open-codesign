@@ -130,19 +130,22 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
   const [files, setFiles] = useState<DesignFileEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const listErrorToastRef = useRef<WorkspaceListErrorToastState>({ key: null, toastId: null });
+  const refetchSeqRef = useRef(0);
   const backend: 'workspace' | 'snapshots' =
     typeof window !== 'undefined' && (window.codesign as unknown as { files?: unknown })?.files
       ? 'workspace'
       : 'snapshots';
 
   const refetch = useCallback(async () => {
+    const seq = ++refetchSeqRef.current;
+    const isCurrent = () => refetchSeqRef.current === seq;
     if (!designId) {
       handleWorkspaceListSuccessToast(
         listErrorToastRef.current,
         dismissToast,
         currentWorkspaceListFailureToastIds(),
       );
-      setFiles([]);
+      if (isCurrent()) setFiles([]);
       return;
     }
     if (backend === 'workspace') {
@@ -152,11 +155,11 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
           dismissToast,
           currentWorkspaceListFailureToastIds(),
         );
-        setFiles(withPreviewSourceFallback([], previewSource, designUpdatedAt));
+        if (isCurrent()) setFiles(withPreviewSourceFallback([], previewSource, designUpdatedAt));
         return;
       }
       try {
-        setLoading(true);
+        if (isCurrent()) setLoading(true);
         const rows = await (
           window.codesign as unknown as {
             files: {
@@ -175,6 +178,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
           updatedAt: r.updatedAt,
           source: 'workspace' as const,
         }));
+        if (!isCurrent()) return;
         setFiles(withPreviewSourceFallback(workspaceRows, previewSource, designUpdatedAt));
         handleWorkspaceListSuccessToast(
           listErrorToastRef.current,
@@ -182,6 +186,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
           currentWorkspaceListFailureToastIds(),
         );
       } catch (err) {
+        if (!isCurrent()) return;
         const message = err instanceof Error ? err.message : tr('errors.unknown');
         setFiles(withPreviewSourceFallback([], previewSource, designUpdatedAt));
         const errorKey = `${designId}:${workspacePath}:${message}`;
@@ -193,7 +198,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
           dismissToast,
         });
       } finally {
-        setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
       return;
     }
@@ -205,7 +210,7 @@ export function useDesignFiles(designId: string | null): UseDesignFilesResult {
       dismissToast,
       currentWorkspaceListFailureToastIds(),
     );
-    setFiles(withPreviewSourceFallback([], previewSource, designUpdatedAt));
+    if (isCurrent()) setFiles(withPreviewSourceFallback([], previewSource, designUpdatedAt));
   }, [designId, backend, designUpdatedAt, dismissToast, previewSource, pushToast, workspacePath]);
 
   // Initial fetch + refetch when the design changes.

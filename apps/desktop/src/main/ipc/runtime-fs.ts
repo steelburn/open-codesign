@@ -11,6 +11,7 @@ import {
 } from '../snapshots-db';
 import { prepareWorkspaceWriteContent } from '../workspace-file-content';
 import { normalizeWorkspacePath } from '../workspace-path';
+import { withStableWorkspacePath } from '../workspace-path-lock';
 import { resolveSafeWorkspaceChildPath } from '../workspace-reader';
 
 function escapeRegExp(input: string): string {
@@ -115,34 +116,65 @@ export function createRuntimeTextEditorFs({
     if (source !== undefined) emitFsUpdated(sourcePath, source);
   }
 
+  async function withResolvedWorkspace<T>(
+    normalizedPath: string,
+    operation: (workspacePath: string, absolutePath: string) => Promise<T>,
+  ): Promise<T> {
+    if (designId === null || db === null) {
+      throw new Error(`Workspace path unavailable for ${normalizedPath}`);
+    }
+    return withStableWorkspacePath(designId, async () => {
+      const design = getDesign(db, designId);
+      if (design === null) {
+        throw new Error(`Design not found: ${designId}`);
+      }
+      if (design.workspacePath === null) {
+        throw new Error(`Design is not bound to a workspace: ${designId}`);
+      }
+      const workspacePath = normalizeWorkspacePath(design.workspacePath);
+      const absolutePath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
+      return operation(workspacePath, absolutePath);
+    });
+  }
+
   async function persistMutation(filePath: string, content: string): Promise<string> {
     const normalizedPath = normalizeDesignFilePath(filePath);
     const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
     if (designId === null || db === null) return writeContent.storedContent;
-    const design = getDesign(db, designId);
-    if (design === null) {
-      throw new Error(`Design not found: ${designId}`);
-    }
-    if (design.workspacePath === null) {
-      throw new Error(`Design is not bound to a workspace: ${designId}`);
-    }
-    const workspacePath = normalizeWorkspacePath(design.workspacePath);
     try {
-      const destinationPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
-      await mkdir(path_module.dirname(destinationPath), { recursive: true });
-      if (typeof writeContent.diskContent === 'string') {
-        await writeFile(destinationPath, writeContent.diskContent, 'utf8');
-      } else {
-        await writeFile(destinationPath, writeContent.diskContent);
-      }
+      await withResolvedWorkspace(normalizedPath, async (_workspacePath, destinationPath) => {
+        try {
+          await mkdir(path_module.dirname(destinationPath), { recursive: true });
+          if (typeof writeContent.diskContent === 'string') {
+            await writeFile(destinationPath, writeContent.diskContent, 'utf8');
+          } else {
+            await writeFile(destinationPath, writeContent.diskContent);
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error('runtime.fs.writeThrough.fail', {
+            designId,
+            filePath,
+            message,
+          });
+          throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
+        }
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.error('runtime.fs.writeThrough.fail', {
-        designId,
-        filePath,
-        workspacePath,
-        message,
-      });
+      if (message.startsWith('Workspace write-through failed for ')) throw err;
+      if (
+        !message.startsWith('Design is not bound to a workspace:') &&
+        !message.startsWith('Design not found:') &&
+        !message.startsWith('Workspace path unavailable for ') &&
+        message !== 'Workspace path must not be empty'
+      ) {
+        logger.error('runtime.fs.writeThrough.fail', {
+          designId,
+          filePath,
+          message,
+        });
+      }
       throw new Error(`Workspace write-through failed for ${filePath}: ${message}`);
     }
 
@@ -155,22 +187,18 @@ export function createRuntimeTextEditorFs({
     absolutePath?: string,
   ): Promise<{ path: string; content: string }> {
     const normalizedPath = normalizeDesignFilePath(filePath);
-    let sourcePath = absolutePath;
+    const sourcePath = absolutePath;
+    let content: string;
     if (!sourcePath) {
       if (designId === null || db === null) {
         throw new Error(`Workspace path unavailable for ${normalizedPath}`);
       }
-      const design = getDesign(db, designId);
-      if (design === null) {
-        throw new Error(`Design not found: ${designId}`);
-      }
-      if (design.workspacePath === null) {
-        throw new Error(`Design is not bound to a workspace: ${designId}`);
-      }
-      const workspacePath = normalizeWorkspacePath(design.workspacePath);
-      sourcePath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
+      content = await withResolvedWorkspace(normalizedPath, async (_workspacePath, path) =>
+        readFile(path, 'utf8'),
+      );
+    } else {
+      content = await readFile(sourcePath, 'utf8');
     }
-    const content = await readFile(sourcePath, 'utf8');
     fsMap.set(normalizedPath, content);
     emitFsUpdated(normalizedPath, content);
     emitSourceIfAssetChanged(normalizedPath);

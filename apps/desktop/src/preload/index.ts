@@ -269,10 +269,12 @@ export interface AgentStreamEvent {
   args?: Record<string, unknown>;
   verbGroup?: string;
   toolCallId?: string;
-  // tool_call_result
+  // Completed host-side activity may arrive as a single tool_call_start event
+  // after the agent run has ended.
   result?: unknown;
   durationMs?: number;
   status?: 'done' | 'error';
+  // tool_call_result
   // fs_updated — emitted whenever the agent edit tool mutates a file in the
   // virtual fs. Renderer uses this to re-render the iframe live during
   // generation so the user can watch the design take shape.

@@ -169,16 +169,21 @@ export function useAgentStream(): void {
     };
 
     const handleToolCallStart = (event: AgentStreamEvent) => {
-      markGenerationRunning(event.designId, event.generationId, 'streaming');
       const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       const toolName = event.toolName ?? 'unknown';
+      const initialStatus =
+        event.status === 'done' || event.status === 'error' ? event.status : 'running';
+      if (initialStatus === 'running') {
+        markGenerationRunning(event.designId, event.generationId, 'streaming');
+      }
       // TODO: replace with rendererLogger once renderer-logger lands
       console.debug('[agent] tool_call_start', {
         generationId: event.generationId,
         designId,
         toolName,
         toolCallId: event.toolCallId,
+        status: initialStatus,
       });
       // set_title runs with no side effects on disk — its whole job is
       // to rename the design. Trigger the rename immediately off the
@@ -206,13 +211,18 @@ export function useAgentStream(): void {
           toolName,
           ...(event.command !== undefined ? { command: event.command } : {}),
           args: event.args ?? {},
-          status: 'running',
+          status: initialStatus,
           startedAt: new Date().toISOString(),
           verbGroup: event.verbGroup ?? 'Working',
           ...(event.toolCallId !== undefined ? { toolCallId: event.toolCallId } : {}),
+          ...(event.result !== undefined ? { result: event.result } : {}),
+          ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+          ...(initialStatus === 'error' && typeof event.message === 'string'
+            ? { error: { message: event.message } }
+            : {}),
         },
       }).then((row) => row?.seq ?? null);
-      if (current) {
+      if (current && initialStatus === 'running') {
         current.pendingTools.push({
           seqPromise,
           toolName,

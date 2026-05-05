@@ -4,11 +4,13 @@ import {
   chooseWorkspacePreviewSourceMode,
   defaultWorkspacePreviewPath,
   isMarkdownPreviewFile,
+  isPreviewSourceUsableForSelectedPath,
   isRenderableDesignFileKind,
   previewKindForFile,
   resolveReferencedWorkspacePreviewPath,
   shouldShowTweakPanelForFile,
   shouldUseDesignPreviewResolverForFile,
+  splitMarkdownFrontmatter,
   workspaceBaseHrefForFile,
   workspacePreviewDependencyKey,
   workspacePreviewSourceStableKey,
@@ -102,6 +104,50 @@ describe('FilesTabView preview helpers', () => {
     expect(
       shouldUseDesignPreviewResolverForFile({ path: 'DESIGN.md', previewKind: 'markdown' }),
     ).toBe(false);
+  });
+
+  it('rejects stale preview sources from another selected file', () => {
+    expect(
+      isPreviewSourceUsableForSelectedPath({
+        selectedPath: 'App.jsx',
+        previewSourcePath: 'DESIGN.md',
+        selectedPreviewKind: 'runtime',
+      }),
+    ).toBe(false);
+    expect(
+      isPreviewSourceUsableForSelectedPath({
+        selectedPath: 'App.jsx',
+        previewSourcePath: 'App.jsx',
+        selectedPreviewKind: 'runtime',
+      }),
+    ).toBe(true);
+    expect(
+      isPreviewSourceUsableForSelectedPath({
+        selectedPath: 'index.html',
+        previewSourcePath: 'src/App.jsx',
+        selectedPreviewKind: 'runtime',
+      }),
+    ).toBe(true);
+  });
+
+  it('splits YAML frontmatter before rendering markdown previews', () => {
+    expect(
+      splitMarkdownFrontmatter('---\nversion: alpha\nname: Demo\n---\n\n## Overview\nBody'),
+    ).toEqual({
+      frontmatter: 'version: alpha\nname: Demo',
+      body: '\n## Overview\nBody',
+    });
+  });
+
+  it('keeps non-frontmatter markdown unchanged', () => {
+    expect(splitMarkdownFrontmatter('--- not a frontmatter delimiter\n\nBody')).toEqual({
+      frontmatter: null,
+      body: '--- not a frontmatter delimiter\n\nBody',
+    });
+    expect(splitMarkdownFrontmatter('---\nunterminated')).toEqual({
+      frontmatter: null,
+      body: '---\nunterminated',
+    });
   });
 
   it('keeps the iframe source key stable for EDITMODE-only changes', () => {

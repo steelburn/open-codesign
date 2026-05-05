@@ -63,7 +63,11 @@ import {
 } from './snapshots-db';
 import { prepareWorkspaceWriteContent } from './workspace-file-content';
 import { normalizeWorkspacePath } from './workspace-path';
-import { runWithWorkspaceRenameQueue, waitForWorkspaceRename } from './workspace-path-lock';
+import {
+  runWithWorkspaceRenameQueue,
+  waitForWorkspaceRename,
+  withStableWorkspacePath,
+} from './workspace-path-lock';
 import {
   classifyWorkspaceFileKind,
   listWorkspaceFilesAt,
@@ -1114,27 +1118,32 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
       }
       const designId = r['designId'] as string;
-      const design = await getDesignAfterPendingWorkspaceRename(db, 'files:list', designId);
-      if (design === null) {
-        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
-      }
-      if (design.workspacePath === null) {
-        logger.warn('files.list.workspace_missing', { designId: design.id });
-        return [];
-      }
-      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
-      if (!checkWorkspaceFolderExists(workspacePath)) {
-        logger.warn('files.list.workspace_unavailable', {
-          designId: design.id,
-          workspacePath,
-        });
-        return [];
-      }
-      try {
-        return await listWorkspaceFilesAt(workspacePath);
-      } catch (cause) {
-        throw new CodesignError('Failed to list workspace files', 'IPC_DB_ERROR', { cause });
-      }
+      return withStableWorkspacePath(designId, async () => {
+        const design = await getDesignAfterPendingWorkspaceRename(db, 'files:list', designId);
+        if (design === null) {
+          throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+        }
+        if (design.workspacePath === null) {
+          logger.warn('files.list.workspace_missing', { designId: design.id });
+          return [];
+        }
+        const workspacePath = requireBoundWorkspacePath(
+          design,
+          'Design is not bound to a workspace',
+        );
+        if (!(await checkWorkspaceFolderExists(workspacePath))) {
+          logger.warn('files.list.workspace_unavailable', {
+            designId: design.id,
+            workspacePath,
+          });
+          return [];
+        }
+        try {
+          return await listWorkspaceFilesAt(workspacePath);
+        } catch (cause) {
+          throw new CodesignError('Failed to list workspace files', 'IPC_DB_ERROR', { cause });
+        }
+      });
     },
   );
 
@@ -1156,26 +1165,31 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
       }
       const designId = r['designId'] as string;
-      const design = await getDesignAfterPendingWorkspaceRename(db, 'files:read', designId);
-      if (design === null) {
-        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
-      }
-      if (design.workspacePath === null) {
-        const requestedPath = r['path'] as string;
-        return {
-          path: requestedPath,
-          kind: classifyWorkspaceFileKind(requestedPath),
-          size: 0,
-          updatedAt: new Date(0).toISOString(),
-          content: '',
-        };
-      }
-      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
-      try {
-        return await readWorkspaceFileAt(workspacePath, r['path'] as string);
-      } catch (cause) {
-        throw new CodesignError('Failed to read workspace file', 'IPC_BAD_INPUT', { cause });
-      }
+      return withStableWorkspacePath(designId, async () => {
+        const design = await getDesignAfterPendingWorkspaceRename(db, 'files:read', designId);
+        if (design === null) {
+          throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+        }
+        if (design.workspacePath === null) {
+          const requestedPath = r['path'] as string;
+          return {
+            path: requestedPath,
+            kind: classifyWorkspaceFileKind(requestedPath),
+            size: 0,
+            updatedAt: new Date(0).toISOString(),
+            content: '',
+          };
+        }
+        const workspacePath = requireBoundWorkspacePath(
+          design,
+          'Design is not bound to a workspace',
+        );
+        try {
+          return await readWorkspaceFileAt(workspacePath, r['path'] as string);
+        } catch (cause) {
+          throw new CodesignError('Failed to read workspace file', 'IPC_BAD_INPUT', { cause });
+        }
+      });
     },
   );
 
@@ -1197,31 +1211,36 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
       }
       const designId = r['designId'] as string;
-      const design = await getDesignAfterPendingWorkspaceRename(db, 'files:preview', designId);
-      if (design === null) {
-        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
-      }
-      if (design.workspacePath === null) {
-        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
-      }
-      let normalizedPath: string;
-      try {
-        normalizedPath = normalizeDesignFilePath(r['path'] as string);
-      } catch (cause) {
-        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
-      }
-      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
-      let absPath: string;
-      try {
-        absPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
-      } catch (cause) {
-        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
-      }
-      try {
-        return await createWorkspaceDocumentPreview({ absPath, relPath: normalizedPath });
-      } catch (cause) {
-        throw new CodesignError('Failed to preview workspace file', 'IPC_BAD_INPUT', { cause });
-      }
+      return withStableWorkspacePath(designId, async () => {
+        const design = await getDesignAfterPendingWorkspaceRename(db, 'files:preview', designId);
+        if (design === null) {
+          throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+        }
+        if (design.workspacePath === null) {
+          throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+        }
+        let normalizedPath: string;
+        try {
+          normalizedPath = normalizeDesignFilePath(r['path'] as string);
+        } catch (cause) {
+          throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+        }
+        const workspacePath = requireBoundWorkspacePath(
+          design,
+          'Design is not bound to a workspace',
+        );
+        let absPath: string;
+        try {
+          absPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
+        } catch (cause) {
+          throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+        }
+        try {
+          return await createWorkspaceDocumentPreview({ absPath, relPath: normalizedPath });
+        } catch (cause) {
+          throw new CodesignError('Failed to preview workspace file', 'IPC_BAD_INPUT', { cause });
+        }
+      });
     },
   );
 
@@ -1243,27 +1262,32 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
       }
       const designId = r['designId'] as string;
-      const design = await getDesignAfterPendingWorkspaceRename(db, 'files:thumbnail', designId);
-      if (design === null) {
-        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
-      }
-      if (design.workspacePath === null) {
-        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
-      }
-      let normalizedPath: string;
-      try {
-        normalizedPath = normalizeDesignFilePath(r['path'] as string);
-      } catch (cause) {
-        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
-      }
-      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
-      let absPath: string;
-      try {
-        absPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
-      } catch (cause) {
-        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
-      }
-      return await createWorkspaceDocumentThumbnail({ absPath, relPath: normalizedPath });
+      return withStableWorkspacePath(designId, async () => {
+        const design = await getDesignAfterPendingWorkspaceRename(db, 'files:thumbnail', designId);
+        if (design === null) {
+          throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+        }
+        if (design.workspacePath === null) {
+          throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+        }
+        let normalizedPath: string;
+        try {
+          normalizedPath = normalizeDesignFilePath(r['path'] as string);
+        } catch (cause) {
+          throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+        }
+        const workspacePath = requireBoundWorkspacePath(
+          design,
+          'Design is not bound to a workspace',
+        );
+        let absPath: string;
+        try {
+          absPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
+        } catch (cause) {
+          throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+        }
+        return await createWorkspaceDocumentThumbnail({ absPath, relPath: normalizedPath });
+      });
     },
   );
 
@@ -1297,65 +1321,72 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
 
       const content = r['content'] as string;
       const designId = r['designId'] as string;
-      const design = await getDesignAfterPendingWorkspaceRename(
-        db,
-        'files:write.lookup-design',
-        designId,
-      );
-      if (design === null) {
-        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
-      }
-      if (design.workspacePath === null) {
-        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
-      }
-      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
-
-      let destinationPath: string;
-      try {
-        destinationPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
-      } catch (cause) {
-        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
-      }
       const writeContent = prepareWorkspaceWriteContent(normalizedPath, content);
-      try {
-        await mkdir(path.dirname(destinationPath), { recursive: true });
-        if (typeof writeContent.diskContent === 'string') {
-          await writeFile(destinationPath, writeContent.diskContent, 'utf8');
-        } else {
-          await writeFile(destinationPath, writeContent.diskContent);
+      return withStableWorkspacePath(designId, async () => {
+        const currentDesign = await getDesignAfterPendingWorkspaceRename(
+          db,
+          'files:write.refresh-design',
+          designId,
+        );
+        if (currentDesign === null) {
+          throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
         }
-      } catch (cause) {
-        throw new CodesignError('Failed to write workspace file', 'IPC_DB_ERROR', { cause });
-      }
-
-      runDb('files:write.upsert-design-file', () =>
-        upsertDesignFile(db, designId, normalizedPath, writeContent.storedContent),
-      );
-
-      if (writeContent.isBinaryAsset) {
+        if (currentDesign.workspacePath === null) {
+          throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+        }
+        const currentWorkspacePath = requireBoundWorkspacePath(
+          currentDesign,
+          'Design is not bound to a workspace',
+        );
+        let currentDestinationPath: string;
         try {
-          const s = await stat(destinationPath);
-          return {
-            path: normalizedPath,
-            kind: classifyWorkspaceFileKind(normalizedPath),
-            size: s.size,
-            updatedAt: s.mtime.toISOString(),
-            content: writeContent.storedContent,
-          };
+          currentDestinationPath = await resolveSafeWorkspaceChildPath(
+            currentWorkspacePath,
+            normalizedPath,
+          );
         } catch (cause) {
-          throw new CodesignError('Failed to stat written workspace file', 'IPC_DB_ERROR', {
+          throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+        }
+        try {
+          await mkdir(path.dirname(currentDestinationPath), { recursive: true });
+          if (typeof writeContent.diskContent === 'string') {
+            await writeFile(currentDestinationPath, writeContent.diskContent, 'utf8');
+          } else {
+            await writeFile(currentDestinationPath, writeContent.diskContent);
+          }
+        } catch (cause) {
+          throw new CodesignError('Failed to write workspace file', 'IPC_DB_ERROR', { cause });
+        }
+
+        runDb('files:write.upsert-design-file', () =>
+          upsertDesignFile(db, designId, normalizedPath, writeContent.storedContent),
+        );
+
+        if (writeContent.isBinaryAsset) {
+          try {
+            const s = await stat(currentDestinationPath);
+            return {
+              path: normalizedPath,
+              kind: classifyWorkspaceFileKind(normalizedPath),
+              size: s.size,
+              updatedAt: s.mtime.toISOString(),
+              content: writeContent.storedContent,
+            };
+          } catch (cause) {
+            throw new CodesignError('Failed to stat written workspace file', 'IPC_DB_ERROR', {
+              cause,
+            });
+          }
+        }
+
+        try {
+          return await readWorkspaceFileAt(currentWorkspacePath, normalizedPath);
+        } catch (cause) {
+          throw new CodesignError('Failed to read written workspace file', 'IPC_DB_ERROR', {
             cause,
           });
         }
-      }
-
-      try {
-        return await readWorkspaceFileAt(workspacePath, normalizedPath);
-      } catch (cause) {
-        throw new CodesignError('Failed to read written workspace file', 'IPC_DB_ERROR', {
-          cause,
-        });
-      }
+      });
     },
   );
 

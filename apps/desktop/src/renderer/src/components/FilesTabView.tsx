@@ -426,6 +426,21 @@ export function workspacePreviewDependencyKey(
   return [selected, source].filter((part): part is string => part !== null).join('|') || null;
 }
 
+export function isPreviewSourceUsableForSelectedPath(input: {
+  selectedPath: string;
+  previewSourcePath: string | null | undefined;
+  selectedPreviewKind: FilePreviewKind;
+}): boolean {
+  const previewSourcePath = input.previewSourcePath;
+  if (!previewSourcePath) return false;
+  if (previewSourcePath === input.selectedPath) return true;
+  return (
+    input.selectedPreviewKind === 'runtime' &&
+    isMainDesignSourcePath(input.selectedPath) &&
+    previewKindForFile(previewSourcePath, undefined) === 'runtime'
+  );
+}
+
 interface WorkspaceFilePreviewProps {
   path: string;
   file?: DesignFileEntry | null | undefined;
@@ -442,6 +457,24 @@ export function workspacePreviewSourceStableKey(source: WorkspacePreviewSource |
   return `${source.path}:${stablePreviewSourceKey(source.content)}`;
 }
 
+export function splitMarkdownFrontmatter(content: string): {
+  frontmatter: string | null;
+  body: string;
+} {
+  const normalized = content.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('---\n')) return { frontmatter: null, body: content };
+  const end = normalized.indexOf('\n---', 4);
+  if (end < 0) return { frontmatter: null, body: content };
+  const afterDelimiter = normalized.slice(end + 4);
+  if (afterDelimiter.length > 0 && !afterDelimiter.startsWith('\n')) {
+    return { frontmatter: null, body: content };
+  }
+  return {
+    frontmatter: normalized.slice(4, end).trimEnd(),
+    body: afterDelimiter.replace(/^\n/, ''),
+  };
+}
+
 function TextFilePreview({
   content,
   previewKind,
@@ -451,12 +484,21 @@ function TextFilePreview({
   previewKind: FilePreviewKind;
   path: string;
 }) {
+  const markdown = previewKind === 'markdown' ? splitMarkdownFrontmatter(content) : null;
   return (
     <div className="h-full overflow-auto bg-[var(--color-background)]">
       <div className="mx-auto w-full max-w-[860px] px-[var(--space-8)] py-[var(--space-7)]">
-        {previewKind === 'markdown' ? (
+        {markdown ? (
           <article className="codesign-prose rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-6)] py-[var(--space-5)] text-[13px] leading-[var(--leading-body)] text-[var(--color-text-primary)] shadow-[var(--shadow-soft)]">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            {markdown.frontmatter ? (
+              <details className="codesign-frontmatter">
+                <summary>YAML frontmatter</summary>
+                <pre>
+                  <code>{markdown.frontmatter}</code>
+                </pre>
+              </details>
+            ) : null}
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown.body}</ReactMarkdown>
           </article>
         ) : (
           <pre
@@ -787,6 +829,13 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   );
   const [readError, setReadError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const activePreviewSource = isPreviewSourceUsableForSelectedPath({
+    selectedPath: path,
+    previewSourcePath: previewSource?.path,
+    selectedPreviewKind: previewKind,
+  })
+    ? previewSource
+    : null;
 
   useEffect(() => {
     function onMessage(event: MessageEvent): void {
@@ -816,6 +865,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
     const read = window.codesign?.files?.read;
     if (useDesignPreviewResolver) {
       let cancelled = false;
+      setPreviewSource(null);
       setReadError(null);
       void resolveDesignPreviewSource({
         designId: currentDesignId,
@@ -855,6 +905,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
       return;
     }
     let cancelled = false;
+    setPreviewSource(null);
     setReadError(null);
     void readWorkspacePreviewSource({ designId: currentDesignId, path, read })
       .then((result) => {
@@ -883,20 +934,23 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   ]);
 
   const previewSourceStableKey = useMemo(
-    () => workspacePreviewSourceStableKey(previewSource),
-    [previewSource],
+    () => workspacePreviewSourceStableKey(activePreviewSource),
+    [activePreviewSource],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: previewSourceStableKey intentionally masks EDITMODE-only token changes so live tweaks can update via postMessage without rebuilding the iframe.
   const srcDoc = useMemo(() => {
-    if (!previewSource || !renderable) return null;
+    if (!activePreviewSource || !renderable) return null;
     try {
       const baseHref = workspaceBaseHrefForFile({
         designId: currentDesignId,
         workspacePath: currentDesign?.workspacePath,
-        filePath: previewSource.path,
+        filePath: activePreviewSource.path,
       });
-      return buildPreviewDocument(previewSource.content, { path: previewSource.path, baseHref });
+      return buildPreviewDocument(activePreviewSource.content, {
+        path: activePreviewSource.path,
+        baseHref,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return `<!doctype html><html><body style="font: 13px system-ui; color: #71717a; display: grid; place-items: center; min-height: 100vh; margin: 0;">${escapeHtmlText(message)}</body></html>`;
@@ -904,7 +958,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   }, [
     currentDesign?.workspacePath,
     currentDesignId,
-    previewSource?.path,
+    activePreviewSource?.path,
     previewSourceStableKey,
     renderable,
   ]);
@@ -927,9 +981,13 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   }
 
   if (!srcDoc) {
-    if (previewSource && textPreview) {
+    if (activePreviewSource && textPreview) {
       return (
-        <TextFilePreview content={previewSource.content} previewKind={previewKind} path={path} />
+        <TextFilePreview
+          content={activePreviewSource.content}
+          previewKind={previewKind}
+          path={path}
+        />
       );
     }
     return (
