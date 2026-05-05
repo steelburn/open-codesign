@@ -63,6 +63,7 @@ import {
 } from './snapshots-db';
 import { prepareWorkspaceWriteContent } from './workspace-file-content';
 import { normalizeWorkspacePath } from './workspace-path';
+import { runWithWorkspaceRenameQueue, waitForWorkspaceRename } from './workspace-path-lock';
 import {
   classifyWorkspaceFileKind,
   listWorkspaceFilesAt,
@@ -465,35 +466,6 @@ function runDb<T>(context: string, fn: () => T): T {
   } catch (err) {
     if (err instanceof CodesignError) throw err;
     throw translateStoreError(err, context);
-  }
-}
-
-const workspaceRenameQueues = new Map<string, Promise<void>>();
-
-async function waitForWorkspaceRename(designId: string): Promise<void> {
-  await workspaceRenameQueues.get(designId);
-}
-
-async function runWithWorkspaceRenameQueue<T>(
-  designId: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const previous = workspaceRenameQueues.get(designId) ?? Promise.resolve();
-  let release = (): void => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const queued = previous.catch(() => undefined).then(() => gate);
-  workspaceRenameQueues.set(designId, queued);
-
-  await previous.catch(() => undefined);
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (workspaceRenameQueues.get(designId) === queued) {
-      workspaceRenameQueues.delete(designId);
-    }
   }
 }
 

@@ -67,6 +67,7 @@ import {
   type SessionChatStoreOptions,
 } from '../session-chat';
 import { type Database, getDesign, recordDiagnosticEvent } from '../snapshots-db';
+import { withStableWorkspacePath } from '../workspace-path-lock';
 import { readWorkspaceFilesAt } from '../workspace-reader';
 import { finalAssistantTextForTurn } from './assistant-text';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
@@ -648,194 +649,136 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         inFlight,
         inFlightByDesign,
         controller,
-        async () => {
-          const coreLogger = coreLoggerFor(id);
+        async () =>
+          withStableWorkspacePath(payload.designId, async () => {
+            const coreLogger = coreLoggerFor(id);
 
-          coreLogger.info('[generate] step=load_config');
-          const loadStart = Date.now();
-          const cfg = getCachedConfig();
-          if (cfg === null) {
-            throw new CodesignError(
-              'No configuration found. Complete onboarding first.',
-              'CONFIG_MISSING',
-            );
-          }
-          const active = resolveActiveModel(cfg, payload.model);
-          const allowKeyless = active.allowKeyless;
-          const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-          // Once we've snapped to the canonical active provider, the renderer-supplied
-          // baseUrl can no longer be trusted — it may belong to a different (stale)
-          // provider. Always use the per-provider baseUrl from cached config.
-          const baseUrl = active.baseUrl ?? undefined;
-          if (active.overridden) {
-            payload.baseUrl = baseUrl;
-          }
-          coreLogger.info('[generate] step=load_config.ok', {
-            ms: Date.now() - loadStart,
-            hasApiKey: apiKey.length > 0,
-            baseUrl: baseUrl ?? '<default>',
-          });
-
-          if (active.overridden) {
-            coreLogger.info('[generate] step=resolve_active.override', {
-              requested: payload.model.provider,
-              requestedModelId: payload.model.modelId,
-              active: active.model.provider,
-              activeModelId: active.model.modelId,
+            coreLogger.info('[generate] step=load_config');
+            const loadStart = Date.now();
+            const cfg = getCachedConfig();
+            if (cfg === null) {
+              throw new CodesignError(
+                'No configuration found. Complete onboarding first.',
+                'CONFIG_MISSING',
+              );
+            }
+            const active = resolveActiveModel(cfg, payload.model);
+            const allowKeyless = active.allowKeyless;
+            const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
+            // Once we've snapped to the canonical active provider, the renderer-supplied
+            // baseUrl can no longer be trusted — it may belong to a different (stale)
+            // provider. Always use the per-provider baseUrl from cached config.
+            const baseUrl = active.baseUrl ?? undefined;
+            if (active.overridden) {
+              payload.baseUrl = baseUrl;
+            }
+            coreLogger.info('[generate] step=load_config.ok', {
+              ms: Date.now() - loadStart,
+              hasApiKey: apiKey.length > 0,
+              baseUrl: baseUrl ?? '<default>',
             });
-          }
 
-          const stepCtx = {
-            generationId: id,
-            provider: active.model.provider,
-            modelId: active.model.modelId,
-          };
-          coreLogger.info('[generate] step=validate_provider', stepCtx);
-          if (apiKey.length === 0 && !allowKeyless) {
-            coreLogger.error('[generate] step=validate_provider.fail', {
-              provider: active.model.provider,
-              reason: 'missing_api_key',
-            });
-            throw new CodesignError(
-              `No API key configured for provider "${active.model.provider}". Open Settings to add one.`,
-              'PROVIDER_AUTH_MISSING',
-            );
-          }
-          coreLogger.info('[generate] step=validate_provider.ok', {
-            provider: active.model.provider,
-          });
-
-          const { designId, workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
-          const prefs = await readPreferences();
-          const promptContext = await preparePromptContext({
-            attachments: payload.attachments,
-            referenceUrl: payload.referenceUrl,
-            designSystem: cfg.designSystem ?? null,
-            workspaceRoot,
-          });
-          let memoryContext: Awaited<ReturnType<typeof loadMemoryContext>> | undefined;
-          let memoryLoadWarning: string | undefined;
-          if (prefs.memoryEnabled) {
-            try {
-              memoryContext = await loadMemoryContext(workspaceRoot);
-            } catch (err) {
-              memoryLoadWarning = `Project memory unavailable: ${err instanceof Error ? err.message : String(err)}`;
-              logIpc.warn('memory.load.fail', {
-                generationId: id,
-                message: err instanceof Error ? err.message : String(err),
+            if (active.overridden) {
+              coreLogger.info('[generate] step=resolve_active.override', {
+                requested: payload.model.provider,
+                requestedModelId: payload.model.modelId,
+                active: active.model.provider,
+                activeModelId: active.model.modelId,
               });
             }
-          }
 
-          logIpc.info('generate', {
-            generationId: id,
-            provider: active.model.provider,
-            modelId: active.model.modelId,
-            ...(active.overridden
-              ? {
-                  requestedProvider: payload.model.provider,
-                  requestedModelId: payload.model.modelId,
-                }
-              : {}),
-            promptLen: payload.prompt.length,
-            historyLen: payload.history.length,
-            attachmentCount: payload.attachments.length,
-            hasReferenceUrl: payload.referenceUrl !== undefined,
-            hasDesignSystem: promptContext.designSystem !== null,
-            baseUrl: baseUrl ?? '<default>',
-          });
-
-          const t0 = Date.now();
-          let clearTimeoutGuard: () => void = () => {};
-          try {
-            clearTimeoutGuard = await armTimeout(id, controller);
-            const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
-            let capturedMessages: DesignBriefConversationMessages | null = null;
-            let aggressivePruneDetected = false;
-            const chatRows = chatRowsForDesign(designId);
-            const resourceState = deriveResourceStateFromChatRows(chatRows);
-            const existingBrief = prefs.memoryEnabled ? briefForDesign(designId) : null;
-            const runPreferenceStoreOptions = chatStoreOptions();
-            const existingRunPreferences =
-              runPreferenceStoreOptions !== null
-                ? readSessionRunPreferences(runPreferenceStoreOptions, designId)
-                : null;
-            const workspaceState = {
-              sourcePath: payload.previousSource ? 'App.jsx' : null,
-              hasSource: Boolean(payload.previousSource?.trim()),
-              hasDesignMd: Boolean(promptContext.projectContext.designMd?.trim()),
-              hasAgentsMd: Boolean(promptContext.projectContext.agentsMd?.trim()),
-              hasSettingsJson: Boolean(promptContext.projectContext.settingsJson?.trim()),
+            const stepCtx = {
+              generationId: id,
+              provider: active.model.provider,
+              modelId: active.model.modelId,
             };
-            const routedPreferences = await routeRunPreferences({
-              prompt: payload.prompt,
-              existingPreferences: existingRunPreferences,
-              recentHistory: recentHistoryForRunPreferenceRouter(chatRows),
-              workspaceState,
-              designBrief: existingBrief ? JSON.stringify(existingBrief) : null,
-              userMemory: memoryContext?.userMemory?.content ?? null,
-              workspaceMemory: memoryContext?.workspaceMemory?.content ?? null,
-              model: active.model,
-              apiKey,
-              ...(baseUrl !== undefined ? { baseUrl } : {}),
-              wire: active.wire,
-              ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-              ...(active.reasoningLevel !== undefined
-                ? { reasoningLevel: active.reasoningLevel }
-                : {}),
-              ...(allowKeyless ? { allowKeyless: true } : {}),
-              logger: coreLogger,
+            coreLogger.info('[generate] step=validate_provider', stepCtx);
+            if (apiKey.length === 0 && !allowKeyless) {
+              coreLogger.error('[generate] step=validate_provider.fail', {
+                provider: active.model.provider,
+                reason: 'missing_api_key',
+              });
+              throw new CodesignError(
+                `No API key configured for provider "${active.model.provider}". Open Settings to add one.`,
+                'PROVIDER_AUTH_MISSING',
+              );
+            }
+            coreLogger.info('[generate] step=validate_provider.ok', {
+              provider: active.model.provider,
             });
-            let runPreferences = routedPreferences.preferences;
-            if (routedPreferences.needsClarification && routedPreferences.clarificationQuestions) {
-              const askResult = await requestAsk(
-                id,
-                buildRunPreferenceAskInput(routedPreferences.clarificationQuestions),
-                () => getMainWindow(),
-              );
-              runPreferences = applyRunPreferenceAnswers(
-                runPreferences,
-                askResult.status === 'answered' ? askResult.answers : [],
-              );
+
+            const { designId, workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
+            const prefs = await readPreferences();
+            const promptContext = await preparePromptContext({
+              attachments: payload.attachments,
+              referenceUrl: payload.referenceUrl,
+              designSystem: cfg.designSystem ?? null,
+              workspaceRoot,
+            });
+            let memoryContext: Awaited<ReturnType<typeof loadMemoryContext>> | undefined;
+            let memoryLoadWarning: string | undefined;
+            if (prefs.memoryEnabled) {
+              try {
+                memoryContext = await loadMemoryContext(workspaceRoot);
+              } catch (err) {
+                memoryLoadWarning = `Project memory unavailable: ${err instanceof Error ? err.message : String(err)}`;
+                logIpc.warn('memory.load.fail', {
+                  generationId: id,
+                  message: err instanceof Error ? err.message : String(err),
+                });
+              }
             }
-            if (runPreferenceStoreOptions !== null) {
-              appendSessionRunPreferences(runPreferenceStoreOptions, designId, runPreferences);
-            }
-            const contextPack = buildDesignContextPack({
-              chatRows,
-              brief: existingBrief,
-              runPreferences,
-              resourceState,
-              modelContextWindow: contextWindowForContextPack(active.model),
-              workspaceState: {
+
+            logIpc.info('generate', {
+              generationId: id,
+              provider: active.model.provider,
+              modelId: active.model.modelId,
+              ...(active.overridden
+                ? {
+                    requestedProvider: payload.model.provider,
+                    requestedModelId: payload.model.modelId,
+                  }
+                : {}),
+              promptLen: payload.prompt.length,
+              historyLen: payload.history.length,
+              attachmentCount: payload.attachments.length,
+              hasReferenceUrl: payload.referenceUrl !== undefined,
+              hasDesignSystem: promptContext.designSystem !== null,
+              baseUrl: baseUrl ?? '<default>',
+            });
+
+            const t0 = Date.now();
+            let clearTimeoutGuard: () => void = () => {};
+            try {
+              clearTimeoutGuard = await armTimeout(id, controller);
+              const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
+              let capturedMessages: DesignBriefConversationMessages | null = null;
+              let aggressivePruneDetected = false;
+              const chatRows = chatRowsForDesign(designId);
+              const resourceState = deriveResourceStateFromChatRows(chatRows);
+              const existingBrief = prefs.memoryEnabled ? briefForDesign(designId) : null;
+              const runPreferenceStoreOptions = chatStoreOptions();
+              const existingRunPreferences =
+                runPreferenceStoreOptions !== null
+                  ? readSessionRunPreferences(runPreferenceStoreOptions, designId)
+                  : null;
+              const workspaceState = {
                 sourcePath: payload.previousSource ? 'App.jsx' : null,
                 hasSource: Boolean(payload.previousSource?.trim()),
                 hasDesignMd: Boolean(promptContext.projectContext.designMd?.trim()),
                 hasAgentsMd: Boolean(promptContext.projectContext.agentsMd?.trim()),
                 hasSettingsJson: Boolean(promptContext.projectContext.settingsJson?.trim()),
-              },
-            });
-            logIpc.info('generate.context', {
-              generationId: id,
-              ...contextPack.trace,
-            });
-            const result = await runGenerate(
-              {
+              };
+              const routedPreferences = await routeRunPreferences({
                 prompt: payload.prompt,
-                history: contextPack.history,
+                existingPreferences: existingRunPreferences,
+                recentHistory: recentHistoryForRunPreferenceRouter(chatRows),
+                workspaceState,
+                designBrief: existingBrief ? JSON.stringify(existingBrief) : null,
+                userMemory: memoryContext?.userMemory?.content ?? null,
+                workspaceMemory: memoryContext?.workspaceMemory?.content ?? null,
                 model: active.model,
                 apiKey,
-                ...(isCodex
-                  ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
-                  : {}),
-                attachments: promptContext.attachments,
-                referenceUrl: promptContext.referenceUrl,
-                designSystem: promptContext.designSystem ?? null,
-                sessionContext: contextPack.contextSections,
-                ...(memoryContext !== undefined ? { memoryContext: memoryContext.sections } : {}),
-                projectContext: promptContext.projectContext,
-                initialResourceState: resourceState,
-                runPreferences,
                 ...(baseUrl !== undefined ? { baseUrl } : {}),
                 wire: active.wire,
                 ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
@@ -843,85 +786,113 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                   ? { reasoningLevel: active.reasoningLevel }
                   : {}),
                 ...(allowKeyless ? { allowKeyless: true } : {}),
-                signal: controller.signal,
                 logger: coreLogger,
-              },
-              id,
-              designId,
-              payload.previousSource ?? null,
-              workspaceRoot,
-              {
-                onAggressivePrune: () => {
-                  aggressivePruneDetected = true;
-                },
-                onComplete: (messages) => {
-                  capturedMessages = messages;
-                },
-              },
-            );
-            logIpc.info('generate.ok', {
-              generationId: id,
-              ms: Date.now() - t0,
-              artifacts: result.artifacts.length,
-              cost: result.costUsd,
-            });
-            if (capturedMessages !== null) {
-              const messagesForMemory = capturedMessages;
-              const design = db !== null ? getDesign(db, designId) : null;
-              let memoryWorkspaceRoot = workspaceRoot;
-              try {
-                memoryWorkspaceRoot = requireWorkspaceRootForDesign(designId).workspaceRoot;
-              } catch (err) {
-                logIpc.warn('memory.workspace.resolve.fail', {
-                  generationId: id,
-                  message: err instanceof Error ? err.message : String(err),
-                });
+              });
+              let runPreferences = routedPreferences.preferences;
+              if (
+                routedPreferences.needsClarification &&
+                routedPreferences.clarificationQuestions
+              ) {
+                const askResult = await requestAsk(
+                  id,
+                  buildRunPreferenceAskInput(routedPreferences.clarificationQuestions),
+                  () => getMainWindow(),
+                );
+                runPreferences = applyRunPreferenceAnswers(
+                  runPreferences,
+                  askResult.status === 'answered' ? askResult.answers : [],
+                );
               }
-              const designName = design?.name ?? 'Untitled';
-              const workspaceMemoryUpdate =
-                prefs.memoryEnabled === true && prefs.workspaceMemoryAutoUpdate === true
-                  ? triggerWorkspaceMemoryUpdate({
-                      workspacePath: memoryWorkspaceRoot,
-                      workspaceName: workspaceNameFromPath(memoryWorkspaceRoot),
-                      designId,
-                      designName,
-                      conversationMessages: messagesForMemory,
-                      userMemory: memoryContext?.userMemory?.content ?? null,
-                      designMdSummary: designMdSummaryForMemory(promptContext.projectContext),
-                      model: active.model,
-                      apiKey,
-                      ...(baseUrl !== undefined ? { baseUrl } : {}),
-                      wire: active.wire,
-                      ...(active.httpHeaders !== undefined
-                        ? { httpHeaders: active.httpHeaders }
-                        : {}),
-                      ...(active.reasoningLevel !== undefined
-                        ? { reasoningLevel: active.reasoningLevel }
-                        : {}),
-                      ...(allowKeyless ? { allowKeyless: true } : {}),
-                    }).catch((err) => {
-                      logIpc.warn('workspace-memory.update.fail', {
-                        generationId: id,
-                        message: err instanceof Error ? err.message : String(err),
-                      });
-                      return memoryContext?.workspaceMemory ?? null;
-                    })
-                  : Promise.resolve(memoryContext?.workspaceMemory ?? null);
-
-              const briefUpdate = prefs.memoryEnabled
-                ? workspaceMemoryUpdate
-                    .then((workspaceMemory) =>
-                      updateDesignSessionBrief({
-                        existingBrief,
-                        conversationMessages: messagesForMemory,
+              if (runPreferenceStoreOptions !== null) {
+                appendSessionRunPreferences(runPreferenceStoreOptions, designId, runPreferences);
+              }
+              const contextPack = buildDesignContextPack({
+                chatRows,
+                brief: existingBrief,
+                runPreferences,
+                resourceState,
+                modelContextWindow: contextWindowForContextPack(active.model),
+                workspaceState: {
+                  sourcePath: payload.previousSource ? 'App.jsx' : null,
+                  hasSource: Boolean(payload.previousSource?.trim()),
+                  hasDesignMd: Boolean(promptContext.projectContext.designMd?.trim()),
+                  hasAgentsMd: Boolean(promptContext.projectContext.agentsMd?.trim()),
+                  hasSettingsJson: Boolean(promptContext.projectContext.settingsJson?.trim()),
+                },
+              });
+              logIpc.info('generate.context', {
+                generationId: id,
+                ...contextPack.trace,
+              });
+              const result = await runGenerate(
+                {
+                  prompt: payload.prompt,
+                  history: contextPack.history,
+                  model: active.model,
+                  apiKey,
+                  ...(isCodex
+                    ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
+                    : {}),
+                  attachments: promptContext.attachments,
+                  referenceUrl: promptContext.referenceUrl,
+                  designSystem: promptContext.designSystem ?? null,
+                  sessionContext: contextPack.contextSections,
+                  ...(memoryContext !== undefined ? { memoryContext: memoryContext.sections } : {}),
+                  projectContext: promptContext.projectContext,
+                  initialResourceState: resourceState,
+                  runPreferences,
+                  ...(baseUrl !== undefined ? { baseUrl } : {}),
+                  wire: active.wire,
+                  ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+                  ...(active.reasoningLevel !== undefined
+                    ? { reasoningLevel: active.reasoningLevel }
+                    : {}),
+                  ...(allowKeyless ? { allowKeyless: true } : {}),
+                  signal: controller.signal,
+                  logger: coreLogger,
+                },
+                id,
+                designId,
+                payload.previousSource ?? null,
+                workspaceRoot,
+                {
+                  onAggressivePrune: () => {
+                    aggressivePruneDetected = true;
+                  },
+                  onComplete: (messages) => {
+                    capturedMessages = messages;
+                  },
+                },
+              );
+              logIpc.info('generate.ok', {
+                generationId: id,
+                ms: Date.now() - t0,
+                artifacts: result.artifacts.length,
+                cost: result.costUsd,
+              });
+              if (capturedMessages !== null) {
+                const messagesForMemory = capturedMessages;
+                const design = db !== null ? getDesign(db, designId) : null;
+                let memoryWorkspaceRoot = workspaceRoot;
+                try {
+                  memoryWorkspaceRoot = requireWorkspaceRootForDesign(designId).workspaceRoot;
+                } catch (err) {
+                  logIpc.warn('memory.workspace.resolve.fail', {
+                    generationId: id,
+                    message: err instanceof Error ? err.message : String(err),
+                  });
+                }
+                const designName = design?.name ?? 'Untitled';
+                const workspaceMemoryUpdate =
+                  prefs.memoryEnabled === true && prefs.workspaceMemoryAutoUpdate === true
+                    ? triggerWorkspaceMemoryUpdate({
+                        workspacePath: memoryWorkspaceRoot,
+                        workspaceName: workspaceNameFromPath(memoryWorkspaceRoot),
                         designId,
                         designName,
+                        conversationMessages: messagesForMemory,
                         userMemory: memoryContext?.userMemory?.content ?? null,
-                        workspaceMemory: workspaceMemory?.content ?? null,
-                        sourceUserMemoryHash: memoryContext?.userMemory?.hash,
-                        sourceWorkspaceMemoryHash: workspaceMemory?.hash,
-                        sourceMemoryUpdatedAt:
-                          workspaceMemory?.updatedAt ?? memoryContext?.userMemory?.updatedAt,
+                        designMdSummary: designMdSummaryForMemory(promptContext.projectContext),
                         model: active.model,
                         apiKey,
                         ...(baseUrl !== undefined ? { baseUrl } : {}),
@@ -933,91 +904,125 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
                           ? { reasoningLevel: active.reasoningLevel }
                           : {}),
                         ...(allowKeyless ? { allowKeyless: true } : {}),
-                      }),
-                    )
-                    .then((briefResult) => {
-                      const opts = chatStoreOptions();
-                      if (opts !== null)
-                        appendSessionDesignBrief(opts, designId, briefResult.brief);
-                      logIpc.info('design-brief.update.ok', {
-                        generationId: id,
-                        outputLen: JSON.stringify(briefResult.brief).length,
-                      });
+                      }).catch((err) => {
+                        logIpc.warn('workspace-memory.update.fail', {
+                          generationId: id,
+                          message: err instanceof Error ? err.message : String(err),
+                        });
+                        return memoryContext?.workspaceMemory ?? null;
+                      })
+                    : Promise.resolve(memoryContext?.workspaceMemory ?? null);
+
+                const briefUpdate = prefs.memoryEnabled
+                  ? workspaceMemoryUpdate
+                      .then((workspaceMemory) =>
+                        updateDesignSessionBrief({
+                          existingBrief,
+                          conversationMessages: messagesForMemory,
+                          designId,
+                          designName,
+                          userMemory: memoryContext?.userMemory?.content ?? null,
+                          workspaceMemory: workspaceMemory?.content ?? null,
+                          sourceUserMemoryHash: memoryContext?.userMemory?.hash,
+                          sourceWorkspaceMemoryHash: workspaceMemory?.hash,
+                          sourceMemoryUpdatedAt:
+                            workspaceMemory?.updatedAt ?? memoryContext?.userMemory?.updatedAt,
+                          model: active.model,
+                          apiKey,
+                          ...(baseUrl !== undefined ? { baseUrl } : {}),
+                          wire: active.wire,
+                          ...(active.httpHeaders !== undefined
+                            ? { httpHeaders: active.httpHeaders }
+                            : {}),
+                          ...(active.reasoningLevel !== undefined
+                            ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(allowKeyless ? { allowKeyless: true } : {}),
+                        }),
+                      )
+                      .then((briefResult) => {
+                        const opts = chatStoreOptions();
+                        if (opts !== null)
+                          appendSessionDesignBrief(opts, designId, briefResult.brief);
+                        logIpc.info('design-brief.update.ok', {
+                          generationId: id,
+                          outputLen: JSON.stringify(briefResult.brief).length,
+                        });
+                      })
+                      .catch((err) => {
+                        logIpc.warn('design-brief.update.fail', {
+                          generationId: id,
+                          message: err instanceof Error ? err.message : String(err),
+                        });
+                      })
+                  : Promise.resolve();
+                const userMemoryMaintenance = shouldRunUserMemoryCandidateCapture(prefs)
+                  ? triggerUserMemoryCandidateCapture({
+                      designId,
+                      designName,
+                      userMessages: extractUserMessagesForMemory(messagesForMemory),
                     })
-                    .catch((err) => {
-                      logIpc.warn('design-brief.update.fail', {
-                        generationId: id,
-                        message: err instanceof Error ? err.message : String(err),
-                      });
-                    })
-                : Promise.resolve();
-              const userMemoryMaintenance = shouldRunUserMemoryCandidateCapture(prefs)
-                ? triggerUserMemoryCandidateCapture({
-                    designId,
-                    designName,
-                    userMessages: extractUserMessagesForMemory(messagesForMemory),
-                  })
-                    .then(() => {
-                      return triggerUserMemoryConsolidation({
-                        model: active.model,
-                        apiKey,
-                        ...(baseUrl !== undefined ? { baseUrl } : {}),
-                        wire: active.wire,
-                        ...(active.httpHeaders !== undefined
-                          ? { httpHeaders: active.httpHeaders }
-                          : {}),
-                        ...(active.reasoningLevel !== undefined
-                          ? { reasoningLevel: active.reasoningLevel }
-                          : {}),
-                        ...(allowKeyless ? { allowKeyless: true } : {}),
-                      });
-                    })
-                    .catch((err) => {
-                      logIpc.warn('user-memory.maintenance.fail', {
-                        generationId: id,
-                        message: err instanceof Error ? err.message : String(err),
-                      });
-                    })
-                : Promise.resolve();
-              if (aggressivePruneDetected) {
-                await Promise.all([briefUpdate, userMemoryMaintenance]);
+                      .then(() => {
+                        return triggerUserMemoryConsolidation({
+                          model: active.model,
+                          apiKey,
+                          ...(baseUrl !== undefined ? { baseUrl } : {}),
+                          wire: active.wire,
+                          ...(active.httpHeaders !== undefined
+                            ? { httpHeaders: active.httpHeaders }
+                            : {}),
+                          ...(active.reasoningLevel !== undefined
+                            ? { reasoningLevel: active.reasoningLevel }
+                            : {}),
+                          ...(allowKeyless ? { allowKeyless: true } : {}),
+                        });
+                      })
+                      .catch((err) => {
+                        logIpc.warn('user-memory.maintenance.fail', {
+                          generationId: id,
+                          message: err instanceof Error ? err.message : String(err),
+                        });
+                      })
+                  : Promise.resolve();
+                if (aggressivePruneDetected) {
+                  await Promise.all([briefUpdate, userMemoryMaintenance]);
+                }
               }
+              if (memoryLoadWarning !== undefined) {
+                return {
+                  ...result,
+                  warnings: [...(result.warnings ?? []), memoryLoadWarning],
+                };
+              }
+              return result;
+            } catch (err) {
+              // Attach upstream metadata so the renderer's diagnostic pipeline can
+              // map this failure to a hypothesis (status, baseUrl, wire, provider).
+              const failure = normalizeGenerationFailure({
+                err,
+                signal: controller.signal,
+                provider: active.model.provider,
+                modelId: active.model.modelId,
+                baseUrl,
+                wire: active.wire,
+              });
+              const rethrow = failure.error;
+              logIpc.error('generate.fail', {
+                generationId: id,
+                ms: Date.now() - t0,
+                provider: active.model.provider,
+                modelId: active.model.modelId,
+                baseUrl: baseUrl ?? '<default>',
+                status: failure.upstreamStatus,
+                message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+                code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+              });
+              recordFinalError('generate', id, rethrow);
+              throw rethrow;
+            } finally {
+              clearTimeoutGuard();
             }
-            if (memoryLoadWarning !== undefined) {
-              return {
-                ...result,
-                warnings: [...(result.warnings ?? []), memoryLoadWarning],
-              };
-            }
-            return result;
-          } catch (err) {
-            // Attach upstream metadata so the renderer's diagnostic pipeline can
-            // map this failure to a hypothesis (status, baseUrl, wire, provider).
-            const failure = normalizeGenerationFailure({
-              err,
-              signal: controller.signal,
-              provider: active.model.provider,
-              modelId: active.model.modelId,
-              baseUrl,
-              wire: active.wire,
-            });
-            const rethrow = failure.error;
-            logIpc.error('generate.fail', {
-              generationId: id,
-              ms: Date.now() - t0,
-              provider: active.model.provider,
-              modelId: active.model.modelId,
-              baseUrl: baseUrl ?? '<default>',
-              status: failure.upstreamStatus,
-              message: rethrow instanceof Error ? rethrow.message : String(rethrow),
-              code: rethrow instanceof CodesignError ? rethrow.code : undefined,
-            });
-            recordFinalError('generate', id, rethrow);
-            throw rethrow;
-          } finally {
-            clearTimeoutGuard();
-          }
-        },
+          }),
       );
     });
   });
@@ -1043,126 +1048,127 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
         inFlight,
         inFlightByDesign,
         controller,
-        async () => {
-          const coreLogger = coreLoggerFor(id);
+        async () =>
+          withStableWorkspacePath(payload.designId, async () => {
+            const coreLogger = coreLoggerFor(id);
 
-          const cfg = getCachedConfig();
-          if (cfg === null) {
-            throw new CodesignError(
-              'No configuration found. Complete onboarding first.',
-              'CONFIG_MISSING',
-            );
-          }
-          // Inline-comment edits don't need to be tied to whatever provider was
-          // pinned in the original generate; resolve fresh against the canonical
-          // active provider so a switch in Settings takes effect immediately.
-          const hint = payload.model ?? { provider: cfg.provider, modelId: cfg.modelPrimary };
-          const active = resolveActiveModel(cfg, hint);
-          const allowKeyless = active.allowKeyless;
-          const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
-          const baseUrl = active.baseUrl ?? undefined;
+            const cfg = getCachedConfig();
+            if (cfg === null) {
+              throw new CodesignError(
+                'No configuration found. Complete onboarding first.',
+                'CONFIG_MISSING',
+              );
+            }
+            // Inline-comment edits don't need to be tied to whatever provider was
+            // pinned in the original generate; resolve fresh against the canonical
+            // active provider so a switch in Settings takes effect immediately.
+            const hint = payload.model ?? { provider: cfg.provider, modelId: cfg.modelPrimary };
+            const active = resolveActiveModel(cfg, hint);
+            const allowKeyless = active.allowKeyless;
+            const apiKey = await resolveApiKeyForActive(active.model.provider, allowKeyless);
+            const baseUrl = active.baseUrl ?? undefined;
 
-          const { workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
+            const { workspaceRoot } = requireWorkspaceRootForDesign(payload.designId);
 
-          const promptContext = await preparePromptContext({
-            attachments: payload.attachments,
-            referenceUrl: payload.referenceUrl,
-            designSystem: cfg.designSystem ?? null,
-            workspaceRoot,
-          });
-
-          logIpc.info('applyComment', {
-            generationId: id,
-            designId: payload.designId,
-            provider: active.model.provider,
-            modelId: active.model.modelId,
-            ...(active.overridden
-              ? { requestedProvider: hint.provider, requestedModelId: hint.modelId }
-              : {}),
-            selector: payload.selection.selector,
-            attachmentCount: payload.attachments.length,
-            hasReferenceUrl: payload.referenceUrl !== undefined,
-            hasDesignSystem: promptContext.designSystem !== null,
-            baseUrl: baseUrl ?? '<default>',
-          });
-
-          const systemPrompt = composeSystemPrompt({ mode: 'revise' });
-          const userPrompt = buildApplyCommentUserPrompt({
-            comment: payload.comment,
-            selection: payload.selection,
-          });
-
-          const t0 = Date.now();
-          let clearTimeoutGuard: () => void = () => {};
-          try {
-            clearTimeoutGuard = await armTimeout(id, controller);
-            const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
-            const result = await runGenerate(
-              {
-                prompt: userPrompt,
-                systemPrompt,
-                history: [],
-                model: active.model,
-                apiKey,
-                ...(isCodex
-                  ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
-                  : {}),
-                attachments: promptContext.attachments,
-                referenceUrl: promptContext.referenceUrl,
-                designSystem: promptContext.designSystem ?? null,
-                projectContext: promptContext.projectContext,
-                initialResourceState: deriveResourceStateFromChatRows(
-                  chatRowsForDesign(payload.designId),
-                ),
-                ...(baseUrl !== undefined ? { baseUrl } : {}),
-                wire: active.wire,
-                ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
-                ...(active.reasoningLevel !== undefined
-                  ? { reasoningLevel: active.reasoningLevel }
-                  : {}),
-                ...(allowKeyless ? { allowKeyless: true } : {}),
-                signal: controller.signal,
-                logger: coreLogger,
-              },
-              id,
-              payload.designId,
-              payload.artifactSource,
+            const promptContext = await preparePromptContext({
+              attachments: payload.attachments,
+              referenceUrl: payload.referenceUrl,
+              designSystem: cfg.designSystem ?? null,
               workspaceRoot,
-            );
-            logIpc.info('applyComment.ok', {
-              generationId: id,
-              ms: Date.now() - t0,
-              artifacts: result.artifacts.length,
-              cost: result.costUsd,
             });
-            return result;
-          } catch (err) {
-            const failure = normalizeGenerationFailure({
-              err,
-              signal: controller.signal,
+
+            logIpc.info('applyComment', {
+              generationId: id,
+              designId: payload.designId,
               provider: active.model.provider,
               modelId: active.model.modelId,
-              baseUrl,
-              wire: active.wire,
-            });
-            const rethrow = failure.error;
-            logIpc.error('applyComment.fail', {
-              generationId: id,
-              ms: Date.now() - t0,
-              provider: active.model.provider,
-              modelId: active.model.modelId,
-              baseUrl: baseUrl ?? '<default>',
-              status: failure.upstreamStatus,
+              ...(active.overridden
+                ? { requestedProvider: hint.provider, requestedModelId: hint.modelId }
+                : {}),
               selector: payload.selection.selector,
-              message: rethrow instanceof Error ? rethrow.message : String(rethrow),
-              code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+              attachmentCount: payload.attachments.length,
+              hasReferenceUrl: payload.referenceUrl !== undefined,
+              hasDesignSystem: promptContext.designSystem !== null,
+              baseUrl: baseUrl ?? '<default>',
             });
-            recordFinalError('apply-comment', id, rethrow);
-            throw rethrow;
-          } finally {
-            clearTimeoutGuard();
-          }
-        },
+
+            const systemPrompt = composeSystemPrompt({ mode: 'revise' });
+            const userPrompt = buildApplyCommentUserPrompt({
+              comment: payload.comment,
+              selection: payload.selection,
+            });
+
+            const t0 = Date.now();
+            let clearTimeoutGuard: () => void = () => {};
+            try {
+              clearTimeoutGuard = await armTimeout(id, controller);
+              const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
+              const result = await runGenerate(
+                {
+                  prompt: userPrompt,
+                  systemPrompt,
+                  history: [],
+                  model: active.model,
+                  apiKey,
+                  ...(isCodex
+                    ? { getApiKey: () => resolveActiveApiKeyFromState(active.model.provider) }
+                    : {}),
+                  attachments: promptContext.attachments,
+                  referenceUrl: promptContext.referenceUrl,
+                  designSystem: promptContext.designSystem ?? null,
+                  projectContext: promptContext.projectContext,
+                  initialResourceState: deriveResourceStateFromChatRows(
+                    chatRowsForDesign(payload.designId),
+                  ),
+                  ...(baseUrl !== undefined ? { baseUrl } : {}),
+                  wire: active.wire,
+                  ...(active.httpHeaders !== undefined ? { httpHeaders: active.httpHeaders } : {}),
+                  ...(active.reasoningLevel !== undefined
+                    ? { reasoningLevel: active.reasoningLevel }
+                    : {}),
+                  ...(allowKeyless ? { allowKeyless: true } : {}),
+                  signal: controller.signal,
+                  logger: coreLogger,
+                },
+                id,
+                payload.designId,
+                payload.artifactSource,
+                workspaceRoot,
+              );
+              logIpc.info('applyComment.ok', {
+                generationId: id,
+                ms: Date.now() - t0,
+                artifacts: result.artifacts.length,
+                cost: result.costUsd,
+              });
+              return result;
+            } catch (err) {
+              const failure = normalizeGenerationFailure({
+                err,
+                signal: controller.signal,
+                provider: active.model.provider,
+                modelId: active.model.modelId,
+                baseUrl,
+                wire: active.wire,
+              });
+              const rethrow = failure.error;
+              logIpc.error('applyComment.fail', {
+                generationId: id,
+                ms: Date.now() - t0,
+                provider: active.model.provider,
+                modelId: active.model.modelId,
+                baseUrl: baseUrl ?? '<default>',
+                status: failure.upstreamStatus,
+                selector: payload.selection.selector,
+                message: rethrow instanceof Error ? rethrow.message : String(rethrow),
+                code: rethrow instanceof CodesignError ? rethrow.code : undefined,
+              });
+              recordFinalError('apply-comment', id, rethrow);
+              throw rethrow;
+            } finally {
+              clearTimeoutGuard();
+            }
+          }),
       );
     });
   });
