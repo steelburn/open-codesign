@@ -137,6 +137,23 @@ function formatResourceLine(entry: ResourceManifestEntryV1): string {
   return `- ${entry.name}: ${oneLine(details.join(' | '), 170)}`;
 }
 
+function scaffoldDestHint(entry: ResourceManifestEntryV1): string {
+  const ext = path.extname(entry.path) || '.txt';
+  const stem = entry.name.replace(/-frame$/i, '');
+  const category = entry.whenToUse;
+  if (category === 'device-frame') return `frames/${stem}${ext}`;
+  if (category === 'background' || category === 'surface') return `styles/${entry.name}${ext}`;
+  if (category === 'design-system') return 'DESIGN.md';
+  if (ext === '.jsx' || ext === '.tsx') return `App${ext}`;
+  if (ext === '.html') return 'index.html';
+  return `${entry.name}${ext}`;
+}
+
+function formatScaffoldLine(entry: ResourceManifestEntryV1): string {
+  const aliases = entry.aliases.length > 0 ? ` aliases: ${entry.aliases.join(', ')}.` : '';
+  return `  - ${entry.name}: ${oneLine(entry.description, 105)}${aliases} Use scaffold({kind: "${entry.name}", destPath: "${scaffoldDestHint(entry)}"}).`;
+}
+
 function groupEntries(
   entries: ResourceManifestEntryV1[],
   category: ResourceManifestEntryV1['category'],
@@ -148,22 +165,23 @@ function groupEntries(
 }
 
 function formatScaffoldGroups(entries: ResourceManifestEntryV1[]): string[] {
-  const groups = new Map<string, string[]>();
+  const groups = new Map<string, ResourceManifestEntryV1[]>();
   for (const entry of entries.filter((item) => item.category === 'scaffold')) {
     const category = entry.whenToUse.includes(' ')
       ? entry.path.split('/')[0] || 'other'
       : entry.whenToUse;
     const list = groups.get(category) ?? [];
-    list.push(entry.name);
+    list.push(entry);
     groups.set(category, list);
   }
   return [...groups.entries()]
     .sort(([a], [b]) => a.localeCompare(b, 'en'))
-    .map(([category, names]) => {
-      const sorted = names.sort((a, b) => a.localeCompare(b, 'en'));
-      const examples = sorted.slice(0, 5).join(', ');
-      const suffix = sorted.length > 5 ? `, +${sorted.length - 5} more` : '';
-      return `- ${category}: ${sorted.length} scaffold(s), examples: ${examples}${suffix}`;
+    .map(([category, group]) => {
+      const sorted = group.sort((a, b) => a.name.localeCompare(b.name, 'en'));
+      return [
+        `- ${category}: ${sorted.length} scaffold(s)`,
+        ...sorted.map(formatScaffoldLine),
+      ].join('\n');
     });
 }
 
@@ -185,7 +203,7 @@ export function formatResourceManifestForPrompt(manifest: ResourceManifestV1): s
   return [
     '# Available Resources',
     '',
-    'Progressive disclosure is manifest-first: choose from this index before writing. Call `skill(name)` for method guidance, `skill("brand:<slug>")` for reference-only brand DESIGN.md, and `scaffold({kind, destPath})` to copy a concrete starter/source file. Workspace `DESIGN.md` is not a manifest resource; it is the authoritative design-system baton when present.',
+    'Progressive disclosure is manifest-first: choose from this index before writing. Call `skill(name)` for method guidance, `skill("brand:<slug>")` for reference-only brand DESIGN.md, and `scaffold({kind, destPath})` to copy a concrete starter/source file. If the user asks for a listed frame, shell, primitive, deck, report, background, or starter, scaffold it before hand-writing that structure. Workspace `DESIGN.md` is not a manifest resource; it is the authoritative design-system baton when present.',
     '',
     '## Design Skills',
     skillLines.length > 0 ? skillLines.join('\n') : 'No design skills available.',

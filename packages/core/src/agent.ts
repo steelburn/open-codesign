@@ -395,7 +395,7 @@ function agenticToolGuidance(input: {
   const requiredSteps = [
     titleStep,
     '2. For multi-step or ambiguous work, call `set_todos` early with a short checklist. Do not delay a ready file mutation solely to add todos.',
-    '3. Load optional resources explicitly with `skill(name)` or `scaffold({kind, destPath})` before relying on them.',
+    '3. Load optional resources explicitly before relying on them. Use `skill(name)` for method guidance. When the request matches an available frame, shell, primitive, deck, report, or starter, call `scaffold({kind, destPath})` before writing the primary artifact; do not substitute a virtual `frames/*` or `skills/*` view for scaffolded workspace source.',
     ...(input.inspectWorkspace
       ? [
           '4. When the workspace brief says files or reference materials are present, call `inspect_workspace` before editing, then `view` the specific files you need.',
@@ -413,7 +413,7 @@ function agenticToolGuidance(input: {
     '- Multi-deliverable packages are allowed when useful: preview source, DESIGN.md, Markdown handoff docs, data files, and local assets can all belong to one design.',
     '- For document-first requests such as design briefs, content outlines, or handoff notes, create the requested `.md` file directly and skip `App.jsx` unless a visual preview is also useful.',
     '- Prefer progressive generation when it is natural: write a coherent first pass, then add sections, data, interactions, and polish in focused edits before previewing.',
-    '- Fresh visual sequence: `set_title` -> optional `set_todos`/`skill`/`scaffold` -> `create App.jsx` with a coherent first pass -> focused edits if needed -> `preview(App.jsx)`.',
+    '- Fresh visual sequence: `set_title` -> optional `set_todos`/`skill` -> required `scaffold` when a matching starter/frame/shell/primitive exists -> `create App.jsx` with a coherent first pass -> focused edits if needed -> `preview(App.jsx)`.',
     '- Fresh document sequence: `set_title` -> optional `set_todos`/`skill` -> create the requested document file -> `done(path)`.',
     '- Do not call `preview` while a previewable artifact is still only a scaffold, loading state, skeleton, placeholder, or empty lower section. Preview should represent a coherent first pass unless the user explicitly asked for a loading-state design.',
     '- Existing-source sequence: optional `set_todos` -> `inspect_workspace` when available -> `view` the source -> `str_replace`/`insert`. Do not edit an existing source from memory, and do not rebuild unless the user explicitly asks.',
@@ -704,12 +704,18 @@ function workspaceFiles(fs: TextEditorFsCallbacks | undefined): string[] {
     .sort((a, b) => a.localeCompare(b));
 }
 
+function isVirtualTemplatePath(file: string): boolean {
+  const normalized = file.replace(/\\/g, '/').toLowerCase();
+  return normalized.startsWith('frames/') || normalized.startsWith('skills/');
+}
+
 function sourceCandidates(
   files: readonly string[],
   fs: TextEditorFsCallbacks | undefined,
 ): string[] {
   if (!fs) return [];
   const candidates = files.filter((file) => {
+    if (isVirtualTemplatePath(file)) return false;
     if (!/\.(?:jsx|tsx|html?)$/i.test(file)) return false;
     const viewed = fs.view(file);
     return viewed !== null && viewed.content.trim().length > 0;

@@ -86,6 +86,10 @@ describe('resource manifest', () => {
       },
     );
     expect(result.sections.join('\n')).toContain('deps: artifact-composition');
+    expect(result.sections.join('\n')).toContain(
+      'Use scaffold({kind: "iphone-frame", destPath: "frames/iphone.jsx"})',
+    );
+    expect(result.sections.join('\n')).toContain('aliases: phone-frame');
     expect(result.sections.join('\n')).not.toContain('Body must not enter prompt manifest');
   });
 

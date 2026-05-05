@@ -1414,7 +1414,7 @@ describe('generateViaAgent()', () => {
     expect(prompt).toContain('make the hero warmer');
   });
 
-  it('requires set_title first when the current design still has an auto title', async () => {
+  it('requires set_title first without treating virtual frame templates as source', async () => {
     scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
     const events: AgentEvent[] = [];
     await generateViaAgent(
@@ -1438,7 +1438,8 @@ describe('generateViaAgent()', () => {
       args: { title: 'design an Apple Watch run coach' },
     });
     expect(prompt).toContain('Current design title: design an Apple Watch run coach.');
-    expect(prompt).toContain('Existing source candidates: frames/watch.jsx');
+    expect(prompt).toContain('No existing design source was found. Create App.jsx');
+    expect(prompt).not.toContain('Existing source candidates: frames/watch.jsx');
   });
 
   it('describes an empty workspace without implying an existing source file', async () => {
