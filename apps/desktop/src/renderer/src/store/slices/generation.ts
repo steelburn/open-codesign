@@ -127,6 +127,53 @@ function startGenerationForDesign(set: SetState, designId: string, generationId:
   });
 }
 
+function markGenerationRunningForDesign(
+  set: SetState,
+  designId: string,
+  generationId: string,
+  stage: GenerationStage = 'thinking',
+): void {
+  set((state) => {
+    const current = state.generationByDesign[designId];
+    if (current?.generationId === generationId && current.stage === stage) return {};
+    const generationByDesign = {
+      ...state.generationByDesign,
+      [designId]: {
+        generationId,
+        stage,
+      },
+    };
+    return {
+      generationByDesign,
+      ...projectedGenerationFields(
+        state,
+        generationByDesign,
+        state.currentDesignId === designId ? 'idle' : state.generationStage,
+      ),
+    };
+  });
+}
+
+function reconcileGenerationStatus(
+  set: SetState,
+  running: Array<{ designId: string; generationId: string }>,
+): void {
+  set((state) => {
+    const next: CodesignState['generationByDesign'] = {};
+    for (const item of running) {
+      const existing = state.generationByDesign[item.designId];
+      next[item.designId] =
+        existing?.generationId === item.generationId
+          ? existing
+          : { generationId: item.generationId, stage: 'thinking' };
+    }
+    return {
+      generationByDesign: next,
+      ...projectedGenerationFields(state, next),
+    };
+  });
+}
+
 function clearStreamingForDesign(set: SetState, designId: string): void {
   set((state) => {
     const streamingAssistantTextByDesign = { ...state.streamingAssistantTextByDesign };
@@ -603,6 +650,8 @@ async function runGenerate(
 
 interface GenerationSliceActions {
   sendPrompt: CodesignState['sendPrompt'];
+  syncGenerationStatus: CodesignState['syncGenerationStatus'];
+  markGenerationRunning: CodesignState['markGenerationRunning'];
   cancelGeneration: CodesignState['cancelGeneration'];
   retryLastPrompt: CodesignState['retryLastPrompt'];
   applyInlineComment: CodesignState['applyInlineComment'];
@@ -612,6 +661,16 @@ interface GenerationSliceActions {
 
 export function makeGenerationSlice(set: SetState, get: GetState): GenerationSliceActions {
   return {
+    async syncGenerationStatus() {
+      if (!window.codesign?.generationStatus) return;
+      const status = await window.codesign.generationStatus();
+      reconcileGenerationStatus(set, status.running);
+    },
+
+    markGenerationRunning(designId, generationId, stage = 'thinking') {
+      markGenerationRunningForDesign(set, designId, generationId, stage);
+    },
+
     async sendPrompt(input) {
       recordAction({
         type: 'prompt.submit',

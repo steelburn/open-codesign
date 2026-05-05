@@ -4,6 +4,7 @@ import {
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
+  listInFlightGenerations,
   withInFlightGeneration,
   withInFlightGenerationForDesign,
 } from './generation-ipc';
@@ -202,6 +203,20 @@ describe('withInFlightGenerationForDesign', () => {
 
     expect(inFlight.has('gen-1')).toBe(false);
     expect(inFlightByDesign.has('design-1')).toBe(false);
+  });
+});
+
+describe('listInFlightGenerations', () => {
+  it('returns design/generation pairs from the main-process in-flight registry', () => {
+    const inFlightByDesign = new Map([
+      ['design-b', 'gen-b'],
+      ['design-a', 'gen-a'],
+    ]);
+
+    expect(listInFlightGenerations(inFlightByDesign)).toEqual([
+      { designId: 'design-a', generationId: 'gen-a' },
+      { designId: 'design-b', generationId: 'gen-b' },
+    ]);
   });
 });
 

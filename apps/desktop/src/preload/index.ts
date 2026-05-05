@@ -261,6 +261,11 @@ export interface AgentStreamEvent {
   code?: string;
 }
 
+export interface GenerationStatusResult {
+  schemaVersion: 1;
+  running: Array<{ designId: string; generationId: string }>;
+}
+
 /**
  * Ask-tool wire shape. Mirrors packages/core/src/tools/ask.ts — duplicated
  * here so the preload does not take a hard dep on `@open-codesign/core`.
@@ -355,6 +360,8 @@ const api = {
       schemaVersion: 1,
       generationId,
     } satisfies CancelGenerationPayloadV1),
+  generationStatus: () =>
+    ipcRenderer.invoke('codesign:v1:generation-status') as Promise<GenerationStatusResult>,
   generateTitle: (prompt: string) =>
     ipcRenderer.invoke('codesign:v1:generate-title', { prompt }) as Promise<string>,
   applyComment: (payload: {

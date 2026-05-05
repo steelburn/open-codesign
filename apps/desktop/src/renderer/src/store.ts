@@ -242,6 +242,8 @@ export interface CodesignState {
      *  normally, but the chat transcript reads as one continuous run. */
     silent?: boolean | undefined;
   }) => Promise<void>;
+  syncGenerationStatus: () => Promise<void>;
+  markGenerationRunning: (designId: string, generationId: string, stage?: GenerationStage) => void;
   /** Feature flag for the auto-polish second-loop injection. When true,
    *  `tryAutoPolish` fires a canned "deepen this design" follow-up after the
    *  first successful run of a design. Set to false for now because the

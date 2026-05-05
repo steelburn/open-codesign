@@ -71,6 +71,14 @@ export async function withInFlightGenerationForDesign<T>(
   }
 }
 
+export function listInFlightGenerations(
+  inFlightByDesign: ReadonlyMap<string, string>,
+): Array<{ designId: string; generationId: string }> {
+  return [...inFlightByDesign.entries()]
+    .map(([designId, generationId]) => ({ designId, generationId }))
+    .sort((a, b) => a.designId.localeCompare(b.designId));
+}
+
 export interface GenerationTimeoutLogger {
   warn: (event: string, payload: Record<string, unknown>) => void;
 }

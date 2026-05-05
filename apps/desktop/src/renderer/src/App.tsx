@@ -14,6 +14,7 @@ import { Sidebar } from './components/Sidebar';
 import { ToastViewport } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { UpdateBanner } from './components/UpdateBanner';
+import { useAgentStream } from './hooks/useAgentStream';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useUpdateWiring } from './hooks/useUpdateWiring';
 
@@ -32,6 +33,7 @@ export function App() {
   const configLoaded = useCodesignStore((s) => s.configLoaded);
   const loadConfig = useCodesignStore((s) => s.loadConfig);
   const loadDesigns = useCodesignStore((s) => s.loadDesigns);
+  const syncGenerationStatus = useCodesignStore((s) => s.syncGenerationStatus);
   const switchDesign = useCodesignStore((s) => s.switchDesign);
   const sendPrompt = useCodesignStore((s) => s.sendPrompt);
   const isGenerating = useCodesignStore(
@@ -61,6 +63,7 @@ export function App() {
 
   const [updateStore] = useState(() => createUpdateStore({ dismissedVersion: '' }));
   useUpdateWiring(updateStore);
+  useAgentStream();
 
   useEffect(() => {
     if (!window.codesign) {
@@ -117,14 +120,17 @@ export function App() {
   useEffect(() => {
     async function bootstrap(): Promise<void> {
       await Promise.all([loadConfig(), loadDesigns()]);
+      await syncGenerationStatus();
       const state = useCodesignStore.getState();
       if (state.currentDesignId === null && state.designs.length > 0) {
-        const first = state.designs[0];
-        if (first) await switchDesign(first.id);
+        const runningDesignId = Object.keys(state.generationByDesign)[0];
+        const initialDesign =
+          state.designs.find((design) => design.id === runningDesignId) ?? state.designs[0];
+        if (initialDesign) await switchDesign(initialDesign.id);
       }
     }
     void bootstrap();
-  }, [loadConfig, loadDesigns, switchDesign]);
+  }, [loadConfig, loadDesigns, switchDesign, syncGenerationStatus]);
 
   function submit(): void {
     const trimmed = prompt.trim();

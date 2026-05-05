@@ -2,7 +2,6 @@ import { useT } from '@open-codesign/i18n';
 import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
 import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { useAgentStream } from '../hooks/useAgentStream';
 import { useCodesignStore } from '../store';
 import { AddMenu } from './chat/AddMenu';
 import { ChatMessageList } from './chat/ChatMessageList';
@@ -100,11 +99,6 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
   const designs = useCodesignStore((s) => s.designs);
   const _sidebarCollapsed = useCodesignStore((s) => s.sidebarCollapsed);
   const _setSidebarCollapsed = useCodesignStore((s) => s.setSidebarCollapsed);
-
-  // Mount useAgentStream here so streaming events route into the chat
-  // as soon as the Sidebar is in the tree — matches the lifecycle of
-  // chat visibility without needing an app-level hook.
-  useAgentStream();
 
   const promptInputRef = useRef<PromptInputHandle>(null);
   const handlePickStarter = (starterPrompt: string): void => {

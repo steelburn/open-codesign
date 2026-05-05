@@ -50,6 +50,7 @@ export function useAgentStream(): void {
   const updateChatToolStatus = useCodesignStore((s) => s.updateChatToolStatus);
   const persistAgentRunSnapshot = useCodesignStore((s) => s.persistAgentRunSnapshot);
   const renameDesign = useCodesignStore((s) => s.renameDesign);
+  const markGenerationRunning = useCodesignStore((s) => s.markGenerationRunning);
   const inFlight = useRef<Map<string, InFlightTurn>>(new Map());
 
   // Throttled live-preview push. iframe srcdoc reloads the whole page on every
@@ -89,6 +90,7 @@ export function useAgentStream(): void {
     };
 
     const handleTurnStart = (event: AgentStreamEvent) => {
+      markGenerationRunning(event.designId, event.generationId, 'thinking');
       // TODO: replace with rendererLogger once renderer-logger lands
       console.debug('[agent] turn_start', {
         generationId: event.generationId,
@@ -106,6 +108,7 @@ export function useAgentStream(): void {
     };
 
     const handleTextDelta = (event: AgentStreamEvent) => {
+      markGenerationRunning(event.designId, event.generationId, 'streaming');
       const current = inFlight.current.get(event.generationId);
       if (!current || typeof event.delta !== 'string') return;
       current.textBuffer += event.delta;
@@ -129,6 +132,7 @@ export function useAgentStream(): void {
     };
 
     const handleTurnEnd = (event: AgentStreamEvent) => {
+      markGenerationRunning(event.designId, event.generationId, 'thinking');
       const current = inFlight.current.get(event.generationId);
       // TODO: replace with rendererLogger once renderer-logger lands
       console.debug('[agent] turn_end', {
@@ -152,6 +156,7 @@ export function useAgentStream(): void {
     };
 
     const handleToolCallStart = (event: AgentStreamEvent) => {
+      markGenerationRunning(event.designId, event.generationId, 'streaming');
       const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       const toolName = event.toolName ?? 'unknown';
@@ -205,6 +210,7 @@ export function useAgentStream(): void {
     };
 
     const handleToolCallResult = (event: AgentStreamEvent) => {
+      markGenerationRunning(event.designId, event.generationId, 'streaming');
       const current = inFlight.current.get(event.generationId);
       const designId = event.designId;
       if (!current) return;
@@ -238,6 +244,7 @@ export function useAgentStream(): void {
     };
 
     const handleFsUpdated = (event: AgentStreamEvent) => {
+      markGenerationRunning(event.designId, event.generationId, 'streaming');
       // Live mirror of the agent edit tool's mutations into the iframe.
       // App.jsx is the default source file. Legacy workspaces may still use
       // index.html directly or as a small placeholder pointing at JSX/TSX.
@@ -409,5 +416,6 @@ export function useAgentStream(): void {
     updateChatToolStatus,
     persistAgentRunSnapshot,
     renameDesign,
+    markGenerationRunning,
   ]);
 }

@@ -34,6 +34,7 @@ import {
   armGenerationTimeout,
   cancelGenerationRequest,
   extractGenerationTimeoutError,
+  listInFlightGenerations,
   withInFlightGenerationForDesign,
 } from '../generation-ipc';
 import { resolveGenerationWorkspaceRoot } from '../generation-workspace';
@@ -802,6 +803,11 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     const { generationId } = CancelGenerationPayloadV1.parse(raw);
     cancelGenerationRequest(generationId, inFlight, logIpc, inFlightByDesign);
   });
+
+  ipcMain.handle('codesign:v1:generation-status', () => ({
+    schemaVersion: 1 as const,
+    running: listInFlightGenerations(inFlightByDesign),
+  }));
 
   ipcMain.handle('codesign:apply-comment', async (_e, raw: unknown) => {
     const payload = ApplyCommentPayload.parse(raw);

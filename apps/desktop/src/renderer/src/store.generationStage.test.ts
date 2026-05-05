@@ -38,6 +38,16 @@ function mockChatApi() {
   };
 }
 
+function mockCodesignApi(overrides: Record<string, unknown> = {}) {
+  return {
+    generationStatus: vi.fn(async () => ({ schemaVersion: 1, running: [] })),
+    generate: vi.fn(async () => ({ artifacts: [], message: 'ok' })),
+    chat: mockChatApi(),
+    snapshots: mockSnapshotsApi(),
+    ...overrides,
+  };
+}
+
 function mockSnapshotsApi() {
   return {
     list: vi.fn(async () => []),
@@ -96,6 +106,50 @@ beforeEach(() => {
 describe('generationStage transitions', () => {
   it('starts at idle', () => {
     expect(useCodesignStore.getState().generationStage).toBe('idle');
+  });
+
+  it('hydrates running generation state from the main-process status endpoint', async () => {
+    vi.stubGlobal('window', {
+      codesign: mockCodesignApi({
+        generationStatus: vi.fn(async () => ({
+          schemaVersion: 1,
+          running: [{ designId: DEFAULT_DESIGN.id, generationId: 'gen-main' }],
+        })),
+      }),
+      setTimeout,
+    });
+
+    await useCodesignStore.getState().syncGenerationStatus();
+
+    expect(useCodesignStore.getState().generationByDesign[DEFAULT_DESIGN.id]).toEqual({
+      generationId: 'gen-main',
+      stage: 'thinking',
+    });
+    expect(useCodesignStore.getState().isGenerating).toBe(true);
+    expect(useCodesignStore.getState().generatingDesignId).toBe(DEFAULT_DESIGN.id);
+  });
+
+  it('clears renderer-only generation state when main reports no running generations', async () => {
+    useCodesignStore.setState({
+      generationByDesign: {
+        [DEFAULT_DESIGN.id]: { generationId: 'stale', stage: 'streaming' },
+      },
+      isGenerating: true,
+      activeGenerationId: 'stale',
+      generatingDesignId: DEFAULT_DESIGN.id,
+      generationStage: 'streaming',
+    });
+    vi.stubGlobal('window', {
+      codesign: mockCodesignApi(),
+      setTimeout,
+    });
+
+    await useCodesignStore.getState().syncGenerationStatus();
+
+    expect(useCodesignStore.getState().generationByDesign).toEqual({});
+    expect(useCodesignStore.getState().isGenerating).toBe(false);
+    expect(useCodesignStore.getState().activeGenerationId).toBeNull();
+    expect(useCodesignStore.getState().generatingDesignId).toBeNull();
   });
 
   it('moves sending → thinking → streaming → parsing → rendering → done on success', async () => {
