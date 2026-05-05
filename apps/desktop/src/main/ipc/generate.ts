@@ -91,9 +91,14 @@ export function shouldRunUserMemoryCandidateCapture(prefs: {
   return prefs.memoryEnabled === true && prefs.userMemoryAutoUpdate === true;
 }
 
-export function buildRunPreferenceAskInput(questions: AskInput['questions']): AskInput {
+export function buildRunPreferenceAskInput(
+  questions: AskInput['questions'],
+  rationale?: string | undefined,
+): AskInput {
   return {
-    rationale: 'A few setup choices help Open CoDesign avoid unnecessary work.',
+    ...(rationale !== undefined && rationale.trim().length > 0
+      ? { rationale: rationale.trim() }
+      : {}),
     questions,
   };
 }
@@ -909,6 +914,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             if (runProtocolPreflight.requiresClarification) {
               const askInput = buildRunPreferenceAskInput(
                 runProtocolPreflight.clarificationQuestions,
+                routedPreferences.clarificationRationale,
               );
               const toolCallId = `host-preflight-ask-${id}`;
               const askStartedAt = Date.now();

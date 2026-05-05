@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildRunProtocolPreflight, formatRunProtocolPreflightAnswers } from './run-protocol.js';
 
 describe('run protocol preflight', () => {
-  it('asks deterministic questions for a fresh vague empty-workspace prompt', () => {
+  it('does not invent clarification questions when the semantic router did not ask any', () => {
     const result = buildRunProtocolPreflight({
       prompt: 'make something cool',
       historyCount: 0,
@@ -15,11 +15,26 @@ describe('run protocol preflight', () => {
       },
     });
 
-    expect(result.requiresClarification).toBe(true);
-    expect(result.clarificationQuestions.map((q) => q.id)).toEqual([
-      'artifactType',
-      'visualDirection',
-    ]);
+    expect(result.requiresClarification).toBe(false);
+    expect(result.clarificationQuestions).toEqual([]);
+    expect(result.requiresTodosBeforeMutation).toBe(true);
+  });
+
+  it('does not ask generic local questions for non-creation operational prompts', () => {
+    const result = buildRunProtocolPreflight({
+      prompt: '还没看文件，先看一下实际情况',
+      historyCount: 0,
+      workspaceState: { hasSource: false },
+      runPreferences: {
+        schemaVersion: 1,
+        tweaks: 'auto',
+        bitmapAssets: 'auto',
+        reusableSystem: 'auto',
+      },
+    });
+
+    expect(result.requiresClarification).toBe(false);
+    expect(result.clarificationQuestions).toEqual([]);
     expect(result.requiresTodosBeforeMutation).toBe(true);
   });
 
@@ -42,7 +57,7 @@ describe('run protocol preflight', () => {
     expect(result.requiresTodosBeforeMutation).toBe(true);
   });
 
-  it('preserves router questions and dedupes deterministic questions by id', () => {
+  it('uses router-authored questions and dedupes them by id', () => {
     const result = buildRunProtocolPreflight({
       prompt: 'make something cool',
       historyCount: 0,
@@ -57,15 +72,26 @@ describe('run protocol preflight', () => {
         {
           id: 'visualDirection',
           type: 'text-options',
-          prompt: 'Which direction?',
-          options: ['professional', 'editorial', 'bold', 'custom'],
+          prompt: '你想先走哪种 run coach 气质？',
+          options: ['Apple Watch 原生感', '运动杂志感', '更强教练感'],
+        },
+        {
+          id: 'visualDirection',
+          type: 'text-options',
+          prompt: 'Duplicate should be ignored',
+          options: ['a', 'b'],
         },
       ],
     });
 
-    expect(result.clarificationQuestions.map((q) => q.id)).toEqual([
-      'visualDirection',
-      'artifactType',
+    expect(result.requiresClarification).toBe(true);
+    expect(result.clarificationQuestions).toEqual([
+      {
+        id: 'visualDirection',
+        type: 'text-options',
+        prompt: '你想先走哪种 run coach 气质？',
+        options: ['Apple Watch 原生感', '运动杂志感', '更强教练感'],
+      },
     ]);
   });
 

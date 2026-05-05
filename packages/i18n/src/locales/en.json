@@ -21,6 +21,10 @@
     "applied": "Applied.",
     "working": "Working"
   },
+  "ask": {
+    "title": "Quick clarification",
+    "submit": "Answer"
+  },
   "toast": {
     "error": {
       "report": "Report"
@@ -38,6 +42,7 @@
     "tokens": "{{count}} tokens"
   },
   "canvas": {
+    "previewTab": "Preview",
     "filesTab": "Files",
     "filesTabEmpty": "No files yet",
     "openInTab": "Open in tab",
@@ -1115,9 +1120,9 @@
     "backToHub": "All designs",
     "tabs": {
       "recent": "Recent",
-      "your": "Your designs",
+      "all": "All designs",
       "examples": "Examples",
-      "designSystems": "Design systems"
+      "resources": "Resources"
     },
     "recent": {
       "title": "Recent",

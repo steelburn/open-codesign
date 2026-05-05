@@ -1,4 +1,6 @@
-import { type ReactElement, useCallback, useEffect, useState } from 'react';
+import { useT } from '@open-codesign/i18n';
+import { Check, MessageCircleQuestion, X } from 'lucide-react';
+import { type ReactElement, useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AskAnswer,
   AskFileQuestion,
@@ -12,10 +14,11 @@ import type {
 } from '../../../preload/index';
 
 /**
- * Questionnaire modal rendered whenever main pushes `ask:request` over IPC.
+ * Inline questionnaire rendered whenever main pushes `ask:request` over IPC.
  * The user's answers — or a `cancelled` marker — flow back via
- * `window.codesign.ask.resolve(requestId, result)`. Tokens only; no hardcoded
- * colors or sizes.
+ * `window.codesign.ask.resolve(requestId, result)`. It lives in the chat pane
+ * so clarification feels like part of the conversation, not an app-level
+ * interruption.
  */
 
 type AnswerValue = string | number | string[] | null;
@@ -36,8 +39,10 @@ export function advanceAskQueue(state: AskQueueState): AskQueueState {
 }
 
 export function AskModal() {
+  const t = useT();
   const [askQueue, setAskQueue] = useState<AskQueueState>({ active: null, queue: [] });
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
+  const panelRef = useRef<HTMLElement>(null);
   const pending = askQueue.active;
 
   useEffect(() => {
@@ -51,6 +56,11 @@ export function AskModal() {
 
   useEffect(() => {
     setAnswers(pending ? initialAnswers(pending.input.questions) : {});
+  }, [pending]);
+
+  useEffect(() => {
+    if (!pending) return;
+    panelRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   }, [pending]);
 
   const resolve = useCallback((requestId: string, result: AskResult) => {
@@ -88,54 +98,61 @@ export function AskModal() {
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
+    <section
+      ref={panelRef}
       aria-labelledby="ask-title"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-[var(--color-overlay-scrim)] p-[var(--space-4)]"
+      role="group"
+      className="mt-[var(--space-5)] max-w-[92%] rounded-2xl rounded-bl-md border border-[var(--color-border)] bg-[var(--color-surface)] px-[var(--space-3)] py-[var(--space-3)] shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
     >
-      <div className="max-h-[calc(100vh-4rem)] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-overlay)] p-[var(--space-6)] shadow-[var(--shadow-overlay)]">
-        <header className="mb-[var(--space-4)]">
-          <h2
-            id="ask-title"
-            className="text-[var(--text-base)] font-[var(--font-weight-semibold)] text-[var(--color-text-primary)]"
-          >
-            A few quick questions
-          </h2>
-          {pending.input.rationale ? (
-            <p className="mt-[var(--space-2)] text-[var(--text-sm)] text-[var(--color-text-secondary)]">
-              {pending.input.rationale}
-            </p>
-          ) : null}
-        </header>
-        <div className="flex flex-col gap-[var(--space-5)]">
-          {pending.input.questions.map((q) => (
-            <QuestionField
-              key={q.id}
-              question={q}
-              value={answers[q.id] ?? null}
-              onChange={(v) => setValue(q.id, v)}
-            />
-          ))}
+      <div className="flex items-start gap-[var(--space-2)]">
+        <div className="mt-[2px] flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-full bg-[var(--color-accent)]/10 text-[var(--color-accent)]">
+          <MessageCircleQuestion className="h-[14px] w-[14px]" aria-hidden />
         </div>
-        <footer className="mt-[var(--space-6)] flex justify-end gap-[var(--space-2)]">
-          <button
-            type="button"
-            onClick={cancel}
-            className="rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] px-[var(--space-4)] py-[var(--space-2)] text-[var(--text-sm)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-raised)]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            className="rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--space-4)] py-[var(--space-2)] text-[var(--text-sm)] font-[var(--font-weight-semibold)] text-[var(--color-text-on-accent)] hover:opacity-90"
-          >
-            Submit
-          </button>
-        </footer>
+        <div className="min-w-0 flex-1">
+          <header className="mb-[var(--space-3)]">
+            <h2
+              id="ask-title"
+              className="text-[13px] font-[var(--font-weight-semibold)] leading-tight text-[var(--color-text-primary)]"
+            >
+              {t('ask.title', { defaultValue: 'Quick clarification' })}
+            </h2>
+            {pending.input.rationale ? (
+              <p className="mt-[var(--space-1)] text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+                {pending.input.rationale}
+              </p>
+            ) : null}
+          </header>
+          <div className="flex flex-col gap-[var(--space-3)]">
+            {pending.input.questions.map((q) => (
+              <QuestionField
+                key={q.id}
+                question={q}
+                value={answers[q.id] ?? null}
+                onChange={(v) => setValue(q.id, v)}
+              />
+            ))}
+          </div>
+          <footer className="mt-[var(--space-3)] flex justify-end gap-[var(--space-2)]">
+            <button
+              type="button"
+              onClick={cancel}
+              className="inline-flex h-[30px] items-center gap-[var(--space-1)] rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] px-[var(--space-2_5)] text-[12px] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text-primary)]"
+            >
+              <X className="h-[13px] w-[13px]" aria-hidden />
+              {t('common.cancel', { defaultValue: 'Cancel' })}
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              className="inline-flex h-[30px] items-center gap-[var(--space-1)] rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--space-2_5)] text-[12px] font-[var(--font-weight-semibold)] text-[var(--color-text-on-accent)] hover:opacity-90"
+            >
+              <Check className="h-[13px] w-[13px]" aria-hidden />
+              {t('ask.submit', { defaultValue: 'Answer' })}
+            </button>
+          </footer>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -157,10 +174,10 @@ interface FieldProps {
 
 function QuestionField({ question, value, onChange }: FieldProps) {
   return (
-    <div className="flex flex-col gap-[var(--space-2)]">
+    <div className="flex flex-col gap-[var(--space-1_5)]">
       <label
         htmlFor={`ask-q-${question.id}`}
-        className="text-[var(--text-sm)] font-[var(--font-weight-medium)] text-[var(--color-text-primary)]"
+        className="text-[12.5px] font-[var(--font-weight-medium)] leading-snug text-[var(--color-text-primary)]"
       >
         {question.prompt}
       </label>
@@ -200,14 +217,15 @@ function TextOptions({
   if (q.multi) {
     const selected = new Set<string>(Array.isArray(value) ? value : []);
     return (
-      <div className="flex flex-col gap-[var(--space-2)]">
+      <div className="flex flex-col gap-[var(--space-1)]">
         {q.options.map((opt) => (
           <label
             key={opt}
-            className="flex items-center gap-[var(--space-2)] text-[var(--text-sm)] text-[var(--color-text-primary)]"
+            className="flex min-w-0 items-start gap-[var(--space-2)] rounded-[var(--radius-sm)] border border-transparent px-[var(--space-2)] py-[var(--space-1_5)] text-[12.5px] leading-snug text-[var(--color-text-primary)] hover:border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-raised)]"
           >
             <input
               type="checkbox"
+              className="mt-[2px] shrink-0"
               checked={selected.has(opt)}
               onChange={(e) => {
                 const next = new Set(selected);
@@ -216,7 +234,7 @@ function TextOptions({
                 onChange([...next]);
               }}
             />
-            {opt}
+            <span className="min-w-0 break-words">{opt}</span>
           </label>
         ))}
       </div>
@@ -224,19 +242,24 @@ function TextOptions({
   }
   const current = typeof value === 'string' ? value : '';
   return (
-    <div className="flex flex-col gap-[var(--space-2)]">
+    <div className="flex flex-col gap-[var(--space-1)]">
       {q.options.map((opt) => (
         <label
           key={opt}
-          className="flex items-center gap-[var(--space-2)] text-[var(--text-sm)] text-[var(--color-text-primary)]"
+          className={`flex min-w-0 items-start gap-[var(--space-2)] rounded-[var(--radius-sm)] border px-[var(--space-2)] py-[var(--space-1_5)] text-[12.5px] leading-snug text-[var(--color-text-primary)] transition-colors ${
+            current === opt
+              ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/10'
+              : 'border-transparent hover:border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-raised)]'
+          }`}
         >
           <input
             type="radio"
             name={`ask-q-${q.id}`}
+            className="mt-[2px] shrink-0"
             checked={current === opt}
             onChange={() => onChange(opt)}
           />
-          {opt}
+          <span className="min-w-0 break-words">{opt}</span>
         </label>
       ))}
     </div>
@@ -254,7 +277,7 @@ function SvgOptions({
 }) {
   const current = typeof value === 'string' ? value : '';
   return (
-    <div className="grid grid-cols-2 gap-[var(--space-3)] sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-[var(--space-2)]">
       {q.options.map((opt) => {
         const selected = current === opt.id;
         return (
@@ -262,7 +285,7 @@ function SvgOptions({
             type="button"
             key={opt.id}
             onClick={() => onChange(opt.id)}
-            className={`flex flex-col items-stretch gap-[var(--space-2)] rounded-[var(--radius-md)] border p-[var(--space-2)] text-left text-[var(--text-xs)] text-[var(--color-text-primary)] transition-colors ${
+            className={`flex min-w-0 flex-col items-stretch gap-[var(--space-2)] rounded-[var(--radius-md)] border p-[var(--space-2)] text-left text-[var(--text-xs)] text-[var(--color-text-primary)] transition-colors ${
               selected
                 ? 'border-[var(--color-accent)] bg-[var(--color-surface-raised)]'
                 : 'border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-raised)]'
@@ -277,7 +300,7 @@ function SvgOptions({
               // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted agent-authored SVG
               dangerouslySetInnerHTML={{ __html: opt.svg }}
             />
-            <span>{opt.label}</span>
+            <span className="break-words">{opt.label}</span>
           </button>
         );
       })}
@@ -296,7 +319,7 @@ function SliderField({
 }) {
   const current = typeof value === 'number' ? value : (q.default ?? q.min);
   return (
-    <div className="flex items-center gap-[var(--space-3)]">
+    <div className="flex items-center gap-[var(--space-2)]">
       <input
         id={`ask-q-${q.id}`}
         type="range"
@@ -307,7 +330,7 @@ function SliderField({
         onChange={(e) => onChange(Number(e.target.value))}
         className="flex-1"
       />
-      <span className="min-w-[3rem] text-right font-[var(--font-mono)] text-[var(--text-sm)] text-[var(--color-text-primary)]">
+      <span className="min-w-[3rem] text-right font-[var(--font-mono)] text-[12px] text-[var(--color-text-primary)]">
         {current}
         {q.unit ? ` ${q.unit}` : ''}
       </span>
@@ -331,7 +354,7 @@ function FileField({ q, onChange }: { q: AskFileQuestion; onChange: (v: AnswerVa
         if (q.multiple) onChange(files.map((f) => f.name));
         else onChange(files[0]?.name ?? null);
       }}
-      className="text-[var(--text-sm)] text-[var(--color-text-primary)]"
+      className="max-w-full text-[12.5px] text-[var(--color-text-primary)]"
     />
   );
 }

@@ -21,6 +21,10 @@
     "applied": "已应用。",
     "working": "处理中"
   },
+  "ask": {
+    "title": "确认一下",
+    "submit": "回答"
+  },
   "toast": {
     "error": {
       "report": "上报"
@@ -38,6 +42,7 @@
     "tokens": "{{count}} 个 token"
   },
   "canvas": {
+    "previewTab": "预览",
     "filesTab": "文件",
     "filesTabEmpty": "还没有文件",
     "openInTab": "在新标签打开",
@@ -1111,9 +1116,9 @@
     "backToHub": "全部设计",
     "tabs": {
       "recent": "最近",
-      "your": "我的设计",
+      "all": "全部设计",
       "examples": "示例",
-      "designSystems": "设计系统"
+      "resources": "资源"
     },
     "recent": {
       "title": "最近",

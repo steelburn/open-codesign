@@ -13,7 +13,7 @@ import { remapProviderError } from './errors.js';
 import { type CoreLogger, NOOP_LOGGER } from './logger.js';
 import type { AskInput } from './tools/ask.js';
 
-const ROUTER_MAX_OUTPUT_TOKENS = 1_000;
+const ROUTER_MAX_OUTPUT_TOKENS = 1_200;
 const MODES = new Set<DesignRunPreferenceMode>(['yes', 'no', 'auto']);
 const PROVENANCES = new Set<DesignRunPreferenceProvenance>(['explicit', 'inferred', 'default']);
 const CONFIDENCES = new Set<DesignRunPreferenceConfidence>(['high', 'medium', 'low']);
@@ -32,7 +32,7 @@ export const DEFAULT_RUN_PREFERENCES: DesignRunPreferencesV1 = {
 };
 
 export const RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT = [
-  'You route Open CoDesign run preferences from semantic intent.',
+  'You route Open CoDesign run preferences and design natural clarification questions from semantic intent.',
   'Output ONLY valid JSON. No markdown.',
   '',
   'Return shape:',
@@ -45,14 +45,27 @@ export const RUN_PREFERENCES_ROUTER_SYSTEM_PROMPT = [
   '    "routing": { "<field>": { "provenance": "explicit" | "inferred" | "default", "confidence": "high" | "medium" | "low", "reason"?: string } }',
   '  },',
   '  "needsClarification": boolean,',
+  '  "clarificationRationale"?: string,',
   '  "clarificationQuestions"?: AskInput["questions"]',
   '}',
+  '',
+  'Allowed clarification question shapes:',
+  '- {"id": string, "type": "text-options", "prompt": string, "options": string[], "multi"?: boolean}',
+  '- {"id": string, "type": "freeform", "prompt": string, "placeholder"?: string, "multiline"?: boolean}',
   '',
   'Rules:',
   '- Use explicit only when the user clearly asked for or refused a capability.',
   '- Use inferred for likely intent from task context; use default for no evidence.',
   '- Prefer auto when unsure; do not over-route.',
-  '- Ask clarification only for high-impact ambiguity that would materially change the run.',
+  '- Ask clarification only for high-impact ambiguity that would materially change this run.',
+  '- Never ask generic setup questions just because artifact type or visual style is missing.',
+  '- Do not ask clarification for operational requests such as reviewing, debugging, inspecting files, explaining current state, or making a narrow revision.',
+  '- When the prompt is actionable, infer safely and let the agent build; the user can revise cheaply later.',
+  '- If you ask, write questions in the same language as the user prompt and make every option specific to the user scenario.',
+  '- Prefer 1 question. Use 2 only when two independent decisions materially change the first pass. Never return more than 2.',
+  '- Avoid options like "professional", "editorial", "bold", "custom" unless those words came from the user. Use concrete phrases instead.',
+  '- Each question must be short enough for a narrow chat sidebar and must not contain newlines.',
+  '- clarificationRationale, when present, must be one short same-language sentence explaining why the answer matters now.',
 ].join('\n');
 
 interface RunPreferenceRouterModelInput {
@@ -79,6 +92,7 @@ export interface RouteRunPreferencesInput extends RunPreferenceRouterModelInput 
 export interface RouteRunPreferencesResult {
   preferences: DesignRunPreferencesV1;
   needsClarification: boolean;
+  clarificationRationale?: string;
   clarificationQuestions?: AskInput['questions'];
 }
 
@@ -146,11 +160,26 @@ function normalizeQuestions(raw: unknown): AskInput['questions'] | undefined {
       const options = Array.isArray(item['options'])
         ? item['options'].filter((option): option is string => typeof option === 'string')
         : [];
-      if (options.length >= 2) questions.push({ id, type, prompt, options });
+      const multi = item['multi'];
+      if (options.length >= 2) {
+        questions.push({
+          id,
+          type,
+          prompt,
+          options: options.slice(0, 5),
+          ...(typeof multi === 'boolean' ? { multi } : {}),
+        });
+      }
     } else if (type === 'freeform') {
-      questions.push({ id, type, prompt });
+      questions.push({
+        id,
+        type,
+        prompt,
+        ...(typeof item['placeholder'] === 'string' ? { placeholder: item['placeholder'] } : {}),
+        ...(typeof item['multiline'] === 'boolean' ? { multiline: item['multiline'] } : {}),
+      });
     }
-    if (questions.length >= 4) break;
+    if (questions.length >= 2) break;
   }
   return questions.length > 0 ? questions : undefined;
 }
@@ -186,9 +215,15 @@ export function normalizeRunPreferencesRouterResult(
     };
   }
   const clarificationQuestions = normalizeQuestions(raw['clarificationQuestions']);
+  const rationaleRaw = raw['clarificationRationale'];
+  const clarificationRationale =
+    typeof rationaleRaw === 'string' && rationaleRaw.trim().length > 0
+      ? rationaleRaw.trim().slice(0, 240)
+      : undefined;
   return {
     preferences,
     needsClarification: raw['needsClarification'] === true && clarificationQuestions !== undefined,
+    ...(clarificationRationale !== undefined ? { clarificationRationale } : {}),
     ...(clarificationQuestions !== undefined ? { clarificationQuestions } : {}),
   };
 }

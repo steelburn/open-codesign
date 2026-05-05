@@ -1,6 +1,5 @@
 import { useT } from '@open-codesign/i18n';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { AskModal } from './components/AskModal';
 import { CommentsPanel } from './components/comment/CommentsPanel';
 import { DeleteDesignDialog } from './components/DeleteDesignDialog';
 import { DesignsView } from './components/DesignsView';
@@ -279,7 +278,6 @@ export function App() {
       <ToastViewport />
       <CommentsPanel />
       <PermissionDialog />
-      <AskModal />
       <ReportEventDialog localId={activeReportLocalId} onClose={closeReportDialog} />
     </div>
   );

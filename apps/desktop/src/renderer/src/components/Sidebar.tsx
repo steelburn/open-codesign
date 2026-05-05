@@ -3,6 +3,7 @@ import type { LocalInputFile, OnboardingState } from '@open-codesign/shared';
 import { FolderOpen, Link2, Paperclip, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useCodesignStore } from '../store';
+import { AskModal } from './AskModal';
 import { AddMenu } from './chat/AddMenu';
 import { ChatMessageList } from './chat/ChatMessageList';
 import { CommentChipBar } from './chat/CommentChipBar';
@@ -141,6 +142,7 @@ export function Sidebar({ prompt, setPrompt, onSubmit }: SidebarProps) {
           }
           empty={<EmptyState onPickStarter={handlePickStarter} />}
         />
+        <AskModal />
       </div>
 
       {/* Skill chips + prompt input + model/tokens line */}

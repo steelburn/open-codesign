@@ -50,14 +50,18 @@ describe('generate IPC memory preference helpers', () => {
 
 describe('generate IPC run preference preflight helpers', () => {
   it('builds clarification input from semantic router questions', () => {
-    const input = buildRunPreferenceAskInput([
-      {
-        id: 'bitmapAssets',
-        type: 'text-options',
-        prompt: 'Generate bitmap assets?',
-        options: ['auto', 'no', 'yes'],
-      },
-    ]);
+    const input = buildRunPreferenceAskInput(
+      [
+        {
+          id: 'bitmapAssets',
+          type: 'text-options',
+          prompt: 'Generate bitmap assets?',
+          options: ['auto', 'no', 'yes'],
+        },
+      ],
+      'This decides whether the first pass needs generated imagery.',
+    );
+    expect(input.rationale).toBe('This decides whether the first pass needs generated imagery.');
     expect(input.questions[0]).toMatchObject({
       id: 'bitmapAssets',
       type: 'text-options',

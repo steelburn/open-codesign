@@ -21,6 +21,10 @@
     "applied": "Aplicado.",
     "working": "Trabajando"
   },
+  "ask": {
+    "title": "Aclaración rápida",
+    "submit": "Responder"
+  },
   "toast": {
     "error": {
       "report": "Reportar"

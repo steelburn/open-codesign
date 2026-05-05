@@ -28,90 +28,14 @@ export interface RunProtocolState {
   todosSet: boolean;
 }
 
-const ARTIFACT_KEYWORDS = [
-  'app',
-  'screen',
-  'page',
-  'landing',
-  'website',
-  'dashboard',
-  'deck',
-  'slide',
-  'poster',
-  'report',
-  'brief',
-  'document',
-  'email',
-  'watch',
-  '界面',
-  '页面',
-  '屏幕',
-  '海报',
-  '报告',
-  '文档',
-  '演示',
-  '幻灯片',
-];
-
-const VISUAL_KEYWORDS = [
-  'apple watch',
-  'style',
-  '风格',
-  'minimal',
-  'modern',
-  'bold',
-  'editorial',
-  'professional',
-  'playful',
-  'high contrast',
-  '强对比',
-  '圆形',
-  'glanceable',
-  'watchos',
-];
-
-function includesAny(input: string, keywords: readonly string[]): boolean {
-  const normalized = input.toLowerCase();
-  return keywords.some((keyword) => normalized.includes(keyword.toLowerCase()));
-}
-
 function isFreshEmpty(input: RunProtocolPreflightInput): boolean {
   return input.historyCount === 0 && !input.workspaceState.hasSource;
 }
 
-function deterministicQuestions(input: RunProtocolPreflightInput): AskInput['questions'] {
-  if (!isFreshEmpty(input)) return [];
-  if (input.attachmentCount || input.hasReferenceUrl || input.hasDesignSystem) return [];
-  const prompt = input.prompt.trim();
-  if (prompt.length === 0) return [];
-
-  const questions: AskInput['questions'] = [];
-  if (!includesAny(prompt, ARTIFACT_KEYWORDS)) {
-    questions.push({
-      id: 'artifactType',
-      type: 'text-options',
-      prompt: 'What should Open CoDesign produce?',
-      options: ['mobile-app-screen', 'landing-page', 'document-brief', 'slide-deck'],
-    });
-  }
-  if (!includesAny(prompt, VISUAL_KEYWORDS)) {
-    questions.push({
-      id: 'visualDirection',
-      type: 'text-options',
-      prompt: 'Which visual direction should guide the first pass?',
-      options: ['professional', 'editorial', 'bold', 'custom'],
-    });
-  }
-  return questions.slice(0, 2);
-}
-
-function mergeQuestions(
-  primary: AskInput['questions'] | undefined,
-  secondary: AskInput['questions'],
-): AskInput['questions'] {
+function dedupeQuestions(primary: AskInput['questions'] | undefined): AskInput['questions'] {
   const merged: AskInput['questions'] = [];
   const seen = new Set<string>();
-  for (const question of [...(primary ?? []), ...secondary]) {
+  for (const question of primary ?? []) {
     if (seen.has(question.id)) continue;
     seen.add(question.id);
     merged.push(question);
@@ -123,7 +47,7 @@ function mergeQuestions(
 export function buildRunProtocolPreflight(
   input: RunProtocolPreflightInput,
 ): RunProtocolPreflightResult {
-  const questions = mergeQuestions(input.routerQuestions, deterministicQuestions(input));
+  const questions = dedupeQuestions(input.routerQuestions);
   const requiresTodosBeforeMutation = isFreshEmpty(input) && input.prompt.trim().length > 0;
   return {
     requiresClarification: questions.length > 0,

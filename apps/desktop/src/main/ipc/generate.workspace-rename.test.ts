@@ -16,6 +16,7 @@ const coreCalls = vi.hoisted(() => ({
       reusableSystem: 'auto';
     };
     needsClarification: boolean;
+    clarificationRationale?: string;
     clarificationQuestions?: Array<{
       id: string;
       type: 'text-options';
@@ -263,7 +264,25 @@ describe('generate IPC workspace rename coordination', () => {
     );
   });
 
-  it('runs deterministic preflight ask before generateViaAgent for vague fresh prompts', async () => {
+  it('runs semantic router preflight ask before generateViaAgent', async () => {
+    coreCalls.routeResults.push({
+      preferences: {
+        schemaVersion: 1,
+        tweaks: 'auto',
+        bitmapAssets: 'auto',
+        reusableSystem: 'auto',
+      },
+      needsClarification: true,
+      clarificationRationale: '这个选择会影响首版信息架构。',
+      clarificationQuestions: [
+        {
+          id: 'primarySurface',
+          type: 'text-options',
+          prompt: '先做哪个核心界面？',
+          options: ['训练中主屏', '完成后复盘', '教练提醒弹层'],
+        },
+      ],
+    });
     const db = initInMemoryDb();
     const design = createDesign(db, 'Untitled design 1');
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
@@ -291,17 +310,40 @@ describe('generate IPC workspace rename coordination', () => {
     const generateOrder = vi.mocked(generateViaAgent).mock.invocationCallOrder[0] ?? 0;
     expect(askOrder).toBeGreaterThan(0);
     expect(askOrder).toBeLessThan(generateOrder);
-    expect(vi.mocked(requestAsk).mock.calls[0]?.[1].questions.map((q) => q.id)).toEqual([
-      'artifactType',
-      'visualDirection',
-    ]);
+    expect(vi.mocked(requestAsk).mock.calls[0]?.[1]).toMatchObject({
+      rationale: '这个选择会影响首版信息架构。',
+      questions: [
+        {
+          id: 'primarySurface',
+          prompt: '先做哪个核心界面？',
+          options: ['训练中主屏', '完成后复盘', '教练提醒弹层'],
+        },
+      ],
+    });
     expect(coreCalls.generateInputs[0]).toMatchObject({ currentDesignName: 'Untitled design 1' });
 
     generateControl.release();
     await generatePromise;
   });
 
-  it('continues generation when deterministic preflight ask is cancelled', async () => {
+  it('continues generation when semantic preflight ask is cancelled', async () => {
+    coreCalls.routeResults.push({
+      preferences: {
+        schemaVersion: 1,
+        tweaks: 'auto',
+        bitmapAssets: 'auto',
+        reusableSystem: 'auto',
+      },
+      needsClarification: true,
+      clarificationQuestions: [
+        {
+          id: 'primarySurface',
+          type: 'text-options',
+          prompt: '先做哪个核心界面？',
+          options: ['训练中主屏', '完成后复盘'],
+        },
+      ],
+    });
     vi.mocked(requestAsk).mockResolvedValueOnce({ status: 'cancelled', answers: [] });
     const db = initInMemoryDb();
     const design = createDesign(db, 'Untitled design 1');
@@ -331,7 +373,24 @@ describe('generate IPC workspace rename coordination', () => {
     await generatePromise;
   });
 
-  it('still runs deterministic preflight when the renderer already persisted the current prompt', async () => {
+  it('still runs semantic preflight when the renderer already persisted the current prompt', async () => {
+    coreCalls.routeResults.push({
+      preferences: {
+        schemaVersion: 1,
+        tweaks: 'auto',
+        bitmapAssets: 'auto',
+        reusableSystem: 'auto',
+      },
+      needsClarification: true,
+      clarificationQuestions: [
+        {
+          id: 'primarySurface',
+          type: 'text-options',
+          prompt: '先做哪个核心界面？',
+          options: ['训练中主屏', '完成后复盘'],
+        },
+      ],
+    });
     const db = initInMemoryDb();
     const design = createDesign(db, 'Untitled design 1');
     const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
@@ -365,8 +424,7 @@ describe('generate IPC workspace rename coordination', () => {
     await generateControl.started;
     expect(vi.mocked(requestAsk)).toHaveBeenCalledOnce();
     expect(vi.mocked(requestAsk).mock.calls[0]?.[1].questions.map((q) => q.id)).toEqual([
-      'artifactType',
-      'visualDirection',
+      'primarySurface',
     ]);
 
     generateControl.release();

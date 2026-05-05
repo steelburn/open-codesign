@@ -61,23 +61,24 @@ describe('run preferences semantic router normalization', () => {
     expect(runPreferencesFromJson('not json', fallback).preferences.tweaks).toBe('yes');
   });
 
-  it('keeps clarification questions from router output', () => {
+  it('keeps natural clarification copy from router output', () => {
     const result = normalizeRunPreferencesRouterResult(
       {
         preferences: defaultRunPreferences(),
         needsClarification: true,
+        clarificationRationale: '这个选择会决定首版是偏训练中抬腕速读，还是偏复盘展示。',
         clarificationQuestions: [
           {
-            id: 'bitmapAssets',
+            id: 'watchMoment',
             type: 'text-options',
-            prompt: 'Generate bitmap imagery?',
-            options: ['auto', 'no', 'yes'],
+            prompt: '这块 Apple Watch 屏幕更像哪个瞬间？',
+            options: ['跑步中抬腕速读', '结束后的复盘卡片', '教练提醒弹出'],
           },
           {
-            id: 'visualDirection',
-            type: 'text-options',
-            prompt: 'Preferred visual direction?',
-            options: ['professional', 'editorial', 'bold', 'custom'],
+            id: 'extraContext',
+            type: 'freeform',
+            prompt: '还有必须保留的指标吗？',
+            placeholder: '比如 heart-rate zone 或 haptic cue',
           },
         ],
       },
@@ -85,7 +86,40 @@ describe('run preferences semantic router normalization', () => {
     );
 
     expect(result.needsClarification).toBe(true);
-    expect(result.clarificationQuestions).toHaveLength(2);
+    expect(result.clarificationRationale).toBe(
+      '这个选择会决定首版是偏训练中抬腕速读，还是偏复盘展示。',
+    );
+    expect(result.clarificationQuestions).toEqual([
+      {
+        id: 'watchMoment',
+        type: 'text-options',
+        prompt: '这块 Apple Watch 屏幕更像哪个瞬间？',
+        options: ['跑步中抬腕速读', '结束后的复盘卡片', '教练提醒弹出'],
+      },
+      {
+        id: 'extraContext',
+        type: 'freeform',
+        prompt: '还有必须保留的指标吗？',
+        placeholder: '比如 heart-rate zone 或 haptic cue',
+      },
+    ]);
+  });
+
+  it('caps router-authored clarification to two focused questions', () => {
+    const result = normalizeRunPreferencesRouterResult(
+      {
+        preferences: defaultRunPreferences(),
+        needsClarification: true,
+        clarificationQuestions: [
+          { id: 'one', type: 'text-options', prompt: 'One?', options: ['a', 'b'] },
+          { id: 'two', type: 'text-options', prompt: 'Two?', options: ['a', 'b'] },
+          { id: 'three', type: 'text-options', prompt: 'Three?', options: ['a', 'b'] },
+        ],
+      },
+      null,
+    );
+
+    expect(result.clarificationQuestions?.map((q) => q.id)).toEqual(['one', 'two']);
   });
 
   it('applies structured user answers without parsing prompt text', () => {
