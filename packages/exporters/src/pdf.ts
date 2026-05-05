@@ -43,6 +43,8 @@ export interface ExportPdfOptions {
   inlineLocalAssets?: boolean;
   /** Inject Tailwind CDN into standalone HTML before browser rendering. Defaults to true. */
   injectTailwind?: boolean;
+  /** Auto-detect slide decks and export one landscape PDF page per slide. Defaults to true. */
+  slideDeck?: boolean;
 }
 
 const DEFAULT_VIEWPORT = { width: 1280, height: 800 } as const;
@@ -115,8 +117,19 @@ export async function exportPdf(
       footerTemplate: opts.footerTemplate ?? '<span></span>',
       ...(margin ? { margin } : {}),
     };
-    const pdfBuf =
-      format === 'auto'
+    const slideDeck =
+      opts.slideDeck !== false && opts.format === undefined && !displayHeaderFooter
+        ? await prepareSlideDeckPdf(page)
+        : null;
+    const pdfBuf = slideDeck
+      ? await page.pdf({
+          ...sharedPdfOptions,
+          width: `${slideDeck.width}px`,
+          height: `${slideDeck.height}px`,
+          margin: { top: '0', right: '0', bottom: '0', left: '0' },
+          preferCSSPageSize: false,
+        })
+      : format === 'auto'
         ? await page.pdf({
             ...sharedPdfOptions,
             width: `${DEFAULT_VIEWPORT.width}px`,
@@ -144,3 +157,92 @@ export async function exportPdf(
     }
   }
 }
+
+interface SlideDeckPdfLayout {
+  pageCount: number;
+  width: number;
+  height: number;
+}
+
+async function prepareSlideDeckPdf(page: {
+  evaluate: (script: string) => Promise<unknown>;
+}): Promise<SlideDeckPdfLayout | null> {
+  const raw = await page.evaluate(SLIDE_DECK_PDF_SCRIPT);
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  const pageCount = value['pageCount'];
+  const width = value['width'];
+  const height = value['height'];
+  if (
+    typeof pageCount !== 'number' ||
+    typeof width !== 'number' ||
+    typeof height !== 'number' ||
+    !Number.isFinite(pageCount) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    pageCount < 2 ||
+    width < 480 ||
+    height < 270
+  ) {
+    return null;
+  }
+  return {
+    pageCount: Math.round(pageCount),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
+const SLIDE_DECK_PDF_SCRIPT = `(() => {
+  const slides = Array.from(document.querySelectorAll('section'))
+    .map((el) => ({ el, rect: el.getBoundingClientRect() }))
+    .filter(({ rect }) => {
+      const ratio = rect.width / Math.max(1, rect.height);
+      return rect.width >= 480 && rect.height >= 270 && ratio >= 1.5 && ratio <= 1.95;
+    });
+  if (slides.length < 2) return null;
+
+  const width = Math.round(slides[0].rect.width);
+  const height = Math.round(slides[0].rect.height);
+  for (const { rect } of slides) {
+    if (Math.abs(rect.width - width) > 8 || Math.abs(rect.height - height) > 8) return null;
+  }
+
+  const head = document.head;
+  for (const node of Array.from(document.body.querySelectorAll('style, link[rel="stylesheet"]'))) {
+    head.appendChild(node.cloneNode(true));
+  }
+
+  const body = document.body;
+  body.replaceChildren();
+  body.style.margin = '0';
+  body.style.padding = '0';
+  body.style.background = '#fff';
+  body.style.width = width + 'px';
+
+  for (const { el } of slides) {
+    const clone = el.cloneNode(true);
+    if (clone instanceof HTMLElement) {
+      clone.style.width = width + 'px';
+      clone.style.height = height + 'px';
+      clone.style.maxWidth = 'none';
+      clone.style.margin = '0';
+      clone.style.borderRadius = '0';
+      clone.style.boxShadow = 'none';
+      clone.style.breakAfter = 'page';
+      clone.style.pageBreakAfter = 'always';
+      clone.style.overflow = 'hidden';
+    }
+    body.appendChild(clone);
+  }
+
+  const style = document.createElement('style');
+  style.textContent = [
+    '@page { size: ' + width + 'px ' + height + 'px; margin: 0; }',
+    'html, body { margin: 0 !important; padding: 0 !important; width: ' + width + 'px !important; background: #fff !important; }',
+    'body > section { width: ' + width + 'px !important; height: ' + height + 'px !important; min-height: 0 !important; max-width: none !important; margin: 0 !important; border-radius: 0 !important; box-shadow: none !important; break-after: page; page-break-after: always; overflow: hidden !important; }',
+    'body > section:last-of-type { break-after: auto; page-break-after: auto; }'
+  ].join('\\n');
+  head.appendChild(style);
+  return { pageCount: slides.length, width, height };
+})()`;

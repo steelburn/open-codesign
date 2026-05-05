@@ -129,6 +129,39 @@ describe('exportPdf', () => {
   );
 
   it(
+    'exports slide decks as one landscape PDF page per section by default',
+    async () => {
+      pdfMock.mockClear();
+      evaluateMock.mockImplementation(async (script: unknown) => {
+        if (typeof script === 'string' && script.includes('querySelectorAll')) {
+          return { pageCount: 2, width: 1280, height: 720 };
+        }
+        return 2400;
+      });
+      const { exportPdf } = await import('./pdf');
+      try {
+        await exportPdf(
+          '<section><h1>One</h1></section><section><h1>Two</h1></section>',
+          join(tempDir, 'deck.pdf'),
+          { chromePath: '/tmp/fake-chrome' },
+        );
+
+        expect(pdfMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            width: '1280px',
+            height: '720px',
+            margin: { top: '0', right: '0', bottom: '0', left: '0' },
+            preferCSSPageSize: false,
+          }),
+        );
+      } finally {
+        evaluateMock.mockResolvedValue(2400);
+      }
+    },
+    CHROME_TEST_TIMEOUT_MS,
+  );
+
+  it(
     'wraps puppeteer failures in EXPORTER_PDF_FAILED',
     async () => {
       pdfMock.mockRejectedValueOnce(new Error('boom'));
