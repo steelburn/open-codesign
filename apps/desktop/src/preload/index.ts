@@ -19,6 +19,7 @@ import type {
   ReasoningLevel,
   ReportEventInput,
   ReportEventResult,
+  ResourceStateV1,
   SelectedElement,
   SnapshotCreateInput,
   SupportedOnboardingProvider,
@@ -204,6 +205,7 @@ export interface GenerateResponse {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  resourceState?: ResourceStateV1;
 }
 
 export interface Preferences {

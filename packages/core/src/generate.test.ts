@@ -347,9 +347,10 @@ describe('composeSystemPrompt()', () => {
     expect(p).not.toContain('<artifact identifier=');
   });
 
-  it('describes App.jsx as the default design source, not standalone HTML', () => {
+  it('describes App.jsx as the default visual source without forcing document outputs into it', () => {
     const p = composeSystemPrompt({ mode: 'create' });
-    expect(p).toContain('main design source');
+    expect(p).toContain('Match the deliverable shape to the request');
+    expect(p).toContain('Multi-deliverable work is allowed');
     expect(p).toContain('`App.jsx`');
     expect(p).toContain('not a standalone HTML export');
   });
@@ -358,9 +359,10 @@ describe('composeSystemPrompt()', () => {
     const p = composeSystemPrompt({ mode: 'create' });
     expect(p).toContain('First file pass');
     expect(p).toContain('create `App.jsx` when you have a coherent first pass');
+    expect(p).toContain('For document-first requests');
     expect(p).toContain('Preview the complete pass');
     expect(p).toContain('Implement and polish');
-    expect(p).toContain('Do not call `preview` while the file is still only a scaffold');
+    expect(p).toContain('call `preview(path)` only for previewable HTML/JSX/TSX files');
   });
 
   it('asks the agent to interleave concise progress notes with tool phases', () => {

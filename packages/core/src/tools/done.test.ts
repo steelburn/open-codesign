@@ -217,6 +217,23 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App/>);`,
     expect(res.content[0]?.type).toBe('text');
   });
 
+  it('does not run the JSX runtime verifier for document-first markdown outputs', async () => {
+    const fs = makeFs({
+      'design-brief.md': '# Design brief\n\nA concise handoff document.',
+    });
+    const runtimeVerify = vi.fn(async () => [
+      {
+        message: 'This verifier should only run for renderable sources.',
+        source: 'runtime',
+      },
+    ]);
+    const tool = makeDoneTool(fs, runtimeVerify, { requireDesignMd: true });
+    const res = await tool.execute('id-markdown-done', { path: 'design-brief.md' });
+    expect(runtimeVerify).not.toHaveBeenCalled();
+    expect(res.details.status).toBe('ok');
+    expect(res.details.path).toBe('design-brief.md');
+  });
+
   it('validates DESIGN.md directly with the Google design.md rules', async () => {
     const fs = makeFs({ 'DESIGN.md': VALID_DESIGN_MD });
     const tool = makeDoneTool(fs);

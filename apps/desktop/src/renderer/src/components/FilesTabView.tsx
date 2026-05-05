@@ -340,6 +340,13 @@ export function defaultWorkspacePreviewPath(files: DesignFileEntry[]): string | 
     files.find((f) => f.path === 'index.jsx')?.path ??
     files.find((f) => f.path === 'index.tsx')?.path ??
     files.find((f) => isRenderableDesignFileKind(f.kind))?.path ??
+    files.find((f) => isMarkdownPreviewFile(f.path, f.kind))?.path ??
+    files.find((f) => f.kind === 'document')?.path ??
+    files.find((f) => f.kind === 'pdf')?.path ??
+    files.find((f) => f.kind === 'image')?.path ??
+    files.find((f) => f.kind === 'video')?.path ??
+    files.find((f) => f.kind === 'audio')?.path ??
+    files.find((f) => previewKindForFile(f.path, f.kind) === 'text')?.path ??
     files[0]?.path ??
     null
   );
@@ -698,6 +705,39 @@ function NativeFilePreview({
             alt={path}
             className="max-h-full max-w-full rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] object-contain shadow-[var(--shadow-soft)]"
           />
+        </div>
+      </div>
+    );
+  }
+  if (kind === 'video') {
+    return (
+      <div className="h-full overflow-auto bg-[var(--color-background-secondary)] p-[var(--space-6)]">
+        <div className="flex min-h-full items-center justify-center">
+          {/* biome-ignore lint/a11y/useMediaCaption: workspace file previews cannot assume a caption track exists. */}
+          <video
+            src={url}
+            controls
+            className="max-h-full max-w-full rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-black shadow-[var(--shadow-soft)]"
+          />
+        </div>
+      </div>
+    );
+  }
+  if (kind === 'audio') {
+    return (
+      <div className="h-full bg-[var(--color-background-secondary)] p-[var(--space-6)]">
+        <div className="flex min-h-full items-center justify-center">
+          <div className="w-full max-w-[680px] rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-5)] py-[var(--space-4)] shadow-[var(--shadow-soft)]">
+            <div
+              className="mb-[var(--space-3)] truncate text-[12px] text-[var(--color-text-secondary)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+              title={path}
+            >
+              {path}
+            </div>
+            {/* biome-ignore lint/a11y/useMediaCaption: workspace file previews cannot assume a caption track exists. */}
+            <audio src={url} controls className="w-full" />
+          </div>
         </div>
       </div>
     );

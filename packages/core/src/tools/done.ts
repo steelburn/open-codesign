@@ -506,7 +506,7 @@ export function makeDoneTool(
         ...(opts.requireDesignMd ? requiredDesignMdErrors(fs, path) : []),
         ...designMdWorkspaceErrors(fs, path),
       ];
-      if (runtimeVerify) {
+      if (runtimeVerify && isRenderableDesignSourcePath(path)) {
         try {
           const runtimeErrors = await runtimeVerify(file.content);
           errors.push(...runtimeErrors);

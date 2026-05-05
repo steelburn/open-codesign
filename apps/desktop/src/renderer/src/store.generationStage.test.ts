@@ -294,4 +294,57 @@ describe('generationStage transitions', () => {
     expect(useCodesignStore.getState().previewSource).toBe('<html><body>existing</body></html>');
     expect(useCodesignStore.getState().generationStage).toBe('done');
   });
+
+  it('opens and announces a document-first done target even without a preview artifact', async () => {
+    const append = vi.fn(async (input: { designId: string; kind: string; payload: unknown }) => ({
+      id: `${input.kind}-1`,
+      designId: input.designId,
+      kind: input.kind,
+      payload: input.payload,
+      createdAt: new Date().toISOString(),
+      seq: 1,
+    }));
+    const generate = vi.fn(async () => ({
+      artifacts: [],
+      message: 'Created the design brief.',
+      resourceState: {
+        mutationSeq: 1,
+        loadedSkills: [],
+        loadedBrandRefs: [],
+        scaffoldedFiles: [],
+        lastDone: {
+          status: 'ok',
+          path: 'design-brief.md',
+          mutationSeq: 1,
+          errorCount: 0,
+          checkedAt: '2026-05-05T00:00:00.000Z',
+        },
+      },
+    }));
+
+    vi.stubGlobal('window', {
+      codesign: {
+        generate,
+        chat: {
+          seedFromSnapshots: vi.fn(async () => {}),
+          list: vi.fn(async () => []),
+          append,
+        },
+      },
+      setTimeout,
+    });
+
+    await useCodesignStore.getState().sendPrompt({ prompt: '生成一个设计文稿' });
+
+    expect(useCodesignStore.getState().canvasTabs).toContainEqual({
+      kind: 'file',
+      path: 'design-brief.md',
+    });
+    const delivered = append.mock.calls.find(
+      ([input]) => (input as { kind: string }).kind === 'artifact_delivered',
+    )?.[0] as { payload?: { filename?: string } } | undefined;
+    expect(delivered?.payload?.filename).toBe('design-brief.md');
+    expect(useCodesignStore.getState().previewSource).toBeNull();
+    expect(useCodesignStore.getState().generationStage).toBe('done');
+  });
 });

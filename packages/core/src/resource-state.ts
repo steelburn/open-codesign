@@ -99,16 +99,30 @@ function readMainSource(fs: TextEditorFsCallbacks): { path: string; content: str
   return null;
 }
 
+function readNonEmptyFile(
+  fs: TextEditorFsCallbacks,
+  path: string | undefined,
+): { path: string; content: string } | null {
+  if (path === undefined || path.trim().length === 0) return null;
+  const file = fs.view(path);
+  if (file === null || file.content.trim().length === 0) return null;
+  return { path, content: file.content };
+}
+
+function isRenderableFinalSourcePath(path: string): boolean {
+  return /\.(?:jsx|tsx|html?)$/i.test(path);
+}
+
 export function assertFinalizationGate(input: FinalizationGateInput): string[] {
   if (!input.enforce) return [];
-  const file = readMainSource(input.fs);
+  const done = input.state.lastDone;
+  const file = readMainSource(input.fs) ?? readNonEmptyFile(input.fs, done?.path);
   if (file === null) {
     throw new CodesignError(
-      `Generation incomplete: workspace ${DEFAULT_SOURCE_ENTRY} is missing or empty.`,
+      `Generation incomplete: workspace ${DEFAULT_SOURCE_ENTRY} is missing or empty and no done() target file is available.`,
       ERROR_CODES.GENERATION_INCOMPLETE,
     );
   }
-  const done = input.state.lastDone;
   if (done === null) {
     throw new CodesignError(
       'Generation incomplete: the agent edited the workspace but did not call done(status="ok").',
@@ -130,7 +144,9 @@ export function assertFinalizationGate(input: FinalizationGateInput): string[] {
       ERROR_CODES.GENERATION_INCOMPLETE,
     );
   }
-  const failures = validationFailures(input.state, file.content, file.path);
+  const failures = isRenderableFinalSourcePath(file.path)
+    ? validationFailures(input.state, file.content, file.path)
+    : [];
   if (failures.length > 0) {
     throw new CodesignError(
       `Generation incomplete: ${failures.join(' ')}`,

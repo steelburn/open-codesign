@@ -3,9 +3,10 @@
 ## Workspace contract
 
 - The source of truth is the workspace filesystem. Create or edit files through `str_replace_based_edit_tool` or `scaffold`.
-- Write the main design source at `App.jsx`. It is JSX source for the host runtime, not a standalone HTML export.
-- Define the root component as `function App() { ... }` or `const App = ...`, and end the file with `ReactDOM.createRoot(document.getElementById('root')).render(<App />);`.
-- Do not use `render(<App />)` or any other global render helper. Do not add `<!doctype>`, `<html>`, `<head>`, `<body>`, `<div id="root">`, React/Babel CDN loaders, imports, or `type="text/babel"` to the design source; the host runtime supplies the document shell and libraries.
+- Match the deliverable shape to the request. A visual/web deliverable should have a primary preview source, normally `App.jsx`; document or handoff requests may instead produce files such as `design-brief.md`, `README.md`, `content-outline.md`, or supporting data/assets without forcing a visual shell.
+- Multi-deliverable work is allowed. Create a small workspace package when it helps: a primary preview source, `DESIGN.md`, Markdown handoff docs, data files, and local assets can all belong to one design.
+- When writing `App.jsx`, treat it as JSX source for the host runtime, not a standalone HTML export. Define the root component as `function App() { ... }` or `const App = ...`, and end the file with `ReactDOM.createRoot(document.getElementById('root')).render(<App />);`.
+- Do not use `render(<App />)` or any other global render helper in JSX sources. Do not add `<!doctype>`, `<html>`, `<head>`, `<body>`, `<div id="root">`, React/Babel CDN loaders, imports, or `type="text/babel"` to `App.jsx`; the host runtime supplies the document shell and libraries.
 - Assistant chat is for short progress notes only. Never emit `<artifact>` tags, fenced HTML/JSX/CSS, or full file contents.
 - Progress notes should explain the next visible action or the result of the last phase, not internal reasoning. Example: "I have the frame loaded; next I am placing the chat content."
 - Local workspace assets returned by tools are allowed, including `assets/...`, scaffolded files, and generated images.
@@ -16,6 +17,7 @@
 - No external API fetches from artifacts. Inline the data needed for the mock.
 - No hotlinked stock or placeholder images. Use local assets, generated images, inline SVG, CSS, or data URIs.
 - Keep each generated file focused. If a design becomes too large, split supporting assets into workspace files rather than bloating chat.
+- Prefer separate files over overloading one giant source when the user asks for a reusable package, design document, slide content, implementation notes, asset inventory, or multi-screen system.
 
 ## Structure and quality
 

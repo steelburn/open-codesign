@@ -3,6 +3,7 @@ import type {
   LocalInputFile,
   OnboardingState,
   ReasoningLevel,
+  ResourceStateV1,
   WireApi,
 } from '@open-codesign/shared';
 import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
@@ -361,6 +362,7 @@ function applyGenerateSuccess(
     inputTokens?: number;
     outputTokens?: number;
     costUsd?: number;
+    resourceState?: ResourceStateV1;
   },
   designIdAtStart: string | null,
 ): void {
@@ -369,6 +371,12 @@ function applyGenerateSuccess(
   if (!isCurrentGenerationForDesign(stateBefore, designId, generationId)) return;
 
   const firstArtifact = result.artifacts[0];
+  const deliveredPath =
+    firstArtifact !== undefined
+      ? (firstArtifact.entryPath ?? DEFAULT_SOURCE_ENTRY)
+      : result.resourceState?.lastDone?.status === 'ok'
+        ? result.resourceState.lastDone.path
+        : undefined;
   const assistantMessage = result.message || tr('common.done');
   const { usage, rejected: rejectedUsageFields } = coerceUsageSnapshot(result);
 
@@ -401,8 +409,8 @@ function applyGenerateSuccess(
     };
   });
 
-  if (firstArtifact && get().currentDesignId === designId) {
-    get().openCanvasFileTab(firstArtifact.entryPath ?? DEFAULT_SOURCE_ENTRY);
+  if (deliveredPath && get().currentDesignId === designId) {
+    get().openCanvasFileTab(deliveredPath);
   }
 
   const artifact = artifactFromResult(firstArtifact, prompt, assistantMessage);
@@ -424,11 +432,11 @@ function applyGenerateSuccess(
       payload: { text: assistantMessage },
     });
   }
-  if (firstArtifact) {
+  if (deliveredPath) {
     void get().appendChatMessage({
       designId,
       kind: 'artifact_delivered',
-      payload: { createdAt: new Date().toISOString() },
+      payload: { filename: deliveredPath, createdAt: new Date().toISOString() },
     });
   }
   if (rejectedUsageFields.length > 0) {
@@ -650,6 +658,7 @@ async function runGenerate(
       inputTokens?: number;
       outputTokens?: number;
       costUsd?: number;
+      resourceState?: ResourceStateV1;
     },
     designIdAtStart,
   );

@@ -186,6 +186,23 @@ describe('FilesTabView preview helpers', () => {
         { path: 'App.tsx', kind: 'tsx', updatedAt: '2026-04-26T00:00:00Z', size: 100 },
       ]),
     ).toBe('App.tsx');
+    expect(
+      defaultWorkspacePreviewPath([
+        { path: 'assets/hero.png', kind: 'image', updatedAt: '2026-04-26T00:00:00Z', size: 1 },
+        {
+          path: 'design-brief.md',
+          kind: 'markdown',
+          updatedAt: '2026-04-26T00:00:00Z',
+          size: 100,
+        },
+      ]),
+    ).toBe('design-brief.md');
+    expect(
+      defaultWorkspacePreviewPath([
+        { path: 'assets/hero.png', kind: 'image', updatedAt: '2026-04-26T00:00:00Z', size: 1 },
+        { path: 'brief.pdf', kind: 'pdf', updatedAt: '2026-04-26T00:00:00Z', size: 100 },
+      ]),
+    ).toBe('brief.pdf');
   });
 
   it('prefers actual workspace reads over previewSource when the files API is available', () => {
