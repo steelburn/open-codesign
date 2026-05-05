@@ -68,6 +68,7 @@ export type WorkspaceFileKind =
   | 'video'
   | 'audio'
   | 'pdf'
+  | 'document'
   | 'design-system'
   | 'asset';
 export interface WorkspaceFileEntry {
@@ -78,6 +79,40 @@ export interface WorkspaceFileEntry {
 }
 export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
   content: string;
+}
+export type WorkspaceDocumentPreviewFormat =
+  | 'doc'
+  | 'docx'
+  | 'ppt'
+  | 'pptx'
+  | 'rtf'
+  | 'xls'
+  | 'xlsx'
+  | 'unknown';
+export interface WorkspaceDocumentPreviewStat {
+  label: string;
+  value: string;
+}
+export interface WorkspaceDocumentPreviewSection {
+  title: string;
+  lines: string[];
+}
+export interface WorkspaceDocumentPreviewResult {
+  schemaVersion: 1;
+  path: string;
+  fileName: string;
+  format: WorkspaceDocumentPreviewFormat;
+  title: string;
+  size: number;
+  updatedAt: string;
+  stats: WorkspaceDocumentPreviewStat[];
+  sections: WorkspaceDocumentPreviewSection[];
+  thumbnailDataUrl?: string;
+}
+export interface WorkspaceDocumentThumbnailResult {
+  schemaVersion: 1;
+  path: string;
+  thumbnailDataUrl: string | null;
 }
 export type WorkspaceImportSource = 'composer' | 'workspace' | 'canvas' | 'clipboard';
 export type WorkspaceImportKind = 'reference' | 'asset';
@@ -526,6 +561,18 @@ const api = {
         designId,
         path,
       }) as Promise<WorkspaceFileReadResult>,
+    preview: (designId: string, path: string) =>
+      ipcRenderer.invoke('codesign:files:v1:preview', {
+        schemaVersion: 1,
+        designId,
+        path,
+      }) as Promise<WorkspaceDocumentPreviewResult>,
+    thumbnail: (designId: string, path: string) =>
+      ipcRenderer.invoke('codesign:files:v1:thumbnail', {
+        schemaVersion: 1,
+        designId,
+        path,
+      }) as Promise<WorkspaceDocumentThumbnailResult>,
     write: (designId: string, path: string, content: string) =>
       ipcRenderer.invoke('codesign:files:v1:write', {
         schemaVersion: 1,

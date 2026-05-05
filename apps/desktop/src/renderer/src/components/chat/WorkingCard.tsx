@@ -238,7 +238,9 @@ export function buildRows(calls: ChatToolCallPayload[]): ToolRow[] {
     const detail = detailOf(call);
     const display = displayLabel(call, label);
     const blocked = blockedReasonOf(call) !== null || call.status === 'error';
-    const errorText = call.error?.message ?? textFromToolResult(call.result) ?? undefined;
+    const errorText = blocked
+      ? (call.error?.message ?? textFromToolResult(call.result) ?? undefined)
+      : undefined;
     const isFileEdit = isTextEditorTool(call) && Boolean(detail);
 
     if (isFileEdit && detail) {

@@ -42,6 +42,20 @@
     "filesTabEmpty": "Sin archivos aún",
     "openInTab": "Abrir en pestaña",
     "previewHint": "Vista previa en miniatura · haz doble clic en el archivo o usa Abrir en pestaña para vista completa",
+    "documentPreview": {
+      "previewLabel": "Vista previa del documento",
+      "loading": "Preparando vista previa…",
+      "unavailable": "Vista previa no disponible",
+      "empty": "No se encontró texto extraíble para este documento.",
+      "thumbnailAlt": "Vista previa de {{name}}",
+      "stats": {
+        "author": "Autor",
+        "pages": "Páginas",
+        "slides": "Diapositivas",
+        "words": "Palabras",
+        "worksheets": "Hojas"
+      }
+    },
     "tabsAriaLabel": "Archivos abiertos",
     "closeTab": "Cerrar {{name}}",
     "files": {

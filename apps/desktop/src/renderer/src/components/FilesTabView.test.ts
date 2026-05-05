@@ -27,11 +27,12 @@ describe('FilesTabView preview helpers', () => {
     expect(isRenderableDesignFileKind('video')).toBe(false);
     expect(isRenderableDesignFileKind('audio')).toBe(false);
     expect(isRenderableDesignFileKind('pdf')).toBe(false);
+    expect(isRenderableDesignFileKind('document')).toBe(false);
     expect(isRenderableDesignFileKind('design-system')).toBe(false);
     expect(isRenderableDesignFileKind('asset')).toBe(false);
   });
 
-  it('chooses broad preview kinds for common files and defaults unknown assets to text', () => {
+  it('chooses broad preview kinds for common files and keeps binary assets off text reads', () => {
     expect(isMarkdownPreviewFile('README.md', 'markdown')).toBe(true);
     expect(isMarkdownPreviewFile('DESIGN.md', 'design-system')).toBe(true);
     expect(previewKindForFile('App.jsx', 'jsx')).toBe('runtime');
@@ -43,7 +44,10 @@ describe('FilesTabView preview helpers', () => {
     expect(previewKindForFile('clip.mp4', 'video')).toBe('video');
     expect(previewKindForFile('voice.mp3', 'audio')).toBe('audio');
     expect(previewKindForFile('brief.pdf', 'pdf')).toBe('pdf');
+    expect(previewKindForFile('references/brief.docx', 'document')).toBe('document');
+    expect(previewKindForFile('references/brief.pptx', 'asset')).toBe('document');
     expect(previewKindForFile('Makefile', 'asset')).toBe('text');
+    expect(previewKindForFile('data.bin', 'asset')).toBe('unsupported');
     expect(previewKindForFile('archive.zip', 'asset')).toBe('unsupported');
   });
 

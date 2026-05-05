@@ -26,6 +26,12 @@ import {
   copyTrackedWorkspaceFiles,
   openWorkspaceFolder,
 } from './design-workspace';
+import {
+  createWorkspaceDocumentPreview,
+  generateQuickLookThumbnailDataUrl,
+  type WorkspaceDocumentPreviewResult,
+  type WorkspaceDocumentThumbnailResult,
+} from './document-preview';
 import { app, dialog, ipcMain } from './electron-runtime';
 import { getLogger } from './logger';
 import {
@@ -462,6 +468,44 @@ function runDb<T>(context: string, fn: () => T): T {
   }
 }
 
+const workspaceRenameQueues = new Map<string, Promise<void>>();
+
+async function waitForWorkspaceRename(designId: string): Promise<void> {
+  await workspaceRenameQueues.get(designId);
+}
+
+async function runWithWorkspaceRenameQueue<T>(
+  designId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = workspaceRenameQueues.get(designId) ?? Promise.resolve();
+  let release = (): void => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => gate);
+  workspaceRenameQueues.set(designId, queued);
+
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (workspaceRenameQueues.get(designId) === queued) {
+      workspaceRenameQueues.delete(designId);
+    }
+  }
+}
+
+async function getDesignAfterPendingWorkspaceRename(
+  db: Database,
+  context: string,
+  designId: string,
+): Promise<Design | null> {
+  await waitForWorkspaceRename(designId);
+  return runDb(context, () => getDesign(db, designId));
+}
+
 export async function renameAutoManagedWorkspaceForDesign(input: {
   db: Database;
   designBeforeRename: Design;
@@ -780,38 +824,40 @@ export function registerSnapshotsIpc(db: Database): void {
       if (typeof r['name'] !== 'string' || r['name'].trim().length === 0) {
         throw new CodesignError('name must be a non-empty string', 'IPC_BAD_INPUT');
       }
-      const before = runDb('rename-design.lookup', () => getDesign(db, r['id'] as string));
-      if (before === null) {
-        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
-      }
-      const updated = runDb('rename-design', () =>
-        renameDesign(db, r['id'] as string, r['name'] as string),
-      );
-      if (updated === null) {
-        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
-      }
-      let finalDesign = updated;
-      try {
-        finalDesign =
-          (await renameAutoManagedWorkspaceForDesign({
-            db,
-            designBeforeRename: before,
-            newName: updated.name,
-          })) ?? updated;
-      } catch (err) {
-        logger.warn('design.workspace_rename.skipped', {
-          id: updated.id,
-          workspacePath: before.workspacePath,
-          targetName: updated.name,
-          error: err instanceof Error ? err.message : String(err),
+      const designId = r['id'] as string;
+      const name = r['name'] as string;
+      return await runWithWorkspaceRenameQueue(designId, async () => {
+        const before = runDb('rename-design.lookup', () => getDesign(db, designId));
+        if (before === null) {
+          throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+        }
+        const updated = runDb('rename-design', () => renameDesign(db, designId, name));
+        if (updated === null) {
+          throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+        }
+        let finalDesign = updated;
+        try {
+          finalDesign =
+            (await renameAutoManagedWorkspaceForDesign({
+              db,
+              designBeforeRename: before,
+              newName: updated.name,
+            })) ?? updated;
+        } catch (err) {
+          logger.warn('design.workspace_rename.skipped', {
+            id: updated.id,
+            workspacePath: before.workspacePath,
+            targetName: updated.name,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+        logger.info('design.renamed', {
+          id: finalDesign.id,
+          name: finalDesign.name,
+          workspacePath: finalDesign.workspacePath,
         });
-      }
-      logger.info('design.renamed', {
-        id: finalDesign.id,
-        name: finalDesign.name,
-        workspacePath: finalDesign.workspacePath,
+        return finalDesign;
       });
-      return finalDesign;
     },
   );
 
@@ -1029,7 +1075,8 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
       }
 
-      const design = runDb('workspace:open', () => getDesign(db, r['designId'] as string));
+      const designId = r['designId'] as string;
+      const design = await getDesignAfterPendingWorkspaceRename(db, 'workspace:open', designId);
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
@@ -1063,7 +1110,8 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
       }
 
-      const design = runDb('workspace:check', () => getDesign(db, r['designId'] as string));
+      const designId = r['designId'] as string;
+      const design = await getDesignAfterPendingWorkspaceRename(db, 'workspace:check', designId);
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
@@ -1093,7 +1141,8 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
         throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
       }
-      const design = runDb('files:list', () => getDesign(db, r['designId'] as string));
+      const designId = r['designId'] as string;
+      const design = await getDesignAfterPendingWorkspaceRename(db, 'files:list', designId);
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
@@ -1134,7 +1183,8 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       if (typeof r['path'] !== 'string' || r['path'].trim().length === 0) {
         throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
       }
-      const design = runDb('files:read', () => getDesign(db, r['designId'] as string));
+      const designId = r['designId'] as string;
+      const design = await getDesignAfterPendingWorkspaceRename(db, 'files:read', designId);
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
@@ -1154,6 +1204,95 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       } catch (cause) {
         throw new CodesignError('Failed to read workspace file', 'IPC_BAD_INPUT', { cause });
       }
+    },
+  );
+
+  ipcMain.handle(
+    'codesign:files:v1:preview',
+    async (_e: unknown, raw: unknown): Promise<WorkspaceDocumentPreviewResult> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'codesign:files:v1:preview expects { designId, path }',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'codesign:files:v1:preview');
+      if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+        throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      if (typeof r['path'] !== 'string' || r['path'].trim().length === 0) {
+        throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      const designId = r['designId'] as string;
+      const design = await getDesignAfterPendingWorkspaceRename(db, 'files:preview', designId);
+      if (design === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      if (design.workspacePath === null) {
+        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+      }
+      let normalizedPath: string;
+      try {
+        normalizedPath = normalizeDesignFilePath(r['path'] as string);
+      } catch (cause) {
+        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+      }
+      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
+      let absPath: string;
+      try {
+        absPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
+      } catch (cause) {
+        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+      }
+      try {
+        return await createWorkspaceDocumentPreview({ absPath, relPath: normalizedPath });
+      } catch (cause) {
+        throw new CodesignError('Failed to preview workspace file', 'IPC_BAD_INPUT', { cause });
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'codesign:files:v1:thumbnail',
+    async (_e: unknown, raw: unknown): Promise<WorkspaceDocumentThumbnailResult> => {
+      if (typeof raw !== 'object' || raw === null) {
+        throw new CodesignError(
+          'codesign:files:v1:thumbnail expects { designId, path }',
+          'IPC_BAD_INPUT',
+        );
+      }
+      const r = raw as Record<string, unknown>;
+      requireSchemaV1(r, 'codesign:files:v1:thumbnail');
+      if (typeof r['designId'] !== 'string' || r['designId'].trim().length === 0) {
+        throw new CodesignError('designId must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      if (typeof r['path'] !== 'string' || r['path'].trim().length === 0) {
+        throw new CodesignError('path must be a non-empty string', 'IPC_BAD_INPUT');
+      }
+      const designId = r['designId'] as string;
+      const design = await getDesignAfterPendingWorkspaceRename(db, 'files:thumbnail', designId);
+      if (design === null) {
+        throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
+      }
+      if (design.workspacePath === null) {
+        throw new CodesignError('Design is not bound to a workspace', 'IPC_BAD_INPUT');
+      }
+      let normalizedPath: string;
+      try {
+        normalizedPath = normalizeDesignFilePath(r['path'] as string);
+      } catch (cause) {
+        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+      }
+      const workspacePath = requireBoundWorkspacePath(design, 'Design is not bound to a workspace');
+      let absPath: string;
+      try {
+        absPath = await resolveSafeWorkspaceChildPath(workspacePath, normalizedPath);
+      } catch (cause) {
+        throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
+      }
+      const thumbnailDataUrl = await generateQuickLookThumbnailDataUrl(absPath);
+      return { schemaVersion: 1, path: normalizedPath, thumbnailDataUrl };
     },
   );
 
@@ -1185,9 +1324,13 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
         throw new CodesignError('Invalid workspace file path', 'IPC_BAD_INPUT', { cause });
       }
 
-      const designId = r['designId'] as string;
       const content = r['content'] as string;
-      const design = runDb('files:write.lookup-design', () => getDesign(db, designId));
+      const designId = r['designId'] as string;
+      const design = await getDesignAfterPendingWorkspaceRename(
+        db,
+        'files:write.lookup-design',
+        designId,
+      );
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
@@ -1266,7 +1409,11 @@ export function registerWorkspaceIpc(db: Database, getWin: () => BrowserWindow |
       if (files.length === 0 && blobs.length === 0) return [];
 
       const designId = r['designId'] as string;
-      const design = runDb('files:import.lookup-design', () => getDesign(db, designId));
+      const design = await getDesignAfterPendingWorkspaceRename(
+        db,
+        'files:import.lookup-design',
+        designId,
+      );
       if (design === null) {
         throw new CodesignError('Design not found', 'IPC_NOT_FOUND');
       }
@@ -1368,6 +1515,8 @@ export const SNAPSHOTS_CHANNELS_V1 = [
   'snapshots:v1:workspace:check',
   'codesign:files:v1:list',
   'codesign:files:v1:read',
+  'codesign:files:v1:preview',
+  'codesign:files:v1:thumbnail',
   'codesign:files:v1:write',
   'codesign:files:v1:import-to-workspace',
   'codesign:files:v1:subscribe',

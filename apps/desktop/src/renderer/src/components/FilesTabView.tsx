@@ -1,10 +1,11 @@
 import { useT } from '@open-codesign/i18n';
 import { buildPreviewDocument, isRenderablePath } from '@open-codesign/runtime';
 import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
-import { FileCode2, Folder, FolderOpen } from 'lucide-react';
+import { FileCode2, FileText, Folder, FolderOpen } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { WorkspaceDocumentPreviewResult } from '../../../preload';
 import { type DesignFileEntry, type DesignFileKind, useDesignFiles } from '../hooks/useDesignFiles';
 import { workspacePathComparisonKey } from '../lib/workspace-path';
 import {
@@ -193,7 +194,57 @@ export type FilePreviewKind =
   | 'video'
   | 'audio'
   | 'pdf'
+  | 'document'
   | 'unsupported';
+
+const DOCUMENT_PREVIEW_EXTENSIONS = new Set([
+  '.doc',
+  '.docx',
+  '.key',
+  '.numbers',
+  '.pages',
+  '.ppt',
+  '.pptx',
+  '.rtf',
+  '.xls',
+  '.xlsx',
+]);
+
+const TEXT_PREVIEW_EXTENSIONS = new Set([
+  '.cjs',
+  '.css',
+  '.csv',
+  '.html',
+  '.htm',
+  '.js',
+  '.json',
+  '.jsx',
+  '.log',
+  '.md',
+  '.markdown',
+  '.mjs',
+  '.svg',
+  '.toml',
+  '.ts',
+  '.tsx',
+  '.txt',
+  '.xml',
+  '.yaml',
+  '.yml',
+]);
+
+const TEXT_PREVIEW_BASENAMES = new Set([
+  '.env',
+  '.gitattributes',
+  '.gitignore',
+  '.npmrc',
+  '.nvmrc',
+  'dockerfile',
+  'license',
+  'makefile',
+  'notice',
+  'readme',
+]);
 
 const UNSUPPORTED_PREVIEW_EXTENSIONS = new Set([
   '.zip',
@@ -219,6 +270,10 @@ function extensionOf(path: string): string {
   return index <= 0 ? '' : name.slice(index).toLowerCase();
 }
 
+function basenameOf(path: string): string {
+  return (path.split('/').pop() ?? path).toLowerCase();
+}
+
 export function isMainDesignSourcePath(path: string): boolean {
   const normalized = path.replaceAll('\\', '/');
   return normalized === DEFAULT_SOURCE_ENTRY || normalized === LEGACY_SOURCE_ENTRY;
@@ -238,6 +293,8 @@ export function previewKindForFile(
   path: string,
   kind: DesignFileKind | undefined,
 ): FilePreviewKind {
+  const ext = extensionOf(path);
+  if (kind === 'document' || DOCUMENT_PREVIEW_EXTENSIONS.has(ext)) return 'document';
   if (isRenderableDesignFileKind(kind) || (kind === undefined && isRenderablePath(path))) {
     return 'runtime';
   }
@@ -246,9 +303,17 @@ export function previewKindForFile(
   if (kind === 'video') return 'video';
   if (kind === 'audio') return 'audio';
   if (kind === 'pdf') return 'pdf';
-  if (kind === 'text' || kind === 'css' || kind === 'js') return 'text';
-  if (UNSUPPORTED_PREVIEW_EXTENSIONS.has(extensionOf(path))) return 'unsupported';
-  return 'text';
+  if (
+    kind === 'text' ||
+    kind === 'css' ||
+    kind === 'js' ||
+    TEXT_PREVIEW_EXTENSIONS.has(ext) ||
+    TEXT_PREVIEW_BASENAMES.has(basenameOf(path))
+  ) {
+    return 'text';
+  }
+  if (UNSUPPORTED_PREVIEW_EXTENSIONS.has(ext)) return 'unsupported';
+  return 'unsupported';
 }
 
 export function shouldShowTweakPanelForFile(input: {
@@ -399,6 +464,188 @@ function TextFilePreview({
   );
 }
 
+function documentStatLabel(label: string, t: (key: string) => string): string {
+  switch (label) {
+    case 'Author':
+      return t('canvas.documentPreview.stats.author');
+    case 'Pages':
+      return t('canvas.documentPreview.stats.pages');
+    case 'Slides':
+      return t('canvas.documentPreview.stats.slides');
+    case 'Words':
+      return t('canvas.documentPreview.stats.words');
+    case 'Worksheets':
+      return t('canvas.documentPreview.stats.worksheets');
+    default:
+      return label;
+  }
+}
+
+function DocumentFilePreview({
+  path,
+  designId,
+}: {
+  path: string;
+  designId: string | null | undefined;
+}) {
+  const t = useT();
+  const [preview, setPreview] = useState<WorkspaceDocumentPreviewResult | null>(null);
+  const [thumbnailDataUrl, setThumbnailDataUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!designId) {
+      setPreview(null);
+      setThumbnailDataUrl(null);
+      setError(t('canvas.documentPreview.unavailable'));
+      return;
+    }
+    const previewApi = window.codesign?.files?.preview;
+    if (!previewApi) {
+      setPreview(null);
+      setThumbnailDataUrl(null);
+      setError(t('canvas.documentPreview.unavailable'));
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setPreview(null);
+    setThumbnailDataUrl(null);
+    void previewApi(designId, path)
+      .then((result) => {
+        if (cancelled) return;
+        setPreview(result);
+        setThumbnailDataUrl(result.thumbnailDataUrl ?? null);
+        setLoading(false);
+        const thumbnailApi = window.codesign?.files?.thumbnail;
+        if (!thumbnailApi) return;
+        void thumbnailApi(designId, path)
+          .then((thumbnail) => {
+            if (cancelled) return;
+            if (thumbnail.thumbnailDataUrl !== null) {
+              setThumbnailDataUrl(thumbnail.thumbnailDataUrl);
+            }
+          })
+          .catch(() => {
+            // Text extraction is the cross-platform preview. Thumbnail failure
+            // should not turn the whole document preview into an error state.
+          });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPreview(null);
+        setThumbnailDataUrl(null);
+        setError(err instanceof Error ? err.message : t('canvas.documentPreview.unavailable'));
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [designId, path, t]);
+
+  if (loading && preview === null) {
+    return (
+      <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
+        {t('canvas.documentPreview.loading')}
+      </div>
+    );
+  }
+
+  if (preview === null) {
+    return (
+      <div className="h-full flex items-center justify-center text-[var(--text-sm)] text-[var(--color-text-muted)]">
+        {error ?? t('canvas.documentPreview.unavailable')}
+      </div>
+    );
+  }
+
+  const hasText = preview.sections.some((section) => section.lines.length > 0);
+
+  return (
+    <div className="h-full overflow-auto bg-[var(--color-background-secondary)]">
+      <div className="mx-auto grid w-full max-w-[1120px] grid-cols-[minmax(260px,360px)_1fr] gap-[var(--space-6)] px-[var(--space-7)] py-[var(--space-7)] max-[920px]:grid-cols-1">
+        <div className="min-w-0">
+          <div className="aspect-[4/5] overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-soft)]">
+            {thumbnailDataUrl ? (
+              <img
+                src={thumbnailDataUrl}
+                alt={t('canvas.documentPreview.thumbnailAlt', { name: preview.fileName })}
+                className="h-full w-full object-contain"
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-[var(--space-4)] px-[var(--space-6)] text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-background-secondary)] text-[var(--color-accent)]">
+                  <FileText className="h-7 w-7" aria-hidden />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
+                    {preview.format.toUpperCase()}
+                  </div>
+                  <div className="mt-2 break-words text-[var(--text-sm)] font-medium text-[var(--color-text-primary)]">
+                    {preview.fileName}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <div className="mb-[var(--space-5)] border-b border-[var(--color-border-muted)] pb-[var(--space-4)]">
+            <div className="mb-[var(--space-2)] text-[10px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
+              {t('canvas.documentPreview.previewLabel')}
+            </div>
+            <h3 className="m-0 break-words text-[24px] leading-[1.2] text-[var(--color-text-primary)]">
+              {preview.title}
+            </h3>
+            {preview.stats.length > 0 ? (
+              <div className="mt-[var(--space-4)] flex flex-wrap gap-[var(--space-2)]">
+                {preview.stats.map((stat) => (
+                  <span
+                    key={`${stat.label}:${stat.value}`}
+                    className="inline-flex items-center gap-[var(--space-1)] rounded-[var(--radius-sm)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-2)] py-[3px] text-[11px] text-[var(--color-text-secondary)]"
+                  >
+                    <span>{documentStatLabel(stat.label, t)}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>{stat.value}</span>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {hasText ? (
+            <div className="flex flex-col gap-[var(--space-4)]">
+              {preview.sections.map((section) => (
+                <section
+                  key={section.title}
+                  className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-5)] py-[var(--space-4)] shadow-[var(--shadow-soft)]"
+                >
+                  <h4 className="m-0 mb-[var(--space-3)] text-[12px] uppercase tracking-[var(--tracking-label)] text-[var(--color-text-muted)]">
+                    {section.title}
+                  </h4>
+                  <div className="space-y-[var(--space-2)] text-[13px] leading-[1.75] text-[var(--color-text-primary)]">
+                    {section.lines.map((line, index) => (
+                      <p key={`${section.title}:${index}`} className="m-0 break-words">
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[var(--radius-md)] border border-[var(--color-border-muted)] bg-[var(--color-surface)] px-[var(--space-5)] py-[var(--space-4)] text-[13px] text-[var(--color-text-muted)] shadow-[var(--shadow-soft)]">
+              {t('canvas.documentPreview.empty')}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NativeFilePreview({
   kind,
   path,
@@ -447,6 +694,7 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   const renderable = previewKind === 'runtime';
   const useDesignPreviewResolver = shouldUseDesignPreviewResolverForFile({ path, previewKind });
   const textPreview = previewKind === 'markdown' || previewKind === 'text';
+  const documentPreview = previewKind === 'document';
   const nativePreview =
     previewKind === 'image' ||
     previewKind === 'video' ||
@@ -590,6 +838,10 @@ export function WorkspaceFilePreview({ path, file, files }: WorkspaceFilePreview
   if (nativePreview) {
     const url = workspaceUrlForFile({ designId: currentDesignId, filePath: path });
     if (url) return <NativeFilePreview kind={previewKind} path={path} url={url} />;
+  }
+
+  if (documentPreview) {
+    return <DocumentFilePreview path={path} designId={currentDesignId} />;
   }
 
   if (previewKind === 'unsupported') {

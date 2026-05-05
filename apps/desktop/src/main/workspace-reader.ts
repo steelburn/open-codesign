@@ -1,6 +1,6 @@
 import type { Dirent } from 'node:fs';
 import { lstat, readdir, readFile, stat } from 'node:fs/promises';
-import { join, relative, resolve, sep } from 'node:path';
+import { basename, extname, join, relative, resolve, sep } from 'node:path';
 import { TextDecoder } from 'node:util';
 
 export const DEFAULT_WORKSPACE_PATTERNS = [
@@ -147,6 +147,7 @@ export type WorkspaceFileKind =
   | 'video'
   | 'audio'
   | 'pdf'
+  | 'document'
   | 'design-system'
   | 'asset';
 
@@ -158,9 +159,63 @@ const LIST_IGNORED_DIRS = WORKSPACE_IGNORED_DIRS;
 
 const LIST_MAX_FILES = 2_000;
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+const TEXT_READABLE_EXTENSIONS = new Set([
+  '.cjs',
+  '.css',
+  '.csv',
+  '.html',
+  '.htm',
+  '.js',
+  '.json',
+  '.jsx',
+  '.log',
+  '.mjs',
+  '.md',
+  '.markdown',
+  '.svg',
+  '.toml',
+  '.ts',
+  '.tsx',
+  '.txt',
+  '.xml',
+  '.yaml',
+  '.yml',
+]);
+const TEXT_READABLE_BASENAMES = new Set([
+  '.env',
+  '.gitattributes',
+  '.gitignore',
+  '.npmrc',
+  '.nvmrc',
+  'dockerfile',
+  'license',
+  'makefile',
+  'notice',
+  'readme',
+]);
+const DOCUMENT_EXTENSIONS = new Set([
+  '.doc',
+  '.docx',
+  '.key',
+  '.numbers',
+  '.pages',
+  '.ppt',
+  '.pptx',
+  '.rtf',
+  '.xls',
+  '.xlsx',
+]);
+
+export function isWorkspaceTextReadablePath(path: string): boolean {
+  const lower = normalizeSlashes(path).toLowerCase();
+  return (
+    TEXT_READABLE_EXTENSIONS.has(extname(lower)) || TEXT_READABLE_BASENAMES.has(basename(lower))
+  );
+}
 
 export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
   const lower = path.toLowerCase();
+  const ext = extname(lower);
   if (lower === 'design.md' || lower.endsWith('/design.md')) return 'design-system';
   if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html';
   if (lower.endsWith('.jsx')) return 'jsx';
@@ -169,6 +224,7 @@ export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
   if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return 'js';
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
   if (lower.endsWith('.pdf')) return 'pdf';
+  if (DOCUMENT_EXTENSIONS.has(ext)) return 'document';
   if (
     lower.endsWith('.png') ||
     lower.endsWith('.jpg') ||
@@ -184,18 +240,7 @@ export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
   }
   if (lower.endsWith('.mp4') || lower.endsWith('.webm')) return 'video';
   if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg')) return 'audio';
-  if (
-    lower.endsWith('.txt') ||
-    lower.endsWith('.json') ||
-    lower.endsWith('.yaml') ||
-    lower.endsWith('.yml') ||
-    lower.endsWith('.toml') ||
-    lower.endsWith('.csv') ||
-    lower.endsWith('.log') ||
-    lower.endsWith('.xml')
-  ) {
-    return 'text';
-  }
+  if (isWorkspaceTextReadablePath(path)) return 'text';
   return 'asset';
 }
 
@@ -381,6 +426,10 @@ export async function readWorkspaceFileAt(
   if (size > MAX_SINGLE_FILE_BYTES) {
     throw new Error(`file too large: ${relPath} (${size} bytes)`);
   }
+  const kind = classifyWorkspaceFileKind(rel);
+  if (!isWorkspaceTextReadablePath(rel)) {
+    throw new Error(`not a text-readable workspace file: ${relPath}`);
+  }
 
   let content: string;
   try {
@@ -390,7 +439,7 @@ export async function readWorkspaceFileAt(
   }
   return {
     path: rel,
-    kind: classifyWorkspaceFileKind(rel),
+    kind,
     size,
     updatedAt: mtime.toISOString(),
     content,

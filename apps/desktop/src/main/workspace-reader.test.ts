@@ -138,6 +138,10 @@ describe('workspace file metadata/read helpers', () => {
     expect(classifyWorkspaceFileKind('demo.mp4')).toBe('video');
     expect(classifyWorkspaceFileKind('voice.wav')).toBe('audio');
     expect(classifyWorkspaceFileKind('brief.pdf')).toBe('pdf');
+    expect(classifyWorkspaceFileKind('brief.docx')).toBe('document');
+    expect(classifyWorkspaceFileKind('slides.pptx')).toBe('document');
+    expect(classifyWorkspaceFileKind('rubric.xlsx')).toBe('document');
+    expect(classifyWorkspaceFileKind('Makefile')).toBe('text');
     expect(classifyWorkspaceFileKind('archive.zip')).toBe('asset');
   });
 
@@ -188,6 +192,11 @@ describe('workspace file metadata/read helpers', () => {
   it('rejects binary single-file reads', async () => {
     await writeFile(join(root, 'binary.jsx'), Buffer.from([0x00, 0x01, 0x02]));
     await expect(readWorkspaceFileAt(root, 'binary.jsx')).rejects.toThrow(/binary/);
+  });
+
+  it('rejects document single-file reads before attempting UTF-8 decoding', async () => {
+    await writeFile(join(root, 'brief.docx'), Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+    await expect(readWorkspaceFileAt(root, 'brief.docx')).rejects.toThrow(/not a text-readable/);
   });
 
   it('rejects invalid UTF-8 single-file reads', async () => {

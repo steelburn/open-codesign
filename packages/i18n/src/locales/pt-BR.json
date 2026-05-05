@@ -42,6 +42,20 @@
     "filesTabEmpty": "Nenhum arquivo ainda",
     "openInTab": "Abrir em nova aba",
     "previewHint": "Pré-visualização em miniatura · clique duas vezes no arquivo ou use Abrir em nova aba para ver em tela cheia",
+    "documentPreview": {
+      "previewLabel": "Prévia do documento",
+      "loading": "Preparando prévia…",
+      "unavailable": "Prévia do documento indisponível",
+      "empty": "Nenhum texto extraível foi encontrado neste documento.",
+      "thumbnailAlt": "Prévia de {{name}}",
+      "stats": {
+        "author": "Autor",
+        "pages": "Páginas",
+        "slides": "Slides",
+        "words": "Palavras",
+        "worksheets": "Planilhas"
+      }
+    },
     "tabsAriaLabel": "Arquivos abertos",
     "closeTab": "Fechar {{name}}",
     "files": {

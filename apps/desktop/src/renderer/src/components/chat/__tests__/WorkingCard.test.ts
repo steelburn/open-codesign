@@ -163,6 +163,30 @@ describe('WorkingCard.buildRows', () => {
     expect(rows[2]?.status).toBe('done');
   });
 
+  it('does not expose successful skill bodies as row hover text', () => {
+    const rows = buildRows([
+      call({
+        toolName: 'skill',
+        args: { name: 'pitch-deck' },
+        status: 'done',
+        result: {
+          content: [
+            {
+              type: 'text',
+              text: '---\nschemaVersion: 1\nname: pitch-deck\n---\n\n## Pitch Deck Design Principles',
+            },
+          ],
+          details: { name: 'pitch-deck', status: 'loaded' },
+        },
+      }),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.label).toBe('skill');
+    expect(rows[0]?.detail).toBe('pitch-deck');
+    expect(rows[0]?.errorText).toBeUndefined();
+  });
+
   it('demotes removed helper tools to a generic legacy row', () => {
     const rows = buildRows([
       call({ toolName: 'read_url', args: { url: 'https://example.com' } }),

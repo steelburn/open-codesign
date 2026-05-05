@@ -78,6 +78,26 @@ describe('workspace files IPC legacy workspace fallback', () => {
     });
   });
 
+  it('returns a lightweight preview for office documents in a bound workspace', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codesign-preview-workspace-'));
+    await writeFile(path.join(root, 'brief.docx'), Buffer.from('not-real-office-but-previewable'));
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Preview design');
+    updateDesignWorkspace(db, design.id, root);
+    registerWorkspaceIpc(db, () => null);
+
+    const preview = getHandler('codesign:files:v1:preview');
+
+    await expect(
+      preview(null, { schemaVersion: 1, designId: design.id, path: 'brief.docx' }),
+    ).resolves.toMatchObject({
+      schemaVersion: 1,
+      path: 'brief.docx',
+      fileName: 'brief.docx',
+      format: 'docx',
+    });
+  });
+
   it('rejects file writes when a legacy design has no workspace path', async () => {
     const db = initInMemoryDb();
     const design = createDesign(db, 'Legacy unbound design');
