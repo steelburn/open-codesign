@@ -133,6 +133,45 @@ function recentHistoryForRunPreferenceRouter(
     .join('\n');
 }
 
+function chatRowText(row: ReturnType<typeof listSessionChatMessages>[number]): string {
+  const payload = row.payload as { text?: unknown };
+  return typeof payload.text === 'string' ? payload.text : '';
+}
+
+function comparablePromptText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ');
+}
+
+function isCurrentPromptEcho(
+  row: ReturnType<typeof listSessionChatMessages>[number],
+  currentPrompt: string,
+): boolean {
+  if (row.kind !== 'user') return false;
+  const rowText = comparablePromptText(chatRowText(row));
+  if (rowText.length === 0) return false;
+  const promptText = comparablePromptText(currentPrompt);
+  return promptText === rowText || promptText.endsWith(rowText);
+}
+
+export function dropCurrentPromptEchoFromChatRows(
+  chatRows: ReturnType<typeof listSessionChatMessages>,
+  currentPrompt: string,
+): ReturnType<typeof listSessionChatMessages> {
+  const last = chatRows.at(-1);
+  if (last === undefined || !isCurrentPromptEcho(last, currentPrompt)) return chatRows;
+  return chatRows.slice(0, -1);
+}
+
+function sendPreflightAskEvent(
+  getMainWindow: () => ElectronBrowserWindow | null,
+  event: Omit<AgentStreamEvent, 'designId' | 'generationId'> & {
+    designId: string;
+    generationId: string;
+  },
+): void {
+  getMainWindow()?.webContents.send('agent:event:v1', event satisfies AgentStreamEvent);
+}
+
 function designMdSummaryForMemory(
   projectContext: Awaited<ReturnType<typeof preparePromptContext>>['projectContext'],
 ): string | null {
@@ -807,7 +846,16 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
             const isCodex = active.model.provider === CHATGPT_CODEX_PROVIDER_ID;
             let capturedMessages: DesignBriefConversationMessages | null = null;
             let aggressivePruneDetected = false;
-            const chatRows = chatRowsForDesign(designId);
+            const rawChatRows = chatRowsForDesign(designId);
+            const chatRows = dropCurrentPromptEchoFromChatRows(rawChatRows, payload.prompt);
+            if (chatRows.length !== rawChatRows.length) {
+              logIpc.info('generate.current_prompt_echo.drop', {
+                generationId: id,
+                designId,
+                rawRows: rawChatRows.length,
+                planningRows: chatRows.length,
+              });
+            }
             const resourceState = deriveResourceStateFromChatRows(chatRows);
             const existingBrief = prefs.memoryEnabled ? briefForDesign(designId) : null;
             const runPreferenceStoreOptions = chatStoreOptions();
@@ -859,13 +907,89 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               value: string | number | string[] | null;
             }> = [];
             if (runProtocolPreflight.requiresClarification) {
-              const askResult = await requestAsk(
-                id,
-                buildRunPreferenceAskInput(runProtocolPreflight.clarificationQuestions),
-                () => getMainWindow(),
+              const askInput = buildRunPreferenceAskInput(
+                runProtocolPreflight.clarificationQuestions,
               );
-              preflightAnswers = askResult.status === 'answered' ? askResult.answers : [];
-              runPreferences = applyRunPreferenceAnswers(runPreferences, preflightAnswers);
+              const toolCallId = `host-preflight-ask-${id}`;
+              const askStartedAt = Date.now();
+              sendPreflightAskEvent(getMainWindow, {
+                designId,
+                generationId: id,
+                type: 'turn_start',
+              });
+              sendPreflightAskEvent(getMainWindow, {
+                designId,
+                generationId: id,
+                type: 'assistant_note',
+                text: 'I need a couple choices before building.',
+              });
+              logIpc.info('agent.tool_start', {
+                generationId: id,
+                tool: 'ask',
+                source: 'preflight',
+              });
+              sendPreflightAskEvent(getMainWindow, {
+                designId,
+                generationId: id,
+                type: 'tool_call_start',
+                toolName: 'ask',
+                toolCallId,
+                args: { questions: askInput.questions, rationale: askInput.rationale },
+                verbGroup: 'Clarifying',
+              });
+              try {
+                const askResult = await requestAsk(id, askInput, () => getMainWindow());
+                preflightAnswers = askResult.status === 'answered' ? askResult.answers : [];
+                runPreferences = applyRunPreferenceAnswers(runPreferences, preflightAnswers);
+                logIpc.info('agent.tool_end', {
+                  generationId: id,
+                  tool: 'ask',
+                  source: 'preflight',
+                  status: 'done',
+                  answers: preflightAnswers.length,
+                });
+                sendPreflightAskEvent(getMainWindow, {
+                  designId,
+                  generationId: id,
+                  type: 'tool_call_result',
+                  toolName: 'ask',
+                  toolCallId,
+                  durationMs: Date.now() - askStartedAt,
+                  status: 'done',
+                  result: {
+                    content: [
+                      {
+                        type: 'text',
+                        text:
+                          askResult.status === 'answered'
+                            ? `user answered ${preflightAnswers.length} question(s)`
+                            : 'user cancelled',
+                      },
+                    ],
+                    details: { status: askResult.status, answerCount: preflightAnswers.length },
+                  },
+                });
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                logIpc.warn('agent.tool_end', {
+                  generationId: id,
+                  tool: 'ask',
+                  source: 'preflight',
+                  status: 'error',
+                  message,
+                });
+                sendPreflightAskEvent(getMainWindow, {
+                  designId,
+                  generationId: id,
+                  type: 'tool_call_result',
+                  toolName: 'ask',
+                  toolCallId,
+                  durationMs: Date.now() - askStartedAt,
+                  status: 'error',
+                  message,
+                });
+                throw err;
+              }
             }
             if (runPreferenceStoreOptions !== null) {
               appendSessionRunPreferences(runPreferenceStoreOptions, designId, runPreferences);

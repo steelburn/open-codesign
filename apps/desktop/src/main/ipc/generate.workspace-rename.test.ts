@@ -180,6 +180,7 @@ vi.mock('../ask-ipc', () => ({
 
 import { generateViaAgent } from '@open-codesign/core';
 import { requestAsk } from '../ask-ipc';
+import { appendSessionChatMessage } from '../session-chat';
 import { createDesign, initInMemoryDb, updateDesignWorkspace } from '../snapshots-db';
 import { registerSnapshotsIpc } from '../snapshots-ipc';
 import { registerGenerateIpc } from './generate';
@@ -326,6 +327,48 @@ describe('generate IPC workspace rename coordination', () => {
 
     await generateControl.started;
     expect(vi.mocked(generateViaAgent)).toHaveBeenCalledOnce();
+    generateControl.release();
+    await generatePromise;
+  });
+
+  it('still runs deterministic preflight when the renderer already persisted the current prompt', async () => {
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Untitled design 1');
+    const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
+    await mkdir(workspace);
+    updateDesignWorkspace(db, design.id, workspace);
+    appendSessionChatMessage(
+      { db, sessionDir: db.sessionDir },
+      {
+        designId: design.id,
+        kind: 'user',
+        payload: { text: 'make something cool' },
+      },
+    );
+
+    registerSnapshotsIpc(db);
+    registerGenerateIpc({ db, getMainWindow: () => null });
+
+    const generate = getHandler('codesign:v1:generate');
+    const generatePromise = Promise.resolve(
+      generate(null, {
+        schemaVersion: 1,
+        prompt: 'make something cool',
+        history: [],
+        model: { provider: 'mock-provider', modelId: 'mock-model' },
+        attachments: [],
+        generationId: 'gen-ask-current-echo',
+        designId: design.id,
+      }),
+    );
+
+    await generateControl.started;
+    expect(vi.mocked(requestAsk)).toHaveBeenCalledOnce();
+    expect(vi.mocked(requestAsk).mock.calls[0]?.[1].questions.map((q) => q.id)).toEqual([
+      'artifactType',
+      'visualDirection',
+    ]);
+
     generateControl.release();
     await generatePromise;
   });

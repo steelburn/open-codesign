@@ -53,6 +53,12 @@ export function registerAskIpc(): void {
       throw err;
     }
     pending.delete(requestId);
+    log.info('ask.resolve', {
+      sessionId: entry.sessionId,
+      requestId,
+      status: parsed.status,
+      answers: parsed.answers.length,
+    });
     entry.resolve({ status: parsed.status, answers: parsed.answers });
   });
 }
@@ -68,11 +74,16 @@ export function requestAsk(
     const win = getMainWindow();
     if (!win || win.isDestroyed()) {
       pending.delete(requestId);
-      log.warn('ask:request ignored (no main window)');
+      log.warn('ask.request.no_window', { sessionId, requestId });
       resolve({ status: 'cancelled', answers: [] });
       return;
     }
     const payload: AskRequestPayload = { requestId, sessionId, input };
+    log.info('ask.request.send', {
+      sessionId,
+      requestId,
+      questions: input.questions.length,
+    });
     win.webContents.send('ask:request', payload);
   });
 }
