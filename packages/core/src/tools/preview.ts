@@ -1,4 +1,5 @@
 import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { ImageContent, TextContent } from '@mariozechner/pi-ai';
 import { CodesignError, ERROR_CODES } from '@open-codesign/shared';
 import { type Static, Type } from '@sinclair/typebox';
 
@@ -66,6 +67,19 @@ export function trimPreviewResult(result: PreviewResult): PreviewResult {
   };
 }
 
+function previewContent(summary: string, result: PreviewResult): Array<TextContent | ImageContent> {
+  const content: Array<TextContent | ImageContent> = [{ type: 'text', text: summary }];
+  if (typeof result.screenshot === 'string' && result.screenshot.startsWith('data:image/')) {
+    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(result.screenshot.trim());
+    const mimeType = match?.[1];
+    const data = match?.[2];
+    if (mimeType !== undefined && data !== undefined) {
+      content.push({ type: 'image', mimeType, data });
+    }
+  }
+  return content;
+}
+
 /** Host-injected preview executor. Loads the artifact at `path` and returns
  *  a structured runtime report. Kept distinct from `DoneRuntimeVerifier` so
  *  preview's wire shape can evolve independently from done's lint + console
@@ -96,7 +110,7 @@ export function makePreviewTool(
           ? `preview ok: ${result.metrics.nodes} nodes, ${result.consoleErrors.length} console errors, ${result.assetErrors.length} asset errors`
           : `preview failed${result.reason ? `: ${result.reason}` : ''} (${result.consoleErrors.length} console errors, ${result.assetErrors.length} asset errors)`;
         return {
-          content: [{ type: 'text', text: summary }],
+          content: previewContent(summary, result),
           details: result,
         };
       } catch (err) {

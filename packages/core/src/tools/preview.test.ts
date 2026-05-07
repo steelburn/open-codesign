@@ -42,6 +42,26 @@ describe('makePreviewTool', () => {
     expect(runPreview).toHaveBeenCalledWith({ path: 'App.jsx', vision: true });
   });
 
+  it('returns preview screenshots as image tool-result content for vision models', async () => {
+    const runPreview = vi.fn().mockResolvedValue(
+      cannedResult({
+        screenshot: 'data:image/png;base64,aW1n',
+      }),
+    );
+    const tool = makePreviewTool(runPreview, { vision: true });
+
+    const res = await tool.execute('call-1', { path: 'App.jsx' });
+
+    expect(res.content).toEqual([
+      {
+        type: 'text',
+        text: 'preview ok: 42 nodes, 0 console errors, 0 asset errors',
+      },
+      { type: 'image', mimeType: 'image/png', data: 'aW1n' },
+    ]);
+    expect(res.details.screenshot).toBe('data:image/png;base64,aW1n');
+  });
+
   it('caps console and asset arrays to the documented budgets', async () => {
     const fatConsole = Array.from({ length: 100 }, (_, i) => ({
       level: 'error' as const,

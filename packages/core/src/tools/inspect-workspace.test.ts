@@ -9,6 +9,8 @@ describe('inspect_workspace', () => {
       { file: 'DESIGN.md', contents: '---\nversion: alpha\n---' },
       { file: 'docs/brief.md', contents: '# Brief' },
       { file: 'assets/logo.svg', contents: '<svg />' },
+      { file: 'references/brief.pdf' },
+      { file: 'references/deck.pptx' },
     ]);
 
     expect(inspection.entryCandidates).toEqual(['App.jsx']);
@@ -16,8 +18,10 @@ describe('inspect_workspace', () => {
     expect(inspection.styleFiles).toContain('styles/tokens.css');
     expect(inspection.designDocs).toContain('DESIGN.md');
     expect(inspection.referenceDocs).toContain('docs/brief.md');
+    expect(inspection.referenceDocs).toContain('references/brief.pdf');
+    expect(inspection.referenceDocs).toContain('references/deck.pptx');
     expect(inspection.assets).toContain('assets/logo.svg');
-    expect(inspection.totalFiles).toBe(5);
+    expect(inspection.totalFiles).toBe(7);
     expect(inspection.truncated).toBe(false);
   });
 

@@ -166,6 +166,17 @@ describe('workspace file metadata/read helpers', () => {
     ]);
   });
 
+  it('skips operating system metadata files from workspace listings', async () => {
+    await writeFile(join(root, '.DS_Store'), 'finder metadata');
+    await mkdir(join(root, 'assets'), { recursive: true });
+    await writeFile(join(root, 'assets', '.DS_Store'), 'nested finder metadata');
+    await writeFile(join(root, 'App.jsx'), 'function App() { return <main/>; }');
+
+    const result = await listWorkspaceFilesAt(root);
+
+    expect(result.map((file) => file.path)).toEqual(['App.jsx']);
+  });
+
   it('throws when listing a missing workspace root', async () => {
     await expect(listWorkspaceFilesAt(join(root, 'missing'))).rejects.toThrow(
       /Failed to scan workspace directory/,

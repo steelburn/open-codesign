@@ -91,6 +91,7 @@ export async function readWorkspaceFilesAt(
         continue;
       }
       if (!entry.isFile()) continue;
+      if (isIgnoredWorkspaceFileName(entry.name)) continue;
       const rel = normalizeSlashes(relative(root, abs));
       if (!matchers.some((re) => re.test(rel))) continue;
       let size = 0;
@@ -156,6 +157,7 @@ export interface WorkspaceFileReadResult extends WorkspaceFileEntry {
 }
 
 const LIST_IGNORED_DIRS = WORKSPACE_IGNORED_DIRS;
+const WORKSPACE_IGNORED_FILE_NAMES = new Set<string>(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
 
 const LIST_MAX_FILES = 2_000;
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -211,6 +213,10 @@ export function isWorkspaceTextReadablePath(path: string): boolean {
   return (
     TEXT_READABLE_EXTENSIONS.has(extname(lower)) || TEXT_READABLE_BASENAMES.has(basename(lower))
   );
+}
+
+function isIgnoredWorkspaceFileName(name: string): boolean {
+  return WORKSPACE_IGNORED_FILE_NAMES.has(name);
 }
 
 export function classifyWorkspaceFileKind(path: string): WorkspaceFileKind {
@@ -323,6 +329,7 @@ export async function listWorkspaceFilesAt(root: string): Promise<WorkspaceFileE
         continue;
       }
       if (!entry.isFile()) continue;
+      if (isIgnoredWorkspaceFileName(entry.name)) continue;
       let size = 0;
       let mtime = new Date();
       try {

@@ -52,7 +52,7 @@ function isStyleFile(file: string): boolean {
 function isReferenceDoc(file: string): boolean {
   const lower = lowerPath(file);
   if (isDesignDoc(lower)) return false;
-  return /\.(?:md|txt|json|ya?ml|toml|csv)$/i.test(file);
+  return /\.(?:md|txt|json|ya?ml|toml|csv|pdf|docx?|pptx?|xlsx?|rtf)$/i.test(file);
 }
 
 function isAsset(file: string): boolean {

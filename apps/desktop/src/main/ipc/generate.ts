@@ -70,7 +70,7 @@ import {
 } from '../session-chat';
 import { type Database, getDesign, recordDiagnosticEvent } from '../snapshots-db';
 import { withStableWorkspacePath } from '../workspace-path-lock';
-import { readWorkspaceFilesAt } from '../workspace-reader';
+import { listWorkspaceFilesAt, readWorkspaceFilesAt } from '../workspace-reader';
 import { finalAssistantTextForTurn } from './assistant-text';
 import { allocateAssetPath, createRuntimeTextEditorFs, resolveLocalAssetRefs } from './runtime-fs';
 import { summarizeToolResultForStream, toolExecutionStatusForStream } from './tool-log';
@@ -527,9 +527,10 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
           await syncWorkspaceTextFile(details.destPath, details.written);
         },
         inspectWorkspace: async () =>
-          withStableWorkspacePath(designId, async () =>
-            inspectWorkspaceFiles(await readWorkspaceFilesAt(currentWorkspaceRoot())),
-          ),
+          withStableWorkspacePath(designId, async () => {
+            const files = await listWorkspaceFilesAt(currentWorkspaceRoot());
+            return inspectWorkspaceFiles(files.map((file) => ({ file: file.path })));
+          }),
         readWorkspaceFiles: (patterns) =>
           withStableWorkspacePath(designId, () =>
             readWorkspaceFilesAt(currentWorkspaceRoot(), patterns),
