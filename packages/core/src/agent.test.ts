@@ -319,7 +319,7 @@ vi.mock('@mariozechner/pi-ai', () => ({
   }),
 }));
 
-import { generateViaAgent } from './agent.js';
+import { generateViaAgent, sanitizeOpenAIResponsesPayloadForStoreFalse } from './agent.js';
 import { applyComment } from './index.js';
 
 const MODEL: ModelRef = { provider: 'anthropic', modelId: 'claude-sonnet-4-6' };
@@ -507,6 +507,61 @@ describe('generateViaAgent()', () => {
       | undefined;
     expect(model?.reasoning).toBe(true);
     expect(model?.compat?.supportsDeveloperRole).toBe(false);
+  });
+
+  it('omits non-persisted reasoning items from OpenAI Responses store=false payloads', async () => {
+    const payload = {
+      model: 'gpt-5.5',
+      store: false,
+      input: [
+        { type: 'reasoning', id: 'rs_missing', encrypted_content: 'opaque' },
+        { type: 'message', id: 'msg_1', role: 'assistant' },
+        { type: 'function_call', id: 'fc_1', call_id: 'call_1' },
+        { type: 'function_call_output', call_id: 'call_1', output: 'ok' },
+        { role: 'user', content: [{ type: 'input_text', text: 'continue' }] },
+      ],
+    };
+
+    const sanitized = sanitizeOpenAIResponsesPayloadForStoreFalse(payload) as typeof payload;
+
+    expect(sanitized.input.map((entry) => entry.type ?? entry.role)).toEqual([
+      'message',
+      'function_call',
+      'function_call_output',
+      'user',
+    ]);
+    expect(payload.input[0]?.type).toBe('reasoning');
+  });
+
+  it('passes the OpenAI Responses store=false sanitizer to agent runs', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent({
+      prompt: 'design a dashboard',
+      history: [],
+      model: { provider: 'codex-coproxy', modelId: 'gpt-5.5' },
+      apiKey: 'sk-test',
+      baseUrl: 'http://127.0.0.1:8538/v1',
+      wire: 'openai-responses',
+    });
+
+    const onPayload = agentCalls[0]?.options.onPayload;
+    expect(onPayload).toBeDefined();
+    const sanitized = onPayload?.(
+      {
+        store: false,
+        input: [
+          { type: 'reasoning', id: 'rs_not_persisted' },
+          { role: 'user', content: [{ type: 'input_text', text: 'next' }] },
+        ],
+      },
+      agentCalls[0]?.options.initialState?.model ??
+        (() => {
+          throw new Error('expected agent model');
+        })(),
+    ) as { input: Array<{ type?: string; role?: string }> };
+    expect(sanitized.input).toEqual([
+      { role: 'user', content: [{ type: 'input_text', text: 'next' }] },
+    ]);
   });
 
   it('uses conservative OpenAI-chat compat for DeepInfra agent models', async () => {

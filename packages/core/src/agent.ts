@@ -173,6 +173,24 @@ interface PiModel {
   headers?: Record<string, string>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isResponsesReasoningItem(value: unknown): boolean {
+  return isRecord(value) && value['type'] === 'reasoning';
+}
+
+export function sanitizeOpenAIResponsesPayloadForStoreFalse(payload: unknown): unknown {
+  if (!isRecord(payload) || payload['store'] !== false || !Array.isArray(payload['input'])) {
+    return payload;
+  }
+  return {
+    ...payload,
+    input: payload['input'].filter((entry) => !isResponsesReasoningItem(entry)),
+  };
+}
+
 function apiForWire(wire: WireApi | undefined): string {
   if (wire === 'anthropic') return 'anthropic-messages';
   if (wire === 'openai-responses') return 'openai-responses';
@@ -1243,6 +1261,8 @@ export async function generateViaAgent(
     messages: AgentMessage[],
     retryThinkingLevel = thinkingLevel,
   ): Agent => {
+    const onPayload =
+      piModel.api === 'openai-responses' ? sanitizeOpenAIResponsesPayloadForStoreFalse : undefined;
     const retryAgent = new Agent({
       initialState: {
         systemPrompt: augmentedSystemPrompt,
@@ -1274,6 +1294,7 @@ export async function generateViaAgent(
             }
           }
         : () => initialApiKey || 'open-codesign-keyless',
+      ...(onPayload !== undefined ? { onPayload } : {}),
     });
     if (deps.onEvent) {
       retryAgent.subscribe((event) => deps.onEvent?.(event));
