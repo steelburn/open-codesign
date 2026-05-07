@@ -44,10 +44,34 @@ function dedupeQuestions(primary: AskInput['questions'] | undefined): AskInput['
   return merged;
 }
 
+function hasReferenceMaterial(input: RunProtocolPreflightInput): boolean {
+  return (
+    (input.attachmentCount ?? 0) > 0 ||
+    input.hasReferenceUrl === true ||
+    input.hasDesignSystem === true
+  );
+}
+
+function asksForMissingSource(question: AskInput['questions'][number]): boolean {
+  const haystack = `${question.id} ${question.prompt}`.toLowerCase();
+  return (
+    /\b(source|reference|screenshot|image|url|link|page)\b/.test(haystack) ||
+    /页面|截图|图片|图像|链接|网址|参考|来源|素材/.test(haystack)
+  );
+}
+
+function suppressAnsweredQuestions(
+  questions: AskInput['questions'],
+  input: RunProtocolPreflightInput,
+): AskInput['questions'] {
+  if (!hasReferenceMaterial(input)) return questions;
+  return questions.filter((question) => !asksForMissingSource(question));
+}
+
 export function buildRunProtocolPreflight(
   input: RunProtocolPreflightInput,
 ): RunProtocolPreflightResult {
-  const questions = dedupeQuestions(input.routerQuestions);
+  const questions = suppressAnsweredQuestions(dedupeQuestions(input.routerQuestions), input);
   const requiresTodosBeforeMutation = isFreshEmpty(input) && input.prompt.trim().length > 0;
   return {
     requiresClarification: questions.length > 0,

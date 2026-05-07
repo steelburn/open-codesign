@@ -17,12 +17,21 @@ const coreCalls = vi.hoisted(() => ({
     };
     needsClarification: boolean;
     clarificationRationale?: string;
-    clarificationQuestions?: Array<{
-      id: string;
-      type: 'text-options';
-      prompt: string;
-      options: string[];
-    }>;
+    clarificationQuestions?: Array<
+      | {
+          id: string;
+          type: 'text-options';
+          prompt: string;
+          options: string[];
+        }
+      | {
+          id: string;
+          type: 'freeform';
+          prompt: string;
+          placeholder?: string;
+          multiline?: boolean;
+        }
+    >;
   }>,
 }));
 const generateControl = vi.hoisted(() => {
@@ -151,12 +160,18 @@ vi.mock('../preferences-ipc', () => ({
 }));
 
 vi.mock('../prompt-context', () => ({
-  preparePromptContext: vi.fn(async () => ({
-    attachments: [],
-    referenceUrl: null,
-    designSystem: null,
-    projectContext: {},
-  })),
+  preparePromptContext: vi.fn(
+    async (input?: { attachments?: Array<{ path: string; name: string; size: number }> }) => ({
+      attachments:
+        input?.attachments?.map((file) => ({
+          ...file,
+          ...(file.name.toLowerCase().endsWith('.png') ? { mediaType: 'image/png' } : {}),
+        })) ?? [],
+      referenceUrl: null,
+      designSystem: null,
+      projectContext: {},
+    }),
+  ),
 }));
 
 vi.mock('../memory-ipc', () => ({
@@ -179,7 +194,7 @@ vi.mock('../ask-ipc', () => ({
   requestAsk: vi.fn(async () => ({ status: 'answered', answers: [] })),
 }));
 
-import { generateViaAgent } from '@open-codesign/core';
+import { generateViaAgent, routeRunPreferences } from '@open-codesign/core';
 import { requestAsk } from '../ask-ipc';
 import { appendSessionChatMessage } from '../session-chat';
 import { createDesign, initInMemoryDb, updateDesignWorkspace } from '../snapshots-db';
@@ -321,6 +336,64 @@ describe('generate IPC workspace rename coordination', () => {
       ],
     });
     expect(coreCalls.generateInputs[0]).toMatchObject({ currentDesignName: 'Untitled design 1' });
+
+    generateControl.release();
+    await generatePromise;
+  });
+
+  it('does not ask for page source when a reference image is attached', async () => {
+    coreCalls.routeResults.push({
+      preferences: {
+        schemaVersion: 1,
+        tweaks: 'auto',
+        bitmapAssets: 'auto',
+        reusableSystem: 'auto',
+      },
+      needsClarification: true,
+      clarificationRationale: '需要知道要复刻的页面是什么才能开始。',
+      clarificationQuestions: [
+        {
+          id: 'source',
+          type: 'freeform',
+          prompt: '请提供要复刻的页面（链接、截图说明或粘贴内容）',
+          multiline: true,
+        },
+      ],
+    });
+    const db = initInMemoryDb();
+    const design = createDesign(db, 'Untitled design 1');
+    const workspace = path.join(defaultWorkspaceRoot, 'Untitled-design-1');
+    await mkdir(path.join(workspace, 'references'), { recursive: true });
+    await writeFile(
+      path.join(workspace, 'references', 'image.png'),
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    );
+    updateDesignWorkspace(db, design.id, workspace);
+
+    registerSnapshotsIpc(db);
+    registerGenerateIpc({ db, getMainWindow: () => null });
+
+    const generate = getHandler('codesign:v1:generate');
+    const generatePromise = Promise.resolve(
+      generate(null, {
+        schemaVersion: 1,
+        prompt: '复刻一下这个页面',
+        history: [],
+        model: { provider: 'mock-provider', modelId: 'mock-model' },
+        attachments: [{ path: 'references/image.png', name: 'image.png', size: 8 }],
+        generationId: 'gen-attached-source',
+        designId: design.id,
+      }),
+    );
+
+    await generateControl.started;
+    expect(requestAsk).not.toHaveBeenCalled();
+    expect(vi.mocked(routeRunPreferences).mock.calls[0]?.[0]).toMatchObject({
+      workspaceState: {
+        attachmentCount: 1,
+        imageAttachmentCount: 1,
+      },
+    });
 
     generateControl.release();
     await generatePromise;

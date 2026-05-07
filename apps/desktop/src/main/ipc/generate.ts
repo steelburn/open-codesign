@@ -848,6 +848,12 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               hasDesignMd: Boolean(promptContext.projectContext.designMd?.trim()),
               hasAgentsMd: Boolean(promptContext.projectContext.agentsMd?.trim()),
               hasSettingsJson: Boolean(promptContext.projectContext.settingsJson?.trim()),
+              attachmentCount: promptContext.attachments.length,
+              imageAttachmentCount: promptContext.attachments.filter((file) =>
+                file.mediaType?.startsWith('image/'),
+              ).length,
+              hasReferenceUrl: promptContext.referenceUrl !== null,
+              hasDesignSystem: promptContext.designSystem !== null,
             };
             const routedPreferences = await routeRunPreferences({
               prompt: payload.prompt,

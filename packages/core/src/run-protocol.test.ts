@@ -95,6 +95,59 @@ describe('run protocol preflight', () => {
     ]);
   });
 
+  it('suppresses missing-source questions when the user attached reference material', () => {
+    const result = buildRunProtocolPreflight({
+      prompt: '复刻一下这个页面',
+      historyCount: 0,
+      workspaceState: { hasSource: false },
+      runPreferences: {
+        schemaVersion: 1,
+        tweaks: 'auto',
+        bitmapAssets: 'auto',
+        reusableSystem: 'auto',
+      },
+      attachmentCount: 1,
+      routerQuestions: [
+        {
+          id: 'source',
+          type: 'freeform',
+          prompt: '请提供要复刻的页面（链接、截图说明或粘贴内容）',
+          multiline: true,
+        },
+      ],
+    });
+
+    expect(result.requiresClarification).toBe(false);
+    expect(result.clarificationQuestions).toEqual([]);
+    expect(result.requiresTodosBeforeMutation).toBe(true);
+  });
+
+  it('keeps non-source clarification questions even with attached references', () => {
+    const result = buildRunProtocolPreflight({
+      prompt: '复刻这个页面',
+      historyCount: 0,
+      workspaceState: { hasSource: false },
+      runPreferences: {
+        schemaVersion: 1,
+        tweaks: 'auto',
+        bitmapAssets: 'auto',
+        reusableSystem: 'auto',
+      },
+      attachmentCount: 1,
+      routerQuestions: [
+        {
+          id: 'targetDevice',
+          type: 'text-options',
+          prompt: '首版按哪个设备尺寸做？',
+          options: ['iPhone 16 Pro', '桌面端 1440px'],
+        },
+      ],
+    });
+
+    expect(result.requiresClarification).toBe(true);
+    expect(result.clarificationQuestions).toHaveLength(1);
+  });
+
   it('formats non-preference preflight answers for agent context', () => {
     const section = formatRunProtocolPreflightAnswers([
       { questionId: 'artifactType', value: 'mobile-app-screen' },
