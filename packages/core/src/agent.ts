@@ -27,7 +27,11 @@ import {
   type AgentTool,
   type AgentToolResult,
 } from '@mariozechner/pi-agent-core';
-import type { Message as PiAiMessage, Model as PiAiModel } from '@mariozechner/pi-ai';
+import type {
+  ImageContent as PiAiImageContent,
+  Message as PiAiMessage,
+  Model as PiAiModel,
+} from '@mariozechner/pi-ai';
 import type { RetryDecision, RetryReason } from '@open-codesign/providers';
 import {
   classifyError,
@@ -186,6 +190,23 @@ function supportsOpenAIDeveloperRole(wire: WireApi | undefined, baseUrl: string)
   return host === 'api.openai.com' || host.endsWith('.openai.com') || host === 'openrouter.ai';
 }
 
+function supportsImageInput(wire: WireApi | undefined, modelId: string): boolean {
+  if (wire === 'anthropic' || wire === 'openai-responses' || wire === 'openai-codex-responses') {
+    return true;
+  }
+  const lower = modelId.toLowerCase();
+  return (
+    lower.includes('vision') ||
+    lower.includes('vl') ||
+    lower.includes('multimodal') ||
+    lower.includes('gpt-4o') ||
+    lower.includes('gpt-5') ||
+    lower.includes('claude-3') ||
+    lower.includes('claude-sonnet-4') ||
+    lower.includes('claude-opus-4')
+  );
+}
+
 const BUILTIN_PUBLIC_BASE_URLS: Record<string, string> = {
   anthropic: 'https://api.anthropic.com',
   openai: 'https://api.openai.com/v1',
@@ -228,7 +249,7 @@ function buildPiModel(
     provider: model.provider,
     baseUrl: canonicalBase,
     reasoning: inferReasoning(wire, effectiveModelId, canonicalBase),
-    input: ['text'],
+    input: supportsImageInput(wire, effectiveModelId) ? ['text', 'image'] : ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
     maxTokens: 32000,
@@ -367,16 +388,49 @@ function wrapTodosState<TParams extends TSchema, TDetails>(
 function wrapPlanningGate<TParams extends TSchema, TDetails>(
   tool: AgentTool<TParams, TDetails>,
   state: RunProtocolState,
+  options: {
+    allowBeforeTodos?: ((params: unknown) => boolean) | undefined;
+  } = {},
 ): AgentTool<TParams, TDetails> {
   return {
     ...tool,
     async execute(toolCallId, params) {
-      if (state.requiresTodosBeforeMutation && !state.todosSet) {
+      if (
+        state.requiresTodosBeforeMutation &&
+        !state.todosSet &&
+        options.allowBeforeTodos?.(params) !== true
+      ) {
         return todosRequiredResult(tool.name) as AgentToolResult<TDetails>;
       }
       return await tool.execute(toolCallId, params);
     },
   };
+}
+
+function isTextEditorView(params: unknown): boolean {
+  return (
+    typeof params === 'object' &&
+    params !== null &&
+    (params as { command?: unknown }).command === 'view'
+  );
+}
+
+function imageDataUrlToContent(dataUrl: string): PiAiImageContent | null {
+  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(dataUrl.trim());
+  if (match === null) return null;
+  const mimeType = match[1];
+  const data = match[2];
+  if (mimeType === undefined || data === undefined || !mimeType.startsWith('image/')) return null;
+  return { type: 'image', data, mimeType };
+}
+
+function attachmentImagesForModel(input: GenerateInput, model: PiModel): PiAiImageContent[] {
+  if (!model.input.includes('image')) return [];
+  return (input.attachments ?? []).flatMap((attachment) => {
+    if (!attachment.imageDataUrl) return [];
+    const image = imageDataUrlToContent(attachment.imageDataUrl);
+    return image === null ? [] : [image];
+  });
 }
 
 function agenticToolGuidance(input: {
@@ -1010,6 +1064,7 @@ export async function generateViaAgent(
       wrapPlanningGate(
         makeTextEditorTool(trackedFs) as unknown as AgentTool<TSchema, unknown>,
         runProtocolState,
+        { allowBeforeTodos: isTextEditorView },
       ),
     );
     defaultToolsByName.set(
@@ -1094,6 +1149,7 @@ export async function generateViaAgent(
     deps.generateImageAsset && !imageExplicitlyDisabled
       ? `${baseAgenticGuidance}\n\n${IMAGE_ASSET_TOOL_GUIDANCE}`
       : baseAgenticGuidance;
+  const promptImages = attachmentImagesForModel(input, piModel);
   const augmentedSystemPrompt = [
     encourageToolUse ? `${systemPrompt}\n\n${activeGuidance}` : systemPrompt,
     ...resourceResult.sections,
@@ -1110,6 +1166,7 @@ export async function generateViaAgent(
     messages: historyAsAgentMessages.length + 2,
     systemChars: augmentedSystemPrompt.length,
     userChars: userContent.length,
+    promptImages: promptImages.length,
     historyCount: input.history.length,
     toolNames: tools.map((tool) => tool.name),
     skills: resourceResult.skillCount,
@@ -1230,7 +1287,7 @@ export async function generateViaAgent(
   const sendOnce = async (): Promise<void> => {
     const preLen = agent.state.messages.length;
     try {
-      await agent.prompt(userContent);
+      await agent.prompt(userContent, promptImages);
       await agent.waitForIdle();
     } catch (err) {
       if (agent.state.messages.length > preLen) {
@@ -1315,7 +1372,7 @@ export async function generateViaAgent(
         if (fallback.mode === 'continue') {
           await agent.continue();
         } else {
-          await agent.prompt(userContent);
+          await agent.prompt(userContent, promptImages);
         }
         await agent.waitForIdle();
       } catch (err) {
@@ -1360,7 +1417,7 @@ export async function generateViaAgent(
 
     const retryStart = Date.now();
     try {
-      await agent.prompt(userContent);
+      await agent.prompt(userContent, promptImages);
       await agent.waitForIdle();
     } catch (err) {
       log.error('[generate] step=transport_retry.fail', {

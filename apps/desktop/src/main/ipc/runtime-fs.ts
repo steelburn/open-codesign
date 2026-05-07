@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path_module from 'node:path';
-import type { CoreLogger, GenerateImageAssetRequest } from '@open-codesign/core';
+import type { AttachmentContext, CoreLogger, GenerateImageAssetRequest } from '@open-codesign/core';
 import { DEFAULT_SOURCE_ENTRY, LEGACY_SOURCE_ENTRY } from '@open-codesign/shared';
 import type { AgentStreamEvent } from '../../preload/index';
 import {
@@ -63,10 +63,36 @@ interface CreateRuntimeTextEditorFsOptions {
   designId: string | null;
   previousSource: string | null;
   initialFiles?: ReadonlyArray<{ file: string; contents: string }>;
+  attachments?: ReadonlyArray<AttachmentContext> | undefined;
   sendEvent: (event: AgentStreamEvent) => void;
   logger: Pick<CoreLogger, 'error'>;
   frames?: ReadonlyArray<readonly [string, string]>;
   designSkills?: ReadonlyArray<readonly [string, string]>;
+}
+
+function dataUrlByteLength(dataUrl: string): number {
+  const base64 = dataUrl.split(',', 2)[1] ?? '';
+  let length = base64.length;
+  if (length >= 2 && base64[length - 1] === '=' && base64[length - 2] === '=') {
+    length -= 2;
+  } else if (length >= 1 && base64[length - 1] === '=') {
+    length -= 1;
+  }
+  return Math.floor((length * 3) / 4);
+}
+
+function attachmentViewContent(attachment: AttachmentContext): string | null {
+  if (!attachment.mediaType?.startsWith('image/') || !attachment.imageDataUrl) return null;
+  return [
+    `Reference image: ${attachment.name}`,
+    `Path: ${attachment.path}`,
+    `Media type: ${attachment.mediaType}`,
+    `Size: ${dataUrlByteLength(attachment.imageDataUrl)} bytes`,
+    '',
+    'This is a user-provided reference image. Use it only as visual reference material.',
+    'Data URL:',
+    attachment.imageDataUrl,
+  ].join('\n');
 }
 
 export function createRuntimeTextEditorFs({
@@ -75,6 +101,7 @@ export function createRuntimeTextEditorFs({
   designId,
   previousSource,
   initialFiles = [],
+  attachments = [],
   sendEvent,
   logger,
   frames = [],
@@ -90,6 +117,11 @@ export function createRuntimeTextEditorFs({
   }
   for (const file of initialFiles) {
     fsMap.set(normalizeDesignFilePath(file.file), file.contents);
+  }
+  for (const attachment of attachments) {
+    const content = attachmentViewContent(attachment);
+    if (content === null) continue;
+    fsMap.set(normalizeDesignFilePath(attachment.path), content);
   }
   if (
     previousSource &&

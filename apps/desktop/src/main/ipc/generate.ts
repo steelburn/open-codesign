@@ -423,6 +423,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
     designId: string,
     previousSource: string | null,
     workspaceRoot: string,
+    attachmentsForRuntimeFs?: Parameters<typeof createRuntimeTextEditorFs>[0]['attachments'],
     memoryCallbacks?: {
       onAggressivePrune?: () => void;
       onComplete?: (messages: DesignBriefConversationMessages) => void;
@@ -448,6 +449,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
       logger: logIpc,
       previousSource,
       initialFiles: initialWorkspaceFiles,
+      attachments: attachmentsForRuntimeFs ?? input.attachments,
       sendEvent,
       frames,
       designSkills,
@@ -1018,6 +1020,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               designId,
               payload.previousSource ?? null,
               workspaceRoot,
+              promptContext.attachments,
               {
                 onAggressivePrune: () => {
                   aggressivePruneDetected = true;
@@ -1358,6 +1361,7 @@ export function registerGenerateIpc({ db, getMainWindow }: RegisterGenerateIpcDe
               payload.designId,
               payload.artifactSource,
               workspaceRoot,
+              promptContext.attachments,
             );
             logIpc.info('applyComment.ok', {
               generationId: id,

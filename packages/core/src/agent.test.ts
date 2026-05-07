@@ -20,7 +20,7 @@ const loadBuiltinSkillsMock = vi.fn(async (): Promise<LoadedSkill[]> => []);
 /** Captured constructor options + prompt calls for the mocked Agent. */
 interface AgentCall {
   options: AgentOptions;
-  prompts: Array<{ message: unknown }>;
+  prompts: Array<{ message: unknown; images?: unknown[] | undefined }>;
   continues: number;
   listeners: Array<(e: AgentEvent) => void>;
   aborted: boolean;
@@ -108,8 +108,8 @@ vi.mock('@mariozechner/pi-agent-core', () => {
       this.call.listeners.push((e) => listener(e));
       return () => {};
     }
-    async prompt(message: unknown): Promise<void> {
-      this.call.prompts.push({ message });
+    async prompt(message: unknown, images?: unknown[]): Promise<void> {
+      this.call.prompts.push({ message, images });
       const callIndex = agentCalls.indexOf(this.call);
       const script =
         scriptedAgent.overrideScriptForCallIndex !== undefined &&
@@ -312,7 +312,7 @@ vi.mock('@mariozechner/pi-ai', () => ({
     provider,
     baseUrl: provider === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1',
     reasoning: true,
-    input: ['text'] as const,
+    input: provider === 'anthropic' ? (['text', 'image'] as const) : (['text'] as const),
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
     maxTokens: 64000,
@@ -999,6 +999,72 @@ describe('generateViaAgent()', () => {
     });
     expect(JSON.stringify(created.content)).toContain('Created App.jsx');
     expect(fs.view('App.jsx')).not.toBeNull();
+  });
+
+  it('allows read-only file views before set_todos on fresh multi-step work', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    const fs = makeStubFs({
+      'references/shot.png': 'Reference image: shot.png\nData URL:\ndata:image/png;base64,aW1n',
+    });
+    await generateViaAgent(
+      {
+        prompt: 'replicate this screenshot',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        attachments: [
+          {
+            name: 'shot.png',
+            path: 'references/shot.png',
+            mediaType: 'image/png',
+            imageDataUrl: 'data:image/png;base64,aW1n',
+          },
+        ],
+      },
+      { fs },
+    );
+
+    const tools = agentCalls[0]?.options.initialState?.tools ?? [];
+    const editor = tools.find((tool) => tool.name === 'str_replace_based_edit_tool');
+    if (!editor) throw new Error('expected editor tool');
+
+    const viewed = await editor.execute('view-1', {
+      command: 'view',
+      path: 'references/shot.png',
+    });
+    expect(JSON.stringify(viewed.content)).toContain('Reference image: shot.png');
+
+    const blocked = await editor.execute('edit-1', {
+      command: 'create',
+      path: 'App.jsx',
+      file_text: 'function App() { return <main/>; }',
+    });
+    expect(JSON.stringify(blocked.content)).toContain('Call set_todos before editing');
+  });
+
+  it('sends image attachments as image blocks for vision-capable agent models', async () => {
+    scriptedAgent = { assistantText: RESPONSE_WITH_ARTIFACT };
+    await generateViaAgent(
+      {
+        prompt: 'replicate this screenshot',
+        history: [],
+        model: MODEL,
+        apiKey: 'sk-test',
+        attachments: [
+          {
+            name: 'shot.png',
+            path: 'references/shot.png',
+            mediaType: 'image/png',
+            imageDataUrl: 'data:image/png;base64,aW1n',
+          },
+        ],
+      },
+      { fs: makeStubFs({}) },
+    );
+
+    expect(agentCalls[0]?.prompts[0]?.images).toEqual(
+      expect.arrayContaining([{ type: 'image', data: 'aW1n', mimeType: 'image/png' }]),
+    );
   });
 
   it('blocks preview and done until set_todos has run for fresh multi-step work', async () => {
