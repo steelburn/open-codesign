@@ -13,7 +13,7 @@ const TAILWIND_CDN = 'https://cdn.tailwindcss.com';
 const TAILWIND_TAG = `<script src="${TAILWIND_CDN}"></script>`;
 
 export interface ExportHtmlOptions extends LocalAssetOptions {
-  /** Inject the Tailwind CDN script if missing. Defaults to true. */
+  /** Inject the Tailwind CDN script if missing. Defaults to false for offline exports. */
   injectTailwind?: boolean;
   /** Inline local src/href/url() references as data URIs when assetBasePath is set. */
   inlineLocalAssets?: boolean;
@@ -29,9 +29,9 @@ export interface ExportHtmlOptions extends LocalAssetOptions {
  * provides asset paths.
  *
  * JSX sources are first wrapped into a standalone web document by the runtime.
- * The export shell then injects the Tailwind CDN tag, a doctype, viewport
- * metadata, and a small comment banner. Remote assets still depend on network
- * availability; local workspace references are handled during export.
+ * The export shell then injects a doctype, viewport metadata, and a small
+ * comment banner. Remote assets still depend on network availability; local
+ * workspace references are handled during export.
  */
 export async function exportHtml(
   artifactSource: string,
@@ -49,7 +49,7 @@ export async function exportHtml(
 }
 
 export function buildHtmlDocument(artifactSource: string, opts: ExportHtmlOptions = {}): string {
-  const injectTailwind = opts.injectTailwind ?? true;
+  const injectTailwind = opts.injectTailwind ?? false;
   const prettify = opts.prettify ?? true;
   const banner =
     opts.bannerComment ??

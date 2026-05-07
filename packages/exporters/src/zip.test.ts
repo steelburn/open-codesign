@@ -75,6 +75,7 @@ describe('exportZip', () => {
     const out = readFileSync(join(extractDir, 'index.html'), 'utf8');
     expect(out).toContain('CODESIGN_STANDALONE_RUNTIME');
     expect(out).toContain('zip-jsx');
+    expect(out).not.toContain('https://cdn.tailwindcss.com');
   });
 
   it('bundles the original source and export manifest for handoff quality', async () => {

@@ -2190,6 +2190,34 @@ describe('generateViaAgent() — transport-level retry', () => {
     expect(retryAgentMessages?.length).toBe(2);
   });
 
+  it('strips aborted transport turns from message history on retry', async () => {
+    scriptedAgent = {
+      assistantText: RESPONSE_WITH_ARTIFACT,
+      stopReason: 'aborted',
+      errorMessage: 'Request was aborted',
+      overrideScriptForCallIndex: 1,
+      overrideScript: {
+        assistantText: RESPONSE_WITH_ARTIFACT,
+        stopReason: 'stop',
+      },
+    };
+    await generateViaAgent(
+      {
+        prompt: 'design a meditation app',
+        history: [
+          { role: 'user', content: 'first request' },
+          { role: 'assistant', content: 'first reply' },
+        ],
+        model: MODEL,
+        apiKey: 'sk-test',
+      },
+      { fs: makeStubFs({ 'App.jsx': SAMPLE_HTML }) },
+    );
+
+    const retryAgentMessages = agentCalls[1]?.options.initialState?.messages;
+    expect(retryAgentMessages?.length).toBe(2);
+  });
+
   it('strips tool-call and toolResult messages from the failed turn', async () => {
     // Simulate a failed turn that includes tool activity:
     // [user, assistant(success), user, assistant(tool-call), toolResult, assistant(error)]

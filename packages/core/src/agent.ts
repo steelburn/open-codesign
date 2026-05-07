@@ -464,7 +464,8 @@ export function stripFailedTurn(messages: readonly AgentMessage[]): AgentMessage
     const msg = messages[i];
     if (!msg) continue;
     if (errorIndex === -1) {
-      if (msg.role === 'assistant' && (msg as PiAssistantMessage).stopReason === 'error') {
+      const stopReason = (msg as PiAssistantMessage).stopReason;
+      if (msg.role === 'assistant' && (stopReason === 'error' || stopReason === 'aborted')) {
         errorIndex = i;
       }
       continue;

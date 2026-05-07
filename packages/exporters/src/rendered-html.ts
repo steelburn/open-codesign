@@ -26,7 +26,7 @@ export async function buildExportHtmlDocument(
   let html = buildHtmlDocument(artifactSource, {
     prettify: false,
     sourcePath: opts.sourcePath,
-    ...(opts.injectTailwind === undefined ? {} : { injectTailwind: opts.injectTailwind }),
+    injectTailwind: opts.injectTailwind ?? true,
   });
   if (opts.inlineLocalAssets ?? true) {
     html = await inlineLocalAssetsInHtml(html, opts);

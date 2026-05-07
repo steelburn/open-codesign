@@ -25,8 +25,17 @@ describe('buildHtmlDocument', () => {
 
     expect(out).toContain('CODESIGN_STANDALONE_RUNTIME');
     expect(out).toContain('window.Babel.transform');
-    expect(out).toContain('https://cdn.tailwindcss.com');
+    expect(out).not.toContain('https://cdn.tailwindcss.com');
     expect(out).not.toContain('CODESIGN_OVERLAY_SCRIPT');
+  });
+
+  it('can inject Tailwind CDN when explicitly requested', () => {
+    const out = buildHtmlDocument('function App() { return <main />; }', {
+      injectTailwind: true,
+      prettify: false,
+    });
+
+    expect(out).toContain('https://cdn.tailwindcss.com');
   });
 
   it('uses sourcePath to preserve TSX transform options during export', () => {
