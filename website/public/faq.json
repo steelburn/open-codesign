@@ -3,7 +3,7 @@
     "https://opencoworkai.github.io/open-codesign/faq",
     "https://opencoworkai.github.io/open-codesign/zh/faq"
   ],
-  "updated": "2026-05-01",
+  "updated": "2026-05-09",
   "items": [
     {
       "id": "what-is-open-codesign",
@@ -27,7 +27,7 @@
       "id": "data-cloud",
       "language": "en-US",
       "question": "Does Open CoDesign send my prompts or designs to the cloud?",
-      "answer": "No. Designs, prompts, settings, and generated files stay on the user's machine by default. The only outbound network traffic is to the model provider the user configures."
+      "answer": "No. Designs, prompts, settings, generated files, and v0.2 workspace-backed sessions stay on the user's machine by default. The only outbound network traffic is to the model provider the user configures."
     },
     {
       "id": "platforms",
@@ -57,13 +57,25 @@
       "id": "data-cloud-zh",
       "language": "zh-CN",
       "question": "Open CoDesign 会把我的提示词或设计发到云端吗？",
-      "answer": "不会。设计、提示词、设置和生成文件默认保存在用户本机。唯一对外网络流量是用户自己配置的模型提供商请求。"
+      "answer": "不会。设计、提示词、设置、生成文件和 v0.2 的真实工作区 session 默认都保存在用户本机。唯一对外网络流量是用户自己配置的模型提供商请求。"
     },
     {
       "id": "platforms-zh",
       "language": "zh-CN",
       "question": "Open CoDesign 支持哪些平台？",
       "answer": "Open CoDesign 支持 macOS Apple Silicon、macOS Intel、Windows x64、Windows ARM64，以及 Linux AppImage、deb、rpm 安装包。"
+    },
+    {
+      "id": "install-status",
+      "language": "en-US",
+      "question": "Which package managers are live for v0.2.0?",
+      "answer": "GitHub Releases, Homebrew Cask, and Scoop are live for v0.2.0. The winget manifest has been submitted and is waiting for Microsoft review."
+    },
+    {
+      "id": "install-status-zh",
+      "language": "zh-CN",
+      "question": "v0.2.0 哪些包管理器已经可用？",
+      "answer": "GitHub Releases、Homebrew Cask 和 Scoop 已经可用。winget manifest 已提交，正在等 Microsoft review。"
     }
   ]
 }

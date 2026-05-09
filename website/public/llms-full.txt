@@ -11,7 +11,7 @@ This file is the long-form machine-readable context for Open CoDesign. It summar
 - Repository: https://github.com/OpenCoworkAI/open-codesign
 - License: MIT
 - Latest public release: v0.2.0, published 2026-05-09
-- Public metrics snapshot from GitHub API on 2026-05-01: 3,833 stars, 383 forks, 45 open issues, 8,594 release asset downloads
+- Public metrics snapshot from GitHub API on 2026-05-09: 5,331 stars, 563 forks, 33 open issues
 - Machine-readable project facts: https://opencoworkai.github.io/open-codesign/project.json
 - Machine-readable site index: https://opencoworkai.github.io/open-codesign/site-index.json
 - Machine-readable FAQ data: https://opencoworkai.github.io/open-codesign/faq.json
@@ -63,9 +63,9 @@ Open CoDesign exists for users who want AI-native design speed without subscript
 - Generation cancellation and timeout messaging.
 - Per-generation token counter.
 
-## v0.2 Direction: Agentic Design
+## v0.2.0 Release: Agentic Design
 
-v0.2 is in preparation as the Agentic Design update. The public roadmap describes the shift from a one-shot prompt-to-artifact generator into a local design agent with a real workspace:
+v0.2.0 shipped on 2026-05-09 as the Agentic Design update. It changes Open CoDesign from a one-shot prompt-to-artifact generator into a local design agent with a real workspace:
 
 - Every design becomes a session with history and a workspace folder.
 - The agent can use permissioned local tools for reading, writing, editing, shell commands, grep, find, and listing files.
@@ -73,6 +73,7 @@ v0.2 is in preparation as the Agentic Design update. The public roadmap describe
 - `DESIGN.md` becomes a shared design-system artifact that both the user and agent can edit.
 - Existing v0.1 designs have a migration path into workspace files and session history.
 - Skills, scaffolds, and brand references lazy-load from manifests with source and license metadata.
+- The release also includes Files panel upgrades, provider and generation diagnostics, export fixes, security hardening for SVG rendering / secret storage / private-network probes, and refreshed website and community surfaces.
 
 ## Architecture Summary
 
@@ -95,7 +96,7 @@ Important architecture boundaries:
 - Desktop code should not import provider SDKs directly; model calls go through provider abstractions.
 - Exporters are loaded lazily so heavy features do not inflate app startup.
 - Local storage and generated files are first-class product surfaces.
-- v0.2 moves toward workspace-backed design sessions rather than new SQLite-backed feature state for design history.
+- v0.2 uses workspace-backed design sessions rather than new SQLite-backed feature state for design history.
 
 ## Installation
 
@@ -109,13 +110,12 @@ brew install --cask opencoworkai/tap/open-codesign
 
 # Windows - Scoop
 scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket
-scoop install open-codesign
+scoop install opencoworkai/open-codesign
 
-# Windows - winget
-winget install OpenCoworkAI.OpenCoDesign
+# Windows - winget is pending Microsoft review for v0.2.0
 ```
 
-Direct downloads are published on GitHub Releases for macOS, Windows, and Linux.
+Direct downloads are published on GitHub Releases for macOS, Windows, and Linux. For v0.2.0, Homebrew Cask and Scoop are live. The winget manifest is submitted as https://github.com/microsoft/winget-pkgs/pull/372310 and is waiting for Microsoft review.
 
 Build from source:
 

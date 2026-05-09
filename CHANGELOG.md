@@ -20,11 +20,24 @@ Agentic Design release. This release turns Open CoDesign from a one-shot generat
 ### Install
 
 ```bash
-winget install OpenCoworkAI.OpenCoDesign           # Windows
 brew install --cask opencoworkai/tap/open-codesign # macOS
+scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket
+scoop install opencoworkai/open-codesign           # Windows
 ```
 
 Or direct download from [GitHub Releases](https://github.com/OpenCoworkAI/open-codesign/releases/tag/v0.2.0).
+
+Homebrew Cask and Scoop are live for v0.2.0. The winget manifest has been submitted in microsoft/winget-pkgs#372310 and is waiting for Microsoft review.
+
+### Contributors
+
+Thanks to everyone who contributed code, PRs, reviews, diagnostics, and issue reports in the v0.2.0 cycle.
+
+- Code and PR contributors: @hqhq1025, @Sun-sunshine06, @snowopsdev, @mussonking, @MoveCloudROY, @cifuentesantonio, @VoidLight00, @Jiangxy-1, @GoDiao, @L4b0R, @cydxxzg, and dependabot[bot].
+- Security hardening: @snowopsdev in #311.
+- Workspace and Files panel work: @mussonking in #271 and @MoveCloudROY in #173.
+- Internationalization and polish: @cifuentesantonio in #272, @GoDiao in #231, @VoidLight00 in #268, @Jiangxy-1 in #226 and #224, and @L4b0R across icon, OAuth, and workspace-path fixes.
+- Issue reporters and testers: @davevr, @jpjperalta, @jonathanmorenon, @rosacelesteusa-oss, @mikecheongx, @apradoc, @fabianmcja, @bstsimo, @abelzhang001, @258044aamm-Dev, @luis782006, @danzub, @WayneEld, @deancallaghan451, @pat3dx, @yshurik, @dev-d-25, @hxwssg, @XiaoCC, @kaiminRyan, @rsxdalv, @WWWduoyu, @L4b0R, @coachescritique, @lanzise1, @bytegh, and @CaioGS06.
 
 ---
 

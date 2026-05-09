@@ -2,7 +2,7 @@
   "name": "Open CoDesign",
   "slug": "open-codesign",
   "alternate_names": ["open-codesign"],
-  "description": "Open CoDesign is an open-source desktop AI design tool. It turns natural-language prompts into HTML prototypes, React components, slide decks, PDFs, and marketing assets while keeping user data local and using bring-your-own-key model access.",
+  "description": "Open CoDesign is an open-source desktop AI design tool. It turns natural-language prompts into HTML prototypes, React components, slide decks, PDFs, and marketing assets while keeping user data local, storing v0.2 design sessions in workspace-backed files, and using bring-your-own-key model access.",
   "canonical_url": "https://opencoworkai.github.io/open-codesign/",
   "repository": "https://github.com/OpenCoworkAI/open-codesign",
   "organization": {
@@ -15,20 +15,23 @@
   },
   "latest_release": {
     "version": "v0.2.0",
-    "published_at": "2026-05-09T00:00:00Z",
-    "source": "https://github.com/OpenCoworkAI/open-codesign/releases/tag/v0.2.0"
+    "published_at": "2026-05-09T08:44:10Z",
+    "source": "https://github.com/OpenCoworkAI/open-codesign/releases/tag/v0.2.0",
+    "summary": "v0.2.0 is the Agentic Design release: workspace-backed design sessions, permissioned local tools, Files panel upgrades, provider diagnostics, security hardening, and DESIGN.md design-system artifacts."
   },
   "repository_snapshot": {
-    "as_of": "2026-05-01",
+    "as_of": "2026-05-09",
     "source": "GitHub API",
-    "stars": 3833,
-    "forks": 383,
-    "open_issues": 45,
-    "release_asset_downloads": 8594
+    "stars": 5331,
+    "forks": 563,
+    "open_issues": 33,
+    "release_asset_downloads": 41,
+    "release_asset_downloads_scope": "v0.2.0 assets only at time of snapshot"
   },
   "product_positioning": [
     "Open-source alternative to Claude Design",
     "Desktop AI design tool",
+    "Agentic Design with workspace-backed sessions",
     "BYOK and multi-model",
     "Local-first design history and files",
     "MIT-licensed"
@@ -125,5 +128,30 @@
     "Open CoDesign is not affiliated with Anthropic, Vercel, StackBlitz, Lovable, or Figma.",
     "Claude, Claude Design, v0, Bolt.new, Lovable, and Figma are names or trademarks of their respective owners."
   ],
-  "content_policy": "This file summarizes public project facts for search and AI retrieval. It is intended to make real public content easier to understand and cite, not to create synthetic SEO filler."
+  "content_policy": "This file summarizes public project facts for search and AI retrieval. It is intended to make real public content easier to understand and cite, not to create synthetic SEO filler.",
+  "distribution_channels": [
+    {
+      "name": "GitHub Releases",
+      "status": "live",
+      "url": "https://github.com/OpenCoworkAI/open-codesign/releases/tag/v0.2.0"
+    },
+    {
+      "name": "Homebrew Cask",
+      "status": "live",
+      "command": "brew install --cask opencoworkai/tap/open-codesign",
+      "repository": "https://github.com/OpenCoworkAI/homebrew-tap"
+    },
+    {
+      "name": "Scoop",
+      "status": "live",
+      "command": "scoop bucket add opencoworkai https://github.com/OpenCoworkAI/scoop-bucket && scoop install opencoworkai/open-codesign",
+      "repository": "https://github.com/OpenCoworkAI/scoop-bucket"
+    },
+    {
+      "name": "winget",
+      "status": "pending_review",
+      "command": "winget install OpenCoworkAI.OpenCoDesign",
+      "pull_request": "https://github.com/microsoft/winget-pkgs/pull/372310"
+    }
+  ]
 }
