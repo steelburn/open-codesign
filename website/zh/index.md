@@ -170,7 +170,7 @@ import { withBase } from 'vitepress'
 <div class="codesign-community">
   <div class="community-card">
     <h3>用户交流群（微信）</h3>
-    <p class="community-hint">扫码加入中文讨论组。二维码每 7 天刷新，当前截至 <strong>5 月 4 日</strong> 有效。过期请到 <a href="https://github.com/OpenCoworkAI/open-codesign/issues">GitHub Issues</a> 留言提醒我们更新。</p>
+    <p class="community-hint">扫码加入中文讨论组。二维码每 7 天刷新，当前截至 <strong>5 月 16 日</strong> 有效。过期请到 <a href="https://github.com/OpenCoworkAI/open-codesign/issues">GitHub Issues</a> 留言提醒我们更新。</p>
     <img
       :src="withBase('/community/wechat-group.jpg')"
       alt="Open CoDesign 用户交流群微信二维码"

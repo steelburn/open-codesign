@@ -335,7 +335,7 @@ For Chinese-speaking users, we also keep a WeChat group for product updates, usa
   />
 </p>
 
-> ⚠️ The WeChat QR code rotates every 7 days and is currently valid until **May 4**.
+> ⚠️ The WeChat QR code rotates every 7 days and is currently valid until **May 16**.
 > If the code has expired, please leave a message in [GitHub Issues](https://github.com/OpenCoworkAI/open-codesign/issues) and we will refresh the image in-repo.
 
 See also the Chinese README: [README.zh-CN.md#社群](./README.zh-CN.md#%E7%A4%BE%E7%BE%A4).
