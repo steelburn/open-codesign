@@ -468,6 +468,7 @@ jobs:
           prerelease: ${{ contains(github.event_name == 'push' && github.ref_name || inputs.tag, '-') }}
           files: dist/**
           fail_on_unmatched_files: false
+          overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
