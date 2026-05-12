@@ -730,8 +730,24 @@ jobs:
           gh api repos/OpenCoworkAI/winget-pkgs >/dev/null
           gh api repos/OpenCoworkAI/winget-pkgs/contents/manifests/o/OpenCoworkAI/OpenCoDesign >/dev/null
 
-      - name: Release winget package
+      - name: Check winget token upstream access
         if: steps.guard.outputs.skip == 'false' && steps.winget-package.outputs.exists == 'true'
+        id: winget-token
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: |
+          if gh api graphql \
+            -f query='query { repository(owner: "microsoft", name: "winget-pkgs") { name } }' \
+            --jq '.data.repository.name' >/dev/null; then
+            echo "submit=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "submit=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::WINGET_PAT cannot query microsoft/winget-pkgs through GraphQL. Komac requires a classic GitHub PAT with public_repo scope that can read microsoft/winget-pkgs and push to OpenCoworkAI/winget-pkgs. Skipping winget submission so the release is not marked failed."
+
+      - name: Release winget package
+        if: steps.guard.outputs.skip == 'false' && steps.winget-package.outputs.exists == 'true' && steps.winget-token.outputs.submit == 'true'
         uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
         with:
           identifier: OpenCoworkAI.OpenCoDesign
