@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: OpenCoworkAI.OpenCoDesign
+PackageVersion: 0.3.0
+InstallerType: nullsoft
+Scope: user
+UpgradeBehavior: install
+ReleaseDate: 2026-05-12
+# electron-builder emits per-arch NSIS installers; winget gets separate
+# entries so ARM Windows users install the native build instead of emulating.
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/OpenCoworkAI/open-codesign/releases/download/v0.3.0/open-codesign-0.3.0-x64-setup.exe
+    InstallerSha256: 6886BDF40CF15391DF33D60A7A41E78951E5807684F76FCC22DBAE12F1FD6BC0
+  - Architecture: arm64
+    InstallerUrl: https://github.com/OpenCoworkAI/open-codesign/releases/download/v0.3.0/open-codesign-0.3.0-arm64-setup.exe
+    InstallerSha256: FAA9F8FB843B0A1C681DD94DD41CD0441B2E5B305E1D8F45E9EC82528C756600
+ManifestType: installer
+ManifestVersion: 1.12.0
