@@ -6,11 +6,11 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/OpenCoworkAI/open-codesign/releases/download/v0.2.0/open-codesign-0.2.0-x64.zip",
-      "hash": "224aee07e367cb840db89fd98771504fcf0ff3c98ca0f5e0f39d2f713aa7d4ed"
+      "hash": "76b9a429e9b81c00580ba8ff0956d08019e335b7a8fa894a96a95b89a9de2fad"
     },
     "arm64": {
       "url": "https://github.com/OpenCoworkAI/open-codesign/releases/download/v0.2.0/open-codesign-0.2.0-arm64.zip",
-      "hash": "ad107ca08a38a3cc19e59a9f28b60fd764c566ade23cc3e8db725b0cfcafb12b"
+      "hash": "d8bbda07e83f990e03378b8694e76d8a57b6331e5e41a9322d1c9776a8ff1ff4"
     }
   },
   "bin": [
