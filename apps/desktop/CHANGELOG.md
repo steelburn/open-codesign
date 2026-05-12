@@ -1,5 +1,22 @@
 # @open-codesign/desktop
 
+## 0.3.0
+
+### Minor Changes
+
+- 923b0fe: Add workspace-backed design creation, file browsing, project rebinding, and local preview modes, including a packaged preview runtime dependency fix so desktop builds include `ms` for `puppeteer-core`/`debug`.
+
+### Patch Changes
+
+- 89f71ad: Allow image generation to use the signed-in ChatGPT subscription OAuth path.
+
+  The image asset provider list now includes ChatGPT subscription alongside
+  OpenAI API and OpenRouter. When selected, `generate_image_asset` calls the
+  ChatGPT Codex Responses backend with the stored OAuth bearer token instead of
+  requiring an OpenAI API key.
+
+- 38fb7ec: Refresh v0.2 user-facing copy for ChatGPT subscription sign-in and current provider support.
+
 ## 0.2.0
 
 ### Minor Changes

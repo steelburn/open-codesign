@@ -1,5 +1,13 @@
 # @open-codesign/exporters
 
+## 0.1.6
+
+### Patch Changes
+
+- Updated dependencies [89f71ad]
+  - @open-codesign/shared@0.2.1
+  - @open-codesign/runtime@0.1.6
+
 ## 0.1.5
 
 ### Patch Changes
