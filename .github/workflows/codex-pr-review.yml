@@ -13,17 +13,13 @@ permissions:
 
 jobs:
   pr-review:
-    # Fork PRs can carry adversarial content. Run the write-token bot only
-    # after a maintainer explicitly adds safe-to-review.
+    # Review all non-draft human PRs by default. The workflow restores the
+    # trusted prompt from the base SHA before running the write-token bot.
     if: |
       github.event.pull_request.draft == false &&
       !endsWith(github.actor, '[bot]') &&
       !contains(github.event.pull_request.labels.*.name, 'bot-skip') &&
-      vars.CODEX_BOT_ENABLED == 'true' &&
-      (
-        github.event.pull_request.head.repo.full_name == github.repository ||
-        contains(github.event.pull_request.labels.*.name, 'safe-to-review')
-      )
+      vars.CODEX_BOT_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
