@@ -1,15 +1,12 @@
 # @open-codesign/desktop
 
-## 0.3.0
+## 0.2.1
 
-### Minor Changes
+### Patch Changes
 
 - 6cbb639: feat(desktop): add per-provider "Disable TLS verification" toggle for custom and imported providers. Unblocks connections to corporate gateways with self-signed or private-CA certificates that Node 22's built-in fetch cannot otherwise accept. Built-in providers (Anthropic, OpenAI, OpenRouter, Ollama) remain unaffected. (#229)
 - 7a1977d: Add workspace-backed design creation, file browsing, project rebinding, and local preview modes, including a packaged preview runtime dependency fix so desktop builds include `ms` for `puppeteer-core`/`debug`.
 - bf86fea: Add an HTTP proxy field to Settings → Advanced. The configured URL is applied to both Chromium's network stack and Node's HTTP(S)\_PROXY env vars, takes effect immediately, and persists across restarts.
-
-### Patch Changes
-
 - 7a1977d: Allow image generation to use the signed-in ChatGPT subscription OAuth path.
 
   The image asset provider list now includes ChatGPT subscription alongside
